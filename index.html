@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0" />
+<title>CYBER EMOJI CORE - 完全版</title>
+<style>
+*{
+  margin:0; padding:0; box-sizing:border-box;
+  font-family:"Segoe UI",sans-serif;
+  -webkit-tap-highlight-color:transparent;
+}
+:root{
+  --cyan:#00e5ff; --pink:#ff3cf7; --green:#00ff9d; --red:#ff355b; --gold:#ffd700;
+  --panel:#0b1322; --panel2:#121f35;
+}
+body{
+  background:#050816; color:#fff; overflow-x:hidden;
+  background-image: radial-gradient(circle at top,#0b2748 0%,#050816 55%), linear-gradient(135deg,#08111f,#02040a);
+}
+/* ヘッダ/タブ */
+header{
+  padding:12px; position:sticky; top:0; z-index:100;
+  background:rgba(3,6,15,.92); backdrop-filter:blur(8px);
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.topBar{ display:flex; flex-direction:column; gap:8px; }
+.moneyBox{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
+.stat{
+  background:linear-gradient(145deg,#0f1930,#091120);
+  border:1px solid rgba(0,229,255,.2); border-radius:12px;
+  padding:8px; font-size:12px; box-shadow:0 0 10px rgba(0,229,255,.08);
+}
+.stat b{ display:block; margin-top:4px; word-break:break-all; }
+#money{
+  font-size:28px; font-weight:900; color:#ffd700;
+  text-shadow:0 0 5px #ffd700,0 0 10px #ffcc00,0 0 20px #ffaa00,0 0 40px rgba(255,200,0,.8);
+  animation:moneyGlow 1.5s infinite alternate;
+}
+@keyframes moneyGlow{
+  0%{ transform:scale(1); filter:brightness(1); }
+  100%{ transform:scale(1.05); filter:brightness(1.3); }
+}
+.tabs{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+.tabBtn{
+  flex:none; padding:10px 14px; border:none; border-radius:12px;
+  background:#101c33; color:#fff; font-weight:700; font-size:13px; cursor:pointer;
+}
+.tabBtn.active{ background:linear-gradient(135deg,var(--cyan),#1f7fff); color:#00131b; }
+main{ padding:12px; padding-bottom:120px; }
+.panel{ display:none; animation:fade .25s; }
+.panel.active{ display:block; }
+@keyframes fade{ from{opacity:0; transform:translateY(10px)} to{opacity:1; transform:none} }
+.section{
+  background:linear-gradient(145deg,#0d1628,#121d33);
+  border-radius:18px; padding:12px; margin-bottom:14px;
+  border:1px solid rgba(255,255,255,.05); box-shadow:0 0 20px rgba(0,0,0,.3);
+}
+.title{ font-size:18px; font-weight:900; margin-bottom:10px; color:var(--cyan); }
+.small{ font-size:11px; opacity:.8; }
+/* ガチャ/カード */
+.gachaBtns{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+button.action{
+  background:linear-gradient(135deg,#00e5ff,#0077ff); border:none; color:#fff;
+  padding:12px; border-radius:14px; font-weight:900; font-size:14px; cursor:pointer;
+}
+button.life{ background:linear-gradient(135deg,#ff3cf7,#ff0055); }
+.grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+.card{
+  background:#0f1930; border-radius:14px; padding:10px; border:1px solid rgba(255,255,255,.05);
+  position:relative; overflow:hidden;
+}
+.card .emoji{ font-size:34px; }
+.card .name{ font-size:12px; font-weight:800; margin-top:6px; }
+.card .rarity{ font-size:11px; margin-top:5px; opacity:.8; }
+.card .sell{ font-size:11px; color:#6effd5; margin-top:4px; }
+.sellBtn{
+  margin-top:8px; width:100%; border:none; padding:8px; border-radius:10px;
+  font-weight:900; font-size:12px; background:linear-gradient(135deg,#ff355b,#ff8844);
+  color:#fff; box-shadow:0 0 10px rgba(255,80,80,.4); cursor:pointer;
+}
+.sellBtn:active{ transform:scale(.96); }
+.legendGlow{ box-shadow:0 0 20px rgba(255,215,0,.35); border:1px solid rgba(255,215,0,.4); }
+.chimeraGlow{ animation:chimera 1s infinite; border:1px solid rgba(255,0,0,.5); }
+@keyframes chimera{
+  0%{box-shadow:0 0 10px rgba(255,0,0,.2)}
+  50%{box-shadow:0 0 30px rgba(255,0,0,.8)}
+  100%{box-shadow:0 0 10px rgba(255,0,0,.2)}
+}
+/* リスト/行 */
+.list{ display:flex; flex-direction:column; gap:8px; max-height:420px; overflow:auto; padding-right:4px; }
+.row{
+  display:flex; align-items:center; justify-content:space-between;
+  background:#0d172a; padding:10px; border-radius:12px; font-size:12px;
+  border:1px solid rgba(255,255,255,.08);
+}
+/* Achievements/Dex 装飾 */
+.dexRow{ display:flex; align-items:center; justify-content:space-between; background:#0d172a; padding:10px; border-radius:12px; font-size:12px; }
+.dexLeft{ display:flex; align-items:center; gap:10px; }
+.dexEmoji{ font-size:22px; }
+.dexName{ font-weight:800; }
+.dexLocked{ opacity:.4; filter:grayscale(.6); }
+.achRow{
+  display:flex; align-items:center; justify-content:space-between; background:#0d172a; padding:10px; border-radius:12px; font-size:12px; position:relative;
+  transition: box-shadow .25s, border-color .25s, opacity .25s, filter .25s; border:1px solid rgba(255,255,255,.08);
+}
+.achLocked{ opacity:.45; filter:grayscale(.6); }
+.achLocked .achName::before{ content:'🔐 '; }
+.achUnlocked{ box-shadow:0 0 16px rgba(0,255,153,.35), inset 0 0 8px rgba(0,255,153,.2); border-color:rgba(0,255,153,.45); opacity:1; filter:none; }
+.achName{ font-weight:900; }
+/* 研究ボタン */
+.researchBuyBtn{
+  padding:8px 10px; border:none; border-radius:10px; font-weight:900; font-size:12px;
+  background:linear-gradient(135deg,#7afcff,#00a3ff); color:#00131b; cursor:pointer;
+}
+.researchBuyBtn:disabled{ background:#163048; color:#7aa2c2; opacity:.6; cursor:not-allowed; }
+/* ログ */
+.log{ font-size:12px; line-height:1.7; max-height:300px; overflow:auto; }
+.log a{ color:var(--cyan); text-decoration:underline; }
+/* ポップアップ */
+.popup{ position:fixed; inset:0; background:rgba(0,0,0,.72); display:none; align-items:center; justify-content:center; padding:14px; z-index:999; }
+.popup.active{ display:flex; }
+.popupBox{
+  width:100%; max-width:520px; max-height:85vh; overflow:auto; background:#08111f; border-radius:20px; padding:14px; border:1px solid rgba(255,255,255,.08);
+}
+.resultGrid{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:12px; max-height:60vh; overflow:auto; padding-right:4px; }
+.closeBtn{ width:100%; margin-top:12px; background:#ff355b; border:none; padding:12px; color:#fff; font-weight:900; border-radius:14px; cursor:pointer; }
+/* 警告 */
+.warning{ animation:warning .3s infinite; }
+@keyframes warning{ 0%{background:#200} 50%{background:#500} 100%{background:#200} }
+/* ボス */
+.bossBox{ text-align:center; padding:18px; border-radius:18px; background:linear-gradient(145deg,#190b12,#321019); }
+.hpBar{ height:18px; background:#222; border-radius:999px; overflow:hidden; margin-top:10px; }
+.hpFill{ height:100%; background:linear-gradient(90deg,#ff3d3d,#ffcc00); width:0%; transition:.3s; }
+</style>
+</head>
+<body>
+<header>
+  <div class="topBar">
+    <div class="moneyBox">
+      <div class="stat">💰 MONEY<b id="money">¥0</b></div>
+      <div class="stat">❤️ LIFE POINT<b id="lp">0 LP</b></div>
+      <div class="stat">💎 CRYSTAL<b id="crystal">0</b></div>
+    </div>
+    <div class="moneyBox">
+      <div class="stat">🏢 BASE<b id="capacity">0 / 5</b></div>
+      <div class="stat">🏆 ACHIEVE<b id="achieveCount">0</b></div>
+      <div class="stat">📚 INDEX<b id="indexCount">0</b></div>
+    </div>
+  </div>
+  <div class="tabs">
+    <button class="tabBtn active" data-tab="home">基地</button>
+    <button class="tabBtn" data-tab="dex">図鑑</button>
+    <button class="tabBtn" data-tab="achieve">実績</button>
+    <button class="tabBtn" data-tab="boss">ボス</button>
+    <button class="tabBtn" data-tab="research">研究所</button>
+    <button class="tabBtn" data-tab="log">ログ</button>
+  </div>
+</header>
+
+<main>
+  <section class="panel active" id="home">
+    <div class="section">
+      <div class="title">⚡ CYBER EMOJI CORE</div>
+      <div class="small">ネオン放置型インフレガチャゲーム</div>
+      <div class="gachaBtns">
+        <button class="action" onclick="normalGacha(1)">通常ガチャ ¥3,000</button>
+        <button class="action" onclick="normalGacha(10)">通常10連 ¥30,000</button>
+        <button class="action life" onclick="lifeGacha(1)">LIFEガチャ 20LP</button>
+        <button class="action life" onclick="lifeGacha(10)">LIFE10連 200LP</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="title">👥 所持キャラクター</div>
+      <div class="grid" id="inventory"></div>
+    </div>
+
+    <div class="section">
+      <div class="title">🏢 基地管理</div>
+      <div class="gachaBtns">
+        <button class="action" onclick="expandBase()">基地拡張</button>
+        <button class="action" onclick="buyLP()">2億円 → 1LP</button>
+        <button class="action life" onclick="accelerate()">10LP 加速</button>
+        <button class="action life" onclick="preventEscape()">3LP 妨害阻止</button>
+        <!-- 追加ボタン：200LPを💎1に変換 -->
+        <button class="action" onclick="convertLPToCrystal()">200LP → 💎1</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="dex">
+    <div class="section">
+      <div class="title">📚 図鑑</div>
+      <div class="list" id="dexList"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="achieve">
+    <div class="section">
+      <div class="title">🏆 実績</div>
+      <div class="list" id="achievements"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="boss">
+    <div class="section">
+      <div class="title">⚔️ ボスレイド</div>
+      <div class="bossBox">
+        <div id="bossName">ボス待機中...</div>
+        <div class="hpBar"><div class="hpFill" id="bossHp"></div></div>
+        <div style="margin-top:8px" id="bossText">出現時間を待機</div>
+        <div class="gachaBtns" style="margin-top:12px">
+          <button class="action" onclick="attackBoss()">攻撃</button>
+          <button class="action life" onclick="forceSpawnBoss()">強制出現（¥1,000,000,000）</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="research">
+    <div class="section">
+      <div class="title">🧪 研究所</div>
+      <div class="list" id="researchList"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="log">
+    <div class="section">
+      <div class="title">📜 ログ</div>
+      <div class="log" id="logs"></div>
+    </div>
+  </section>
+</main>
+
+<div class="popup" id="popup">
+  <div class="popupBox">
+    <div class="title">🎰 ガチャ結果</div>
+    <div class="resultGrid" id="results"></div>
+    <button class="closeBtn" onclick="closePopup()">閉じる</button>
+  </div>
+</div>
+
+<script>
+/* ====== データ構造 ====== */
+const GAME = {
+  money: 100000,
+  lp: 0,
+  crystal: 0,
+  baseCap: 5,
+  owned: [],
+  dex: [],        // 取得済みキャラ名（図鑑埋め）
+  achievements: [], // 解除キー
+  legendPity: 0,
+  research: { luck:0, legend:0, event:0, chimera:0, life:0, cap:0, auto:0, time:0 },
+  logs: []
+};
+
+const RESEARCHES = [
+  {key:'luck',   name:'ガチャ運強化',   cost:5,  effect:'全体排出率 +2%（内部補正）'},
+  {key:'legend', name:'レジェ率UP',     cost:10, effect:'LEGEND排出率上昇（内部補正）'},
+  {key:'event',  name:'イベント率UP',   cost:15, effect:'イベントキャラ出現率上昇（内部補正）'},
+  {key:'chimera',name:'キメラ解析',     cost:20, effect:'CHIMERA排出率上昇（内部補正）'},
+  {key:'life',   name:'ライフ効率化',   cost:25, effect:'LP+1（即時）'},
+  {key:'cap',    name:'超圧縮倉庫',     cost:30, effect:'基地容量+5（即時）'},
+  {key:'auto',   name:'自動研究AI',     cost:40, effect:'放置で研究進行（内部抽選）'},
+  {key:'time',   name:'時空観測装置',   cost:50, effect:'イベント提前（内部補正）'}
+];
+
+const ACHIEVEMENTS = [
+  {key:'money1',  name:'💰 所持金100万',                    check:()=>GAME.money>=1_000_000},
+  {key:'legend5', name:'👑 LEGENDを5体獲得',                check:()=>countRarity('LEGEND')>=5},
+  {key:'chimera1',name:'☣️ CHIMERA獲得',                    check:()=>countRarity('CHIMERA')>=1},
+  {key:'box29',   name:'🗑️ ごみ箱29体',                     check:()=>countName('ただのごみ箱')>=29},
+  {key:'boss5',   name:'⚔️ ボス5体撃破',                     check:()=>bossKill>=5},
+  {key:'season',  name:'📅 季節イベントコンプ',               check:()=>seasonCount>=8}
+];
+
+/* ベースのキャラプール（通常） */
+const CHARACTERS = [
+  {emoji:'🗑️', name:'ただのごみ箱', rarity:'LOW', sell:5},
+  {emoji:'📦', name:'古びた段ボール兵器', rarity:'LOW', sell:8},
+  {emoji:'🔋', name:'空っぽバッテリー', rarity:'LOW', sell:10},
+  {emoji:'🪫', name:'崩壊エネルギーセル', rarity:'LOW', sell:12},
+  {emoji:'🧹', name:'掃除用ドローンβ', rarity:'LOW', sell:15},
+  {emoji:'📡', name:'壊れた通信アンテナ', rarity:'LOW', sell:18},
+  {emoji:'🪨', name:'無価値な鉱石コア', rarity:'LOW', sell:20},
+  {emoji:'⚙️', name:'旧式スチールギア', rarity:'LOW', sell:25},
+
+  {emoji:'🤖', name:'プロトタイプ・ロボット', rarity:'MID', sell:60},
+  {emoji:'🛵', name:'ネオン・デリバリー', rarity:'MID', sell:75},
+  {emoji:'🔧', name:'修復用ナノマシン', rarity:'MID', sell:90},
+  {emoji:'🧪', name:'ケミカル研究端末', rarity:'MID', sell:120},
+  {emoji:'🛰️', name:'低軌道サテライト', rarity:'MID', sell:150},
+  {emoji:'🚨', name:'セキュリティ・アイ', rarity:'MID', sell:180},
+  {emoji:'⚔️', name:'サイバー傭兵隊員', rarity:'MID', sell:220},
+  {emoji:'🐺', name:'孤高のシャドウ・ウルフ', rarity:'MID', sell:260},
+  {emoji:'🦾', name:'強化義手ファイター', rarity:'MID', sell:300},
+  {emoji:'🛸', name:'小型探索UFO', rarity:'MID', sell:350},
+
+  {emoji:'⚡', name:'雷撃コア・Type-X', rarity:'ELITE', sell:900},
+  {emoji:'❄️', name:'絶零フリーズユニット', rarity:'ELITE', sell:1100},
+  {emoji:'☣️', name:'ポイズン・リアクター', rarity:'ELITE', sell:1300},
+  {emoji:'🌪️', name:'ストーム・ジェネレーター', rarity:'ELITE', sell:1500},
+  {emoji:'🦅', name:'スカイハント・イーグル', rarity:'ELITE', sell:1800},
+  {emoji:'🔥', name:'灼熱プラズマ炉', rarity:'ELITE', sell:2200},
+  {emoji:'🧿', name:'深層監視AI', rarity:'ELITE', sell:2600},
+  {emoji:'🌊', name:'アクア・エネルギー炉', rarity:'ELITE', sell:3000},
+
+  {emoji:'🌟', name:'超新星スーパーノヴァ', rarity:'SUPER', sell:10000},
+  {emoji:'🔱', name:'海皇ポセイドン・トライデント', rarity:'SUPER', sell:12000},
+  {emoji:'🦁', name:'獅子王ゴールド・レオン', rarity:'SUPER', sell:15000},
+  {emoji:'⚡', name:'雷帝ライトニング・コア', rarity:'SUPER', sell:18000},
+  {emoji:'🛰️', name:'軌道兵器ラグランジュ', rarity:'SUPER', sell:22000},
+  {emoji:'🦊', name:'九尾のファントム・フォックス', rarity:'SUPER', sell:26000},
+  {emoji:'🧬', name:'ジェノム・ブレイカー', rarity:'SUPER', sell:32000},
+  {emoji:'🌌', name:'銀河制御アルカディア', rarity:'SUPER', sell:40000},
+
+  {emoji:'👑', name:'皇帝のインペリアルクラウン', rarity:'LEGEND', sell:150000},
+  {emoji:'🔮', name:'天魔オーブ・インフィニティ',  rarity:'LEGEND', sell:180000},
+  {emoji:'🔥', name:'絶対不滅プロメテウス',        rarity:'LEGEND', sell:220000},
+  {emoji:'💎', name:'金剛石インペリアル・ダイヤ',  rarity:'LEGEND', sell:280000},
+  {emoji:'🐉', name:'極天竜サイバー・ドラゴン',    rarity:'LEGEND', sell:350000},
+  {emoji:'🛸', name:'未知の生命体マザーシップ',    rarity:'LEGEND', sell:500000},
+
+  /* CHIMERA（最上位） - 既存Tier-1 */
+  {emoji:'🐉🔥', name:'煉獄竜ヘル・ドラグニクス', rarity:'CHIMERA', sell:1500000},
+  {emoji:'👁️🪐', name:'銀河監視者オメガ・アイ', rarity:'CHIMERA', sell:1800000},
+  {emoji:'🤖💀', name:'機械死神ネクロ・コア',   rarity:'CHIMERA', sell:2200000},
+  {emoji:'🦊⚡', name:'雷鳴九尾ライジン・フォックス', rarity:'CHIMERA', sell:2600000},
+  {emoji:'👑🌌', name:'宇宙皇帝アストラル・ゼロ', rarity:'CHIMERA', sell:3000000},
+
+  /* 追加CHIMERA Tier-2 */
+  {emoji:'☣️🧬', name:'終焉融合バイオ・ハザード', rarity:'CHIMERA', sell:4000000},
+  {emoji:'🌋⚔️', name:'災厄剣ラグナ・ブレイカー', rarity:'CHIMERA', sell:5000000},
+  {emoji:'🛰️👁️', name:'軌道監視AIセラフィム', rarity:'CHIMERA', sell:6000000},
+  {emoji:'💎🔥', name:'灼熱結晶イグナイト', rarity:'CHIMERA', sell:7500000},
+  {emoji:'🛸🌪️', name:'虚空嵐ヴォイド・ストーム', rarity:'CHIMERA', sell:9000000},
+
+  /* 追加CHIMERA Tier-3 */
+  {emoji:'🐺🌑', name:'月蝕獣フェンリル・ゼロ', rarity:'CHIMERA', sell:12000000},
+  {emoji:'⚡🧿', name:'雷神機関アポロギア', rarity:'CHIMERA', sell:15000000},
+  {emoji:'🧪👿', name:'禁断実験体デモニウム', rarity:'CHIMERA', sell:18000000},
+  {emoji:'🌊☣️', name:'深海汚染神アビスロード', rarity:'CHIMERA', sell:22000000},
+  {emoji:'🔮🦅', name:'千里眼ファルコン・ネオ', rarity:'CHIMERA', sell:26000000},
+
+  /* 追加CHIMERA Tier-4 */
+  {emoji:'🌌💀', name:'銀河死皇ネクロシア', rarity:'CHIMERA', sell:35000000},
+  {emoji:'👑🐉', name:'星界龍帝アストラギア', rarity:'CHIMERA', sell:45000000},
+  {emoji:'⚔️🔥', name:'神滅剣インフェルノ', rarity:'CHIMERA', sell:60000000},
+  {emoji:'☀️🪐', name:'恒星神ヘリオス・コア', rarity:'CHIMERA', sell:80000000},
+  {emoji:'🧬🌑', name:'原初融合ノクス・エデン', rarity:'CHIMERA', sell:100000000}
+];
+
+/* 月別イベントプール（各月3種） */
+const MONTH_EVENT_POOLS = {
+  1: [
+    {emoji:'🌅', name:'ネオ・ニューイヤー・ガイア', rarity:'EVENT', sell:240000},
+    {emoji:'🎁', name:'暗号化プレゼントBOX', rarity:'EVENT', sell:500000},
+    {emoji:'🎄', name:'聖夜インフィニティツリー', rarity:'EVENT', sell:350000}
+  ],
+  2: [
+    {emoji:'🍫', name:'ショコラ・マトリクスハート', rarity:'EVENT', sell:260000},
+    {emoji:'👹', name:'仮想オニ・プロトコル', rarity:'EVENT', sell:300000},
+    {emoji:'🎁', name:'暗号化プレゼントBOX', rarity:'EVENT', sell:500000} // 冬テーマ継続例
+  ],
+  3: [
+    {emoji:'🌸', name:'サクラ・ブレード・ナノテック', rarity:'EVENT', sell:45000},
+    {emoji:'🎎', name:'電脳ひな祭りパペトリー', rarity:'EVENT', sell:50000},
+    {emoji:'🍡', name:'三色ナノダンゴユニット', rarity:'EVENT', sell:55000}
+  ],
+  4: [
+    {emoji:'🌱', name:'ネオ・スプリング・スプラウト', rarity:'EVENT', sell:60000},
+    {emoji:'🎒', name:'インテリジェンス・ランドセル', rarity:'EVENT', sell:65000},
+    {emoji:'👔', name:'新人アンドロイド・エージェント', rarity:'EVENT', sell:70000}
+  ],
+  5: [
+    {emoji:'☔', name:'レイニー・ドローン微雨', rarity:'EVENT', sell:75000},
+    {emoji:'🐸', name:'ケロケロ・ソニックウェーブ', rarity:'EVENT', sell:80000},
+    {emoji:'🌌', name:'七夕クォンタム・オリヒメ', rarity:'EVENT', sell:90000}
+  ],
+  6: [
+    {emoji:'🎆', name:'サマーバースト・フェスティバル', rarity:'EVENT', sell:100000},
+    {emoji:'🏄', name:'サイバーサーフ・ランナー', rarity:'EVENT', sell:110000},
+    {emoji:'🍉', name:'電磁ウォーターメロン', rarity:'EVENT', sell:120000}
+  ],
+  7: [
+    {emoji:'🎑', name:'月詠サイバーラビット', rarity:'EVENT', sell:130000},
+    {emoji:'🌕', name:'フルムーン・サテライト', rarity:'EVENT', sell:145000},
+    {emoji:'🎃', name:'ジャック・オー・サイバーランタン', rarity:'EVENT', sell:160000}
+  ],
+  8: [
+    {emoji:'👻', name:'ゴースト・イン・ザ・ネット', rarity:'EVENT', sell:175000},
+    {emoji:'🍁', name:'紅葉メランコリアブレード', rarity:'EVENT', sell:190000},
+    {emoji:'🍄', name:'マッシュルーム・ノード', rarity:'EVENT', sell:210000}
+  ],
+  9: [
+    {emoji:'🌅', name:'ネオ・ニューイヤー・ガイア', rarity:'EVENT', sell:240000},
+    {emoji:'🍫', name:'ショコラ・マトリクスハート', rarity:'EVENT', sell:260000},
+    {emoji:'👹', name:'仮想オニ・プロトコル', rarity:'EVENT', sell:300000}
+  ],
+  10: [
+    {emoji:'🎄', name:'聖夜インフィニティツリー', rarity:'EVENT', sell:350000},
+    {emoji:'🎅', name:'サイバーサンタAI', rarity:'EVENT', sell:420000},
+    {emoji:'🎁', name:'暗号化プレゼントBOX', rarity:'EVENT', sell:500000}
+  ],
+  11: [
+    {emoji:'🎑', name:'月詠サイバーラビット', rarity:'EVENT', sell:130000},
+    {emoji:'🌕', name:'フルムーン・サテライト', rarity:'EVENT', sell:145000},
+    {emoji:'🌌', name:'七夕クォンタム・オリヒメ', rarity:'EVENT', sell:200000}
+  ],
+  12: [
+    {emoji:'🎄', name:'聖夜インフィニティツリー', rarity:'EVENT', sell:350000},
+    {emoji:'🎅', name:'サイバーサンタAI', rarity:'EVENT', sell:420000},
+    {emoji:'🎁', name:'暗号化プレゼントBOX', rarity:'EVENT', sell:500000}
+  ]
+};
+
+/* 既存の月イベント（互換保持・未使用化） */
+// イベント（月限定3種）
+const MONTH_EVENT_POOL = [
+  {emoji:'🎑', name:'月詠サイバーラビット', rarity:'EVENT', sell:120000},
+  {emoji:'🌕', name:'フルムーン・サテライト', rarity:'EVENT', sell:160000},
+  {emoji:'🌌', name:'七夕クォンタム・オリヒメ', rarity:'EVENT', sell:200000}
+];
+
+let bossHP = 0;
+let bossMax = 0;
+let bossKill = 0;
+let seasonCount = 0;
+let boost = false;
+let currentBoss = null;  // スポーン中のボス情報
+let lastSpawnSlotKey = ''; // 直近スポーンスロット識別（1時間に1体制御用）
+let bossNoEscape = 0;
+
+/* ====== 永続化 ====== */
+function save(){ localStorage.setItem('CYBER_EMOJI_CORE_SAVE_V2', JSON.stringify(GAME)); }
+function load(){
+  const data = localStorage.getItem('CYBER_EMOJI_CORE_SAVE_V2');
+  if(!data) return;
+  try{
+    const obj = JSON.parse(data);
+    Object.assign(GAME, obj);
+  }catch(e){ console.warn('save broken'); }
+}
+
+/* ====== ユーティリティ ====== */
+function format(n){ return '¥'+Number(n).toLocaleString(); }
+function addLog(t){ GAME.logs.push('['+new Date().toLocaleTimeString()+'] '+t); renderLogs(); save(); }
+
+/* ====== タブ ====== */
+function activateTab(tabId){
+  document.querySelectorAll('.tabBtn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.tab === tabId);
+  });
+  document.querySelectorAll('.panel').forEach(p=>{
+    p.classList.toggle('active', p.id === tabId);
+  });
+}
+function tabsInit(){
+  document.querySelectorAll('.tabBtn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.tab;
+      activateTab(id);
+      history.replaceState(null,'','#'+id);
+    }, {passive:true});
+  });
+  const hash = (location.hash || '').replace('#','');
+  const defaultTab = (hash && document.getElementById(hash) ? hash :
+                      (document.querySelector('.tabBtn.active')?.dataset.tab) || 'home');
+  activateTab(defaultTab);
+}
+
+/* ====== UI更新 ====== */
+function updateUI(){
+  document.getElementById('money').innerText = format(GAME.money);
+  document.getElementById('lp').innerText = GAME.lp+' LP';
+  document.getElementById('crystal').innerText = GAME.crystal;
+  document.getElementById('capacity').innerText = GAME.owned.length+' / '+GAME.baseCap;
+  document.getElementById('achieveCount').innerText = GAME.achievements.length;
+  document.getElementById('indexCount').innerText = GAME.dex.length;
+  renderInventory();
+  renderDex();
+  renderAchievements();
+  renderResearch();
+  renderLogs();
+  updateBossBar();
+  save();
+}
+
+function renderInventory(){
+  const box = document.getElementById('inventory');
+  box.innerHTML = '';
+  const reversed = GAME.owned.map((c,i)=>({c,i})).reverse();
+  reversed.forEach(({c, i: originalIdx})=>{
+    const div = document.createElement('div');
+    div.className='card';
+    if(c.rarity==='LEGEND') div.classList.add('legendGlow');
+    if(c.rarity==='CHIMERA' || c.rarity==='EVENT') div.classList.add('chimeraGlow'); // EVENTも光らせる
+    div.innerHTML = `
+      <div class="emoji">${c.emoji}</div>
+      <div class="name">${c.name}</div>
+      <div class="rarity">${c.rarity}</div>
+      <div class="sell">売却 ${format(c.sell)}</div>
+      <button class="sellBtn">売却</button>
+    `;
+    div.querySelector('.sellBtn').addEventListener('click', ()=>sellCharacterByIndex(originalIdx));
+    box.appendChild(div);
+  });
+}
+function sellCharacterByIndex(idx){
+  const ch = GAME.owned[idx];
+  if(!ch) return;
+  GAME.money += ch.sell;
+  GAME.owned.splice(idx,1);
+  addLog('💸 売却 ▶ '+ch.name);
+  updateUI();
+}
+
+function renderResearch(){
+  const box = document.getElementById('researchList');
+  box.innerHTML = '';
+  RESEARCHES.forEach(r=>{
+    const row = document.createElement('div');
+    row.className = 'row';
+    row.innerHTML = `
+      <div>
+        <div>${r.name}</div>
+        <div class="small">${r.effect}</div>
+      </div>
+    `;
+    const btn = document.createElement('button');
+    btn.className = 'researchBuyBtn';
+    btn.textContent = `買う 💎${r.cost}`;
+    btn.onclick = ()=>buyResearch(r);
+    if(GAME.crystal < r.cost){
+      btn.disabled = true;
+      btn.title = '結晶が不足しています';
+    }
+    row.appendChild(btn);
+    box.appendChild(row);
+  });
+}
+
+function renderLogs(){
+  const log = document.getElementById('logs');
+  log.innerHTML = GAME.logs.slice(-200).reverse().join('<br>');
+}
+
+function renderDex(){
+  const box = document.getElementById('dexList');
+  box.innerHTML = '';
+  // 図鑑は通常キャラ + 全月イベント（重複を避けユニーク化）を表示
+  const eventAll = Object.values(MONTH_EVENT_POOLS).flat();
+  const map = new Map();
+  [...CHARACTERS, ...eventAll].forEach(ch=>{
+    if(!map.has(ch.name)) map.set(ch.name, ch);
+  });
+  const fullDex = Array.from(map.values());
+  fullDex.forEach(ch=>{
+    const got = GAME.dex.includes(ch.name);
+    const row = document.createElement('div');
+    row.className = 'dexRow' + (got ? '' : ' dexLocked');
+    row.innerHTML = `
+      <div class="dexLeft">
+        <div class="dexEmoji">${got ? ch.emoji : '❓'}</div>
+        <div class="dexName">${got ? ch.name : '？？？'}</div>
+      </div>
+      <div>${got ? ch.rarity : ''}</div>
+    `;
+    box.appendChild(row);
+  });
+}
+
+function renderAchievements(){
+  const box = document.getElementById('achievements');
+  box.innerHTML = '';
+  ACHIEVEMENTS.forEach(a=>{
+    const unlocked = GAME.achievements.includes(a.key);
+    const row = document.createElement('div');
+    row.className = 'achRow ' + (unlocked ? 'achUnlocked' : 'achLocked');
+    row.innerHTML = `<div class="achName">${a.name}</div><div>${unlocked ? '済' : '未'}</div>`;
+    box.appendChild(row);
+  });
+}
+
+/* ====== 取得/図鑑/実績 ====== */
+function obtain(char){
+  GAME.owned.push(char);
+  GAME.money += Math.floor(char.sell/4);
+  if(!GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+  addLog('獲得 ▶ '+char.name);
+  checkAchievements();
+  updateUI();
+}
+function checkAchievements(){
+  ACHIEVEMENTS.forEach(a=>{
+    if(!GAME.achievements.includes(a.key) && a.check()){
+      GAME.achievements.push(a.key);
+      GAME.money += 50_000;
+      addLog('🏆 実績解除 ▶ '+a.name+'（報酬 ¥50,000）');
+    }
+  });
+}
+
+/* ====== ガチャ確率 ====== */
+function rarityRoll(){
+  let pLOW=40, pMID=30, pELI=18, pSUP=10, pLEG=2;
+  pLOW  = Math.max(10, pLOW  - 1*GAME.research.luck);
+  pMID  = Math.max(10, pMID  - 1*GAME.research.luck);
+  pELI  = Math.min(40, pELI  + 0.5*GAME.research.luck);
+  pSUP  = Math.min(25, pSUP  + 0.3*GAME.research.legend);
+  pLEG  = Math.min(10, pLEG  + 0.2*GAME.research.legend);
+  const sumBase = pLOW+pMID+pELI+pSUP+pLEG;
+  if(GAME.legendPity>=99){ GAME.legendPity=0; return 'LEGEND'; }
+  const r = Math.random()*sumBase;
+  if(r < pLOW) return 'LOW';
+  if(r < pLOW+pMID) return 'MID';
+  if(r < pLOW+pMID+pELI) return 'ELITE';
+  if(r < pLOW+pMID+pELI+pSUP){ GAME.legendPity++; return 'SUPER'; }
+  GAME.legendPity=0; return 'LEGEND';
+}
+function getRandomByRarity(r){
+  const arr = CHARACTERS.filter(c=>c.rarity===r);
+  return JSON.parse(JSON.stringify(arr[Math.floor(Math.random()*arr.length)]));
+}
+
+/* ====== ガチャ ====== */
+function normalGacha(times){
+  const cost = times===10 ? 30000 : 3000;
+  if(GAME.money<cost) return alert('お金不足');
+  if(GAME.owned.length+times>GAME.baseCap) return alert('基地容量不足');
+  GAME.money -= cost;
+  const results=[];
+  for(let i=0;i<times;i++){
+    const rarity = rarityRoll();
+    const char = getRandomByRarity(rarity);
+    results.push(char);
+    obtain(char);
+  }
+  showResults(results);
+}
+function lifeGacha(times){
+  const cost = times===10 ? 200 : 20;
+  if(GAME.lp<cost) return alert('LP不足');
+  if(GAME.owned.length+times>GAME.baseCap) return alert('基地容量不足');
+  GAME.lp -= cost;
+  const chimeras = CHARACTERS.filter(c=>c.rarity==='CHIMERA');
+  const results=[];
+  for(let i=0;i<times;i++){
+    const c = JSON.parse(JSON.stringify(chimeras[Math.floor(Math.random()*chimeras.length)]));
+    results.push(c);
+    obtain(c);
+  }
+  document.body.classList.add('warning');
+  setTimeout(()=>document.body.classList.remove('warning'),2000);
+  showResults(results);
+}
+
+/* ====== リザルト演出 ====== */
+function showResults(results){
+  const popup=document.getElementById('popup');
+  const box=document.getElementById('results');
+  box.innerHTML='';
+  results.forEach(c=>{
+    const div=document.createElement('div');
+    div.className='card';
+    if(c.rarity==='LEGEND') div.classList.add('legendGlow');
+    if(c.rarity==='CHIMERA' || c.rarity==='EVENT') div.classList.add('chimeraGlow');
+    if(c.rarity==='LEGEND') flashRainbow();
+    if(c.rarity==='CHIMERA') warningEffect();
+    div.innerHTML=`
+      <div class="emoji">${c.emoji}</div>
+      <div class="name">${c.name}</div>
+      <div class="rarity">${c.rarity}</div>
+      <div class="sell">${format(c.sell)}</div>
+    `;
+    box.appendChild(div);
+  });
+  popup.classList.add('active');
+}
+function closePopup(){ document.getElementById('popup').classList.remove('active'); }
+function flashRainbow(){
+  const d=document.createElement('div');
+  d.style.position='fixed'; d.style.inset='0';
+  d.style.background='linear-gradient(45deg,red,orange,yellow,green,cyan,blue,purple)';
+  d.style.opacity='.4'; d.style.zIndex='998'; d.style.pointerEvents='none';
+  document.body.appendChild(d); setTimeout(()=>d.remove(),700);
+}
+function warningEffect(){
+  const d=document.createElement('div');
+  d.style.position='fixed'; d.style.inset='0'; d.style.background='rgba(255,0,0,.25)';
+  d.style.zIndex='998'; d.style.pointerEvents='none';
+  document.body.appendChild(d); setTimeout(()=>d.remove(),1200);
+}
+
+/* ====== 基地/LP ====== */
+function expandBase(){
+  const cost = 50000 * GAME.baseCap;
+  if(GAME.money<cost) return alert('お金不足');
+  GAME.money -= cost;
+  GAME.baseCap += 5;
+  addLog('基地拡張成功（容量+5）');
+  updateUI();
+}
+function buyLP(){
+  if(GAME.money<200_000_000) return alert('2億円必要');
+  GAME.money -= 200_000_000;
+  GAME.lp += 1;
+  addLog('LP購入（+1）');
+  updateUI();
+}
+function accelerate(){
+  if(GAME.lp<10) return alert('LP不足');
+  GAME.lp -= 10;
+  boost = true;
+  addLog('時間加速発動（10分間）');
+  setTimeout(()=>{ boost=false; addLog('時間加速終了'); },600_000);
+  updateUI();
+}
+function preventEscape(){
+  if(GAME.lp<3) return alert('LP不足');
+  GAME.lp -= 3;
+  addLog('ボス逃走阻止（この1体に有効）');
+  bossNoEscape = Date.now() + 30*60*1000; // 30分間逃走阻止（簡易）
+  updateUI();
+}
+/* 追加ロジック：200LP → 💎1 変換 */
+function convertLPToCrystal(){
+  if(GAME.lp < 200){ alert('LP不足（200LP必要）'); return; }
+  GAME.lp -= 200;
+  GAME.crystal += 1;
+  addLog('交換 ▶ 200LP → 💎1');
+  updateUI();
+}
+
+/* ====== 研究 ====== */
+function buyResearch(r){
+  if(GAME.crystal < r.cost){ alert('結晶不足'); return; }
+  GAME.crystal -= r.cost;
+  if(!GAME.research[r.key]) GAME.research[r.key]=0;
+  GAME.research[r.key]++;
+  applyResearchEffect(r.key);
+  addLog(`研究完了 ▶ ${r.name}（Lv.${GAME.research[r.key]}）`);
+  updateUI();
+}
+function applyResearchEffect(key){
+  switch(key){
+    case 'cap': GAME.baseCap += 5; break;
+    case 'life': GAME.lp += 1; break;
+    // その他は内部補正（確率/進行系）で参照
+  }
+}
+
+/* ====== 収益/イベント ====== */
+setInterval(()=>{
+  let income=0;
+  GAME.owned.forEach(c=> income += Math.floor(c.sell/20));
+  if(boost) income *= 5;
+  GAME.money += income;
+  updateUI();
+},1000);
+
+setInterval(()=>{
+  // FEVER
+  if(Math.random()<0.05){
+    addLog('🌌 FEVER TIME 発生（+¥500,000）');
+    GAME.money += 500_000;
+    updateUI();
+  }
+  // 自動研究AI 小確率で結晶+1（デモ）
+  if(GAME.research.auto>0 && Math.random()<0.02*GAME.research.auto){
+    GAME.crystal += 1;
+    addLog('🤖 自動研究AI ▶ 結晶+1');
+    updateUI();
+  }
+},30_000);
+
+/* ====== ボスシステム ====== */
+function slotKeyForNow(){
+  const now = new Date();
+  return now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0')+'-'+String(now.getHours()).padStart(2,'0');
+}
+
+function getTimeBand(){
+  const h = new Date().getHours();
+  if(h>=6 && h<=7) return 'MORNING';
+  if(h>=12 && h<=13) return 'NOON';
+  if(h>=18 && h<=19) return 'NIGHT';
+  return 'OFF';
+}
+
+function currentMonthPool(){
+  const m = new Date().getMonth()+1; // 1-12
+  return MONTH_EVENT_POOLS[m] || [];
+}
+
+function pickBossForBand(band){
+  if(band==='MORNING'){
+    const pool = CHARACTERS.filter(c=>c.rarity==='CHIMERA');
+    return clone(pool[Math.floor(Math.random()*pool.length)]);
+  }
+  if(band==='NOON'){
+    // 指定月の3種から選択
+    const pool = currentMonthPool();
+    if(pool.length===0) return null;
+    return clone(pool[Math.floor(Math.random()*pool.length)]);
+  }
+  if(band==='NIGHT'){
+    if(Math.random()<0.5){
+      const pool = CHARACTERS.filter(c=>['LEGEND','SUPER','ELITE'].includes(c.rarity));
+      return clone(pool[Math.floor(Math.random()*pool.length)]);
+    }else{
+      const pool = currentMonthPool();
+      if(pool.length===0) return null;
+      return clone(pool[Math.floor(Math.random()*pool.length)]);
+    }
+  }
+  return null;
+}
+function clone(o){ return JSON.parse(JSON.stringify(o)); }
+
+function spawnBossAuto(){
+  const band = getTimeBand();
+  if(band==='OFF') { clearBossIfOffband(); return; }
+  const sk = slotKeyForNow();
+  if(lastSpawnSlotKey === sk && bossHP>0) { updateBossBar(); return; }
+  const bossChar = pickBossForBand(band);
+  if(!bossChar){ clearBossIfOffband(); return; }
+  const hpBase = Math.min(5_000_000, Math.max(10_000, Math.floor(bossChar.sell * 2)));
+  bossHP = bossMax = hpBase;
+  currentBoss = bossChar;
+  lastSpawnSlotKey = sk;
+  document.getElementById('bossName').innerText = `👹 ボス出現 ▶ ${bossChar.name}`;
+  document.getElementById('bossText').innerText = `${bossHP} / ${bossMax}`;
+  updateBossBar();
+  addLog(`👹 ボス出現 ▶ ${bossChar.name}（${getTimeBand()}）`);
+}
+
+function clearBossIfOffband(){
+  const now = Date.now();
+  if(now < bossNoEscape) { updateBossBar(); return; }
+  document.getElementById('bossName').innerText='ボス待機中...';
+  document.getElementById('bossText').innerText='出現時間を待機';
+  document.getElementById('bossHp').style.width='0%';
+  bossHP = bossMax = 0;
+  currentBoss = null;
+}
+
+function updateBossBar(){
+  if(bossMax<=0){ document.getElementById('bossHp').style.width='0%'; return; }
+  const p = Math.max(0, Math.min(100, (bossHP/bossMax)*100));
+  document.getElementById('bossHp').style.width = p+'%';
+  document.getElementById('bossText').innerText = `${bossHP} / ${bossMax}`;
+}
+
+function attackBoss(){
+  if(bossHP<=0 || !currentBoss) return;
+  let dmg = 100 + countRarity('LEGEND')*150 + (countRarity('CHIMERA')+countRarity('EVENT'))*500;
+  bossHP -= dmg;
+  if(bossHP<0) bossHP=0;
+  updateBossBar();
+  if(bossHP===0){
+    GAME.money += 500_000;
+    GAME.lp += 5;
+    bossKill++;
+    obtain(clone(currentBoss));
+    addLog('⚔️ ボス撃破 ▶ '+currentBoss.name+'（+¥500,000 / +5LP / 本体入手）');
+    currentBoss = null;
+    alert('ボス撃破！');
+    updateUI();
+  }
+}
+
+function forceSpawnBoss(){
+  const cost = 1_000_000_000;
+  if(GAME.money<cost) return alert('10億円必要です');
+  GAME.money -= cost;
+  const band = getTimeBand();
+  if(band==='OFF'){
+    // OFF帯は月別イベントに寄せたロジックへ変更
+    const weight = Math.random();
+    let bossChar;
+    if(weight<0.5){
+      const pool = CHARACTERS.filter(c=>c.rarity==='CHIMERA');
+      bossChar = clone(pool[Math.floor(Math.random()*pool.length)]);
+    }else if(weight<0.8){
+      const pool = CHARACTERS.filter(c=>c.rarity==='LEGEND');
+      bossChar = clone(pool[Math.floor(Math.random()*pool.length)]);
+    }else{
+      const pool = currentMonthPool();
+      bossChar = clone(pool[Math.floor(Math.random()*pool.length)]);
+    }
+    const hpBase = Math.min(5_000_000, Math.max(10_000, Math.floor(bossChar.sell * 2)));
+    bossHP = bossMax = hpBase;
+    currentBoss = bossChar;
+    document.getElementById('bossName').innerText = `👹 強制出現 ▶ ${bossChar.name}`;
+    updateBossBar();
+    addLog(`💎 強制出現 ▶ ${bossChar.name}`);
+  }else{
+    const bossChar = pickBossForBand(band);
+    const hpBase = Math.min(5_000_000, Math.max(10_000, Math.floor(bossChar.sell * 2)));
+    bossHP = bossMax = hpBase;
+    currentBoss = bossChar;
+    document.getElementById('bossName').innerText = `👹 強制出現 ▶ ${bossChar.name}`;
+    updateBossBar();
+    addLog(`💎 強制出現 ▶ ${bossChar.name}（${band}）`);
+  }
+  updateUI();
+}
+
+/* ====== 補助 ====== */
+function countRarity(r){ return GAME.owned.filter(x=>x.rarity===r).length; }
+function countName(n){ return GAME.owned.filter(x=>x.name===n).length; }
+
+/* ====== タイマー ====== */
+setInterval(()=>{ spawnBossAuto(); }, 60_000);
+
+/* ====== 起動 ====== */
+document.addEventListener('DOMContentLoaded', ()=>{
+  load();
+  tabsInit();
+  if(GAME.logs.length===0){
+    addLog('🏆 実績は未達成時は🔐ロック、達成で緑に発光します。');
+    addLog('📚 図鑑は未入手は❓/？？？、入手で開示されます。');
+    addLog('⚔️ ボスは 06-07（最上位）、12-13（当月のイベント3種）、18-19（通常or当月イベント）に1時間ごと1体出現します。');
+    addLog('💎 強制出現は10億円が必要です。');
+  }
+  updateUI();
+  spawnBossAuto();
+});
+</script>
+</body>
+</html>
