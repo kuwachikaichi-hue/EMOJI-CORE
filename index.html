@@ -155,6 +155,7 @@ button.life{ background:linear-gradient(135deg,#ff3cf7,#ff0055); }
     <button class="tabBtn" data-tab="boss">ボス</button>
     <button class="tabBtn" data-tab="research">研究所</button>
     <button class="tabBtn" data-tab="log">ログ</button>
+    <button class="tabBtn" data-tab="miniBoss">小ボス</button>
   </div>
 </header>
 
@@ -168,6 +169,7 @@ button.life{ background:linear-gradient(135deg,#ff3cf7,#ff0055); }
         <button class="action" onclick="normalGacha(10)">通常10連 ¥30,000</button>
         <button class="action life" onclick="lifeGacha(1)">LIFEガチャ 20LP</button>
         <button class="action life" onclick="lifeGacha(10)">LIFE10連 200LP</button>
+        <button class="action life" onclick="dimensionGacha()">異世界個体 600LP</button>
       </div>
     </div>
 
@@ -231,6 +233,30 @@ button.life{ background:linear-gradient(135deg,#ff3cf7,#ff0055); }
       <div class="log" id="logs"></div>
     </div>
   </section>
+
+  <section class="panel" id="miniBoss">
+<div class="section">
+<div class="title">⚔️ 小ボスラッシュ</div>
+
+<div class="bossBox">
+<div id="miniBossName">待機中</div>
+
+<div class="hpBar">
+<div class="hpFill" id="miniBossHp"></div>
+</div>
+
+<div id="miniBossText" style="margin-top:8px">
+小ボス出現待機
+</div>
+
+<div class="gachaBtns" style="margin-top:12px">
+<button class="action" onclick="spawnMiniBoss()">出現</button>
+<button class="action life" onclick="attackMiniBoss()">攻撃</button>
+</div>
+
+</div>
+</div>
+</section>
 </main>
 
 <div class="popup" id="popup">
@@ -424,6 +450,41 @@ const MONTH_EVENT_POOL = [
   {emoji:'🌌', name:'七夕クォンタム・オリヒメ', rarity:'EVENT', sell:200000}
 ];
 
+const DIMENSION_CHARACTERS=[
+{emoji:'🧊',name:'異界冷却コア・NOVA',rarity:'異世界RARE',sell:0,power:'小ボス防御+10%'},
+{emoji:'🌑',name:'虚無観測ドローン',rarity:'異世界RARE',sell:0,power:'LP獲得+3%'},
+{emoji:'⚙️',name:'崩壊歯車メルター',rarity:'異世界RARE',sell:0,power:'売却額+5%'},
+
+{emoji:'⚡',name:'次元雷獣ヴォルト・ハウル',rarity:'異世界ELITE',sell:0,power:'小ボス速度+20%'},
+{emoji:'☣️',name:'汚染神経バイラスAI',rarity:'異世界ELITE',sell:0,power:'毒ダメージ付与'},
+{emoji:'🌌',name:'星間迷子アーク・ノア',rarity:'異世界ELITE',sell:0,power:'LP追加獲得率+8%'},
+
+{emoji:'🛰️',name:'次元兵器ネメシス・ゼロ',rarity:'異世界SUPER',sell:0,power:'全体攻撃'},
+{emoji:'👁️',name:'観測者アザト・コード',rarity:'異世界SUPER',sell:0,power:'小ボス妨害無効'},
+
+{emoji:'☀️',name:'恒星融合ヘリオス・リヴァイア',rarity:'異世界LEGEND',sell:0,power:'小ボス報酬2倍'},
+{emoji:'🧬',name:'原初生命イデア・シグマ',rarity:'異世界LEGEND',sell:0,power:'LP獲得+25%'},
+
+{emoji:'🌌👑',name:'異界王クロノス・エンド',rarity:'異世界GOD',sell:0,power:'全倍率+15%'}
+];
+
+const MINI_BOSSES=[
+{name:'🤖 スクラップ・タイタン',hp:12000,lp:1},
+{name:'☣️ 汚染融合コア',hp:15000,lp:1},
+{name:'⚡ ライトニング捕食機',hp:10000,lp:1},
+{name:'🌌 ミニ・アークディア',hp:18000,lp:1},
+{name:'🛰️ 軌道破壊兵器β',hp:22000,lp:1},
+{name:'👁️ 深層監視AI端末',hp:25000,lp:1},
+{name:'🦾 重装サイバーゴーレム',hp:35000,lp:1},
+{name:'🔥 プラズマ暴走炉',hp:40000,lp:1}
+];
+
+let miniBoss=null;
+let miniBossHP=0;
+let miniBossMax=0;
+let miniCombo=0;
+
+  
 let bossHP = 0;
 let bossMax = 0;
 let bossKill = 0;
@@ -657,6 +718,121 @@ function lifeGacha(times){
   showResults(results);
 }
 
+let dimensionPity=0;
+
+function dimensionRoll(){
+const r=Math.random()*100;
+
+if(dimensionPity>=49){
+dimensionPity=0;
+return '異世界GOD';
+}
+
+if(r<45)return '異世界RARE';
+if(r<75)return '異世界ELITE';
+if(r<92)return '異世界SUPER';
+if(r<99)return '異世界LEGEND';
+
+dimensionPity++;
+return '異世界GOD';
+}
+
+function dimensionGacha(){
+
+if(GAME.lp<600)return alert('LP不足');
+if(GAME.owned.length+1>GAME.baseCap)return alert('基地容量不足');
+
+GAME.lp-=600;
+GAME.crystal+=1;
+
+const rarity=dimensionRoll();
+
+const pool=DIMENSION_CHARACTERS.filter(c=>c.rarity===rarity);
+
+const char=JSON.parse(JSON.stringify(
+pool[Math.floor(Math.random()*pool.length)]
+));
+
+obtainDimension(char);
+
+dimensionEffect();
+
+showResults([char]);
+
+updateUI();
+}
+
+function spawnMiniBoss(){
+
+miniBoss=MINI_BOSSES[
+Math.floor(Math.random()*MINI_BOSSES.length)
+];
+
+miniBossHP=miniBoss.hp;
+miniBossMax=miniBoss.hp;
+
+document.getElementById('miniBossName').innerText=miniBoss.name;
+
+updateMiniBossBar();
+
+}
+
+function attackMiniBoss(){
+
+if(!miniBoss)return;
+
+let dmg=500;
+
+dmg+=countRarity('LEGEND')*200;
+dmg+=countRarity('CHIMERA')*700;
+
+miniBossHP-=dmg;
+
+if(miniBossHP<0){
+miniBossHP=0;
+}
+
+updateMiniBossBar();
+
+if(miniBossHP===0){
+
+miniCombo++;
+
+let mult=1;
+
+if(miniCombo>=6)mult=1.5;
+if(miniCombo>=11)mult=2;
+if(miniCombo>=16)mult=3;
+if(miniCombo>=21)mult=5;
+
+const reward=Math.floor(miniBoss.lp*mult);
+
+GAME.lp+=reward;
+
+addLog('⚔️ 小ボス撃破 ▶ '+miniBoss.name+' ×'+mult);
+
+miniBoss=null;
+
+document.getElementById('miniBossName').innerText='撃破完了';
+
+updateUI();
+
+}
+
+}
+
+function updateMiniBossBar(){
+
+const p=(miniBossHP/miniBossMax)*100;
+
+document.getElementById('miniBossHp').style.width=p+'%';
+
+document.getElementById('miniBossText').innerText=
+miniBossHP+' / '+miniBossMax+
+' | '+miniCombo+'連勝';
+
+}
+  
 /* ====== リザルト演出 ====== */
 function showResults(results){
   const popup=document.getElementById('popup');
@@ -692,6 +868,49 @@ function warningEffect(){
   d.style.position='fixed'; d.style.inset='0'; d.style.background='rgba(255,0,0,.25)';
   d.style.zIndex='998'; d.style.pointerEvents='none';
   document.body.appendChild(d); setTimeout(()=>d.remove(),1200);
+}
+
+function dimensionEffect(){
+
+const d=document.createElement('div');
+
+d.style.position='fixed';
+d.style.inset='0';
+d.style.zIndex='9999';
+d.style.pointerEvents='none';
+d.style.background='radial-gradient(circle,#ffffff 0%,#ff00ff 20%,#000000 70%)';
+d.style.animation='dimensionCrash 2s forwards';
+
+document.body.appendChild(d);
+
+const style=document.createElement('style');
+
+style.innerHTML=`
+@keyframes dimensionCrash{
+0%{
+opacity:0;
+transform:scale(2) rotate(0deg);
+filter:hue-rotate(0deg);
+}
+50%{
+opacity:1;
+transform:scale(1) rotate(180deg);
+filter:hue-rotate(180deg);
+}
+100%{
+opacity:0;
+transform:scale(4) rotate(360deg);
+filter:hue-rotate(360deg);
+}
+}
+`;
+
+document.head.appendChild(style);
+
+setTimeout(()=>{
+d.remove();
+},2000);
+
 }
 
 /* ====== 基地/LP ====== */
