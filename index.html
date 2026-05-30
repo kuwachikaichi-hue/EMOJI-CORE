@@ -491,7 +491,7 @@ const MINI_BOSSES=[
 ];
 
 /* ===== アニマルアーミー ===== */
-
+const ANIMAL_ARMY = [
 {emoji:"🦊",name:"偵察狐レンジャー",rarity:"BEAST RARE",value:350000000,type:"animal",skill:"視界+20%、奇襲率+5%"},
 {emoji:"🦌",name:"角槍エルク・ランサー",rarity:"BEAST RARE",value:42000000,type:"animal",skill:"小ボス防御-10%付与"},
 {emoji:"🦅",name:"高空ホーク・スカウト",rarity:"BEAST RARE",value:48000000,type:"animal",skill:"クリ率+6%（後列）"},
@@ -519,9 +519,9 @@ const MINI_BOSSES=[
 {emoji:"🦚",name:"聖冠ピーコック・ロイヤル",rarity:"BEAST LEGEND",value:7300000000,type:"animal",skill:"小ボス報酬+80%"},
 
 {emoji:"🦁👑",name:"百獣帝レオナイト",rarity:"BEAST KING",value:81000000000,type:"animal",skill:"全物理倍率+12%、部隊シナジー+20%"},
-
+];
 /* ===== マジックフェアリーズ ===== */
-
+const FAIRY_POOL = [
 {emoji:"🌿",name:"クローバー・ヒーラー",rarity:"FAIRY RARE",value:4440000,type:"fairy",skill:"戦闘中回復+8%"},
 {emoji:"💧",name:"ミスト・ドリップ",rarity:"FAIRY RARE",value:4240000,type:"fairy",skill:"敵命中-7%"},
 {emoji:"🔥",name:"スパーク・ピクシー",rarity:"FAIRY RARE",value:45000005,type:"fairy",skill:"連鎖発火"},
@@ -549,9 +549,9 @@ const MINI_BOSSES=[
 {emoji:"🕰️",name:"クロノ・フェアリーナ",rarity:"FAIRY LEGEND",value:3600000000,type:"fairy",skill:"時間停止"},
 
 {emoji:"👑",name:"フェアリークイーン・オーロラ",rarity:"FAIRY QUEEN",value:9000000000,type:"fairy",skill:"全魔法倍率+15%"},
-
+];
 /* ===== ロボペット ===== */
-
+const ROBOT_PET_POOL = [
 {emoji:"🔋",name:"バッテリーネコ・V1",rarity:"ROBO RARE",value:300000000,type:"robo",skill:"初期エネルギー+20%"},
 {emoji:"📡",name:"センサーイヌ・Mk-I",rarity:"ROBO RARE",value:320000000,type:"robo",skill:"ステルス検知+25%"},
 {emoji:"🛞",name:"ローラーウサギ",rarity:"ROBO RARE",value:340000000,type:"robo",skill:"移動中攻撃可能"},
@@ -579,7 +579,8 @@ const MINI_BOSSES=[
 {emoji:"🛰️👑",name:"管制AIキャット・Overseer",rarity:"ROBO LEGEND",value:32000000000,type:"robo",skill:"ロボ与ダメ+18%"},
 
 {emoji:"💠",name:"コアペット・ハイペリオン",rarity:"ROBO CORE",value:8500000000000,type:"robo",skill:"全テク倍率+14%"}
-
+];
+  
 let miniBoss=null;
 let miniBossHP=0;
 let miniBossMax=0;
