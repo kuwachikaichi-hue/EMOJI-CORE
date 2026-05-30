@@ -747,6 +747,14 @@ function renderAchievements(){
   });
 }
 
+function isDiamondFestival(){
+  const now = new Date();
+  const day = now.getDay(); // 0=日曜 6=土曜
+  const hour = now.getHours();
+
+  return (day===0 || day===6) && hour>=12 && hour<14;
+}
+  
 /* ====== 取得/図鑑/実績 ====== */
 function obtain(char){
   GAME.owned.push(char);
@@ -1289,6 +1297,13 @@ function updateBossBar(){
   if(bossMax<=0){ document.getElementById('bossHp').style.width='0%'; return; }
   const p = Math.max(0, Math.min(100, (bossHP/bossMax)*100));
   document.getElementById('bossHp').style.width = p+'%';
+if(isDiamondFestival()){
+
+    document.getElementById('bossText').innerHTML =
+
+      `${bossHP} / ${bossMax}<br>💎ダイヤ祭開催中！`;
+
+  }else{
   document.getElementById('bossText').innerText = `${bossHP} / ${bossMax}`;
 }
 
@@ -1299,9 +1314,15 @@ function attackBoss(){
   if(bossHP<0) bossHP=0;
   updateBossBar();
   if(bossHP===0){
-    GAME.money += 500_000;
-    GAME.lp += 5;
-    bossKill++;
+  GAME.money += 500_000;
+  GAME.lp += 5;
+
+if(isDiamondFestival()){
+  GAME.crystal += 1;
+  addLog('💎 ダイヤ祭 ▶ ダイヤ+1');
+  }
+  bossKill++; 
+  obtain(clone(currentBoss));
     obtain(clone(currentBoss));
     addLog('⚔️ ボス撃破 ▶ '+currentBoss.name+'（+¥500,000 / +5LP / 本体入手）');
     currentBoss = null;
