@@ -37,6 +37,14 @@ header{
   text-shadow:0 0 5px #ffd700,0 0 10px #ffcc00,0 0 20px #ffaa00,0 0 40px rgba(255,200,0,.8);
   animation:moneyGlow 1.5s infinite alternate;
 }
+#money{
+  display:block;
+  max-height: calc(1.2em * 4); /* 4行分 */
+  line-height: 1.2em;
+  overflow-y: auto;
+  word-break: break-all;
+  white-space: normal;
+}
 @keyframes moneyGlow{
   0%{ transform:scale(1); filter:brightness(1); }
   100%{ transform:scale(1.05); filter:brightness(1.3); }
