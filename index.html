@@ -1323,10 +1323,25 @@ function updateBossBar(){
 
   document.getElementById('bossHp').style.width=p+'%';
 
-  if(isDiamondFestival()){
-    document.getElementById('bossText').innerHTML=
-      `${bossHP} / ${bossMax}<br>💎ダイヤ祭開催中！`;
-  }else{
+  if(isDiamondFestival() && isLifeFestival()){
+
+document.getElementById('bossText').innerHTML=
+`${bossHP} / ${bossMax}<br>
+💎ダイヤ祭 + ❤️ライフ祭`;
+
+}else if(isDiamondFestival()){
+
+document.getElementById('bossText').innerHTML=
+`${bossHP} / ${bossMax}<br>
+💎ダイヤ祭開催中！`;
+
+}else if(isLifeFestival()){
+
+document.getElementById('bossText').innerHTML=
+`${bossHP} / ${bossMax}<br>
+❤️ライフ祭開催中！`;
+
+}else{
     document.getElementById('bossText').innerText=
       `${bossHP} / ${bossMax}`;
   }
