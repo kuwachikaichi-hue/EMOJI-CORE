@@ -1807,9 +1807,15 @@ const RANK_HP = [
 1e7192
 ];
 
-if(!GAME.rank){
+if(GAME.rank===undefined){
 GAME.rank=0;
+}
+
+if(GAME.rankCooldown===undefined){
 GAME.rankCooldown=0;
+}
+
+if(GAME.rankLastDecay===undefined){
 GAME.rankLastDecay=Date.now();
 }
 
@@ -1942,7 +1948,9 @@ rankEndTime=Date.now()+15000;
 
 updateRankBoss();
 
+if(typeof addLog==="function"){
 addLog("🏆 ランク挑戦開始");
+}
 
 }
 
@@ -1974,14 +1982,17 @@ function attackRankBoss(){
 
 if(!rankBattle)return;
 
-/* 毎秒収入ベースで攻撃 */
-const damage =
-GAME.perSecond ||
-GAME.income ||
-GAME.pps ||
+const damage=
+GAME.perSecond||
+GAME.income||
+GAME.pps||
 1;
 
-rankBossHP -= damage;
+rankBossHP-=damage;
+
+if(rankBossHP<0){
+rankBossHP=0;
+}
 
 if(rankBossHP<=0){
 
@@ -2012,8 +2023,11 @@ document.getElementById(
 "rankBossHp"
 ).style.width="0%";
 
+if(typeof flashRainbow==="function"){
 flashRainbow();
+}
 
+if(typeof addLog==="function"){
 addLog(
 "🏆 ランク昇格 ▶ "+
 RANK_DATA[
@@ -2023,8 +2037,11 @@ RANK_DATA.length-1
 )
 ]
 );
+}
 
+if(typeof updateUI==="function"){
 updateUI();
+}
 
 }else{
 
@@ -2048,13 +2065,20 @@ GAME.rankCooldown=
 Date.now()+
 3*24*60*60*1000;
 
+if(typeof addLog==="function"){
 addLog(
 "❌ ランク挑戦失敗（3日待機）"
 );
+}
 
+const text=
 document.getElementById(
 "rankBossText"
-).innerText="挑戦失敗";
+);
+
+if(text){
+text.innerText="挑戦失敗";
+}
 
 }
 
@@ -2080,9 +2104,11 @@ GAME.rank-2
 GAME.rankLastDecay=
 Date.now();
 
+if(typeof addLog==="function"){
 addLog(
 "📉 ランクが2段階低下"
 );
+}
 
 }
 
@@ -2090,8 +2116,12 @@ addLog(
 
 document.addEventListener(
 "DOMContentLoaded",
-createRankTab
+()=>{
+setTimeout(createRankTab,100);
+}
 );
+
+createRankTab();
   
 </script>
 </body>
