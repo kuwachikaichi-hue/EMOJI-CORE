@@ -1974,7 +1974,14 @@ function attackRankBoss(){
 
 if(!rankBattle)return;
 
-rankBossHP-=getTotalPower();
+/* 毎秒収入ベースで攻撃 */
+const damage =
+GAME.perSecond ||
+GAME.income ||
+GAME.pps ||
+1;
+
+rankBossHP -= damage;
 
 if(rankBossHP<=0){
 
