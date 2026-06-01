@@ -2063,11 +2063,10 @@ rankBattle=false;
 
 GAME.rankCooldown=
 Date.now()+
-3*24*60*60*1000;
+60*60*1000;
 
-if(typeof addLog==="function"){
 addLog(
-"❌ ランク挑戦失敗（3日待機）"
+"❌ ランク挑戦失敗（1時間待機）"
 );
 }
 
