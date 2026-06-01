@@ -750,11 +750,28 @@ function renderAchievements(){
 }
 
 function isDiamondFestival(){
-  const now = new Date();
-  const day = now.getDay(); // 0=日曜 6=土曜
-  const hour = now.getHours();
+  const now=new Date();
+  const day=now.getDay();
+  const hour=now.getHours();
 
-  return (day===0 || day===6) && hour>=12 && hour<14;
+  return (
+    day===2 || // 火
+    day===5 || // 金
+    day===6 || // 土
+    day===0    // 日
+  ) && hour>=12 && hour<14;
+}
+
+function isLifeFestival(){
+  const now=new Date();
+  const day=now.getDay();
+  const hour=now.getHours();
+
+  return (
+    day===1 || // 月
+    day===3 || // 水
+    day===5    // 金
+  ) && hour>=12 && hour<14;
 }
   
 /* ====== 取得/図鑑/実績 ====== */
@@ -1323,7 +1340,15 @@ function attackBoss(){
   updateBossBar();
   if(bossHP===0){
   GAME.money += 500_000;
-  GAME.lp += 5;
+
+let lpReward=5;
+
+if(isLifeFestival()){
+  lpReward*=3;
+  addLog('❤️ ライフ祭 ▶ LP3倍');
+}
+
+GAME.lp+=lpReward;
 
 if(isDiamondFestival()){
   GAME.crystal += 1;
