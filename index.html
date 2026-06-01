@@ -203,6 +203,188 @@ opacity:0;
 transform:scale(2);
 }
 }
+
+.fx_robo_boot{
+  position:fixed;
+  inset:0;
+  background:rgba(0,255,255,0.2);
+  animation:fade 0.7s;
+}
+
+.fx_chain_clash{
+  position:fixed;
+  inset:0;
+  background:rgba(255,0,0,0.2);
+  animation:shake 0.3s;
+}
+
+.fx_overdrive{
+  position:fixed;
+  inset:0;
+  background:rgba(255,80,0,0.3);
+  animation:flash 0.6s;
+}
+
+.fx_emp{
+  position:fixed;
+  inset:0;
+  background:rgba(0,100,255,0.25);
+  animation:flash 0.8s;
+}
+
+.fx_crystal_spawn{
+  position:fixed;
+  inset:0;
+  background:linear-gradient(45deg,#00f2ff,#b300ff);
+  opacity:0;
+  animation:flash 0.7s;
+}
+
+.fx_prism{
+  position:fixed;
+  inset:0;
+  background:conic-gradient(red,orange,yellow,green,blue,purple);
+  animation:flash 0.6s;
+}
+
+.fx_shatter{
+  position:fixed;
+  inset:0;
+  background:white;
+  animation:shake 0.3s;
+}
+
+.fx_gem_rain{
+  position:fixed;
+  inset:0;
+  background:rgba(255,255,255,0.15);
+  animation:fade 0.9s;
+}
+
+.fx_quake{
+  position:fixed;
+  inset:0;
+  background:rgba(120,120,120,0.2);
+  animation:shake 0.4s;
+}
+
+.fx_orbit{
+  position:fixed;
+  inset:0;
+  background:radial-gradient(circle,transparent,rgba(0,0,255,0.2));
+  animation:fade 0.6s;
+}
+
+.fx_gravity{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.2);
+  animation:flash 0.8s;
+}
+
+.fx_star{
+  position:fixed;
+  inset:0;
+  background:rgba(255,255,255,0.25);
+  animation:flash 0.5s;
+}
+
+/* 共通アニメ */
+@keyframes flash{
+  0%{opacity:0;}
+  30%{opacity:1;}
+  100%{opacity:0;}
+}
+
+@keyframes fade{
+  0%{opacity:0;}
+  50%{opacity:1;}
+  100%{opacity:0;}
+}
+
+@keyframes shake{
+  0%{transform:translate(0,0);}
+  25%{transform:translate(3px,-3px);}
+  50%{transform:translate(-3px,3px);}
+  75%{transform:translate(2px,2px);}
+  100%{transform:translate(0,0);}
+}
+
+#gachaPanel{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  margin-top:20px;
+}
+
+.gachaBtn{
+  padding:16px;
+  font-size:16px;
+  border:none;
+  border-radius:12px;
+  color:white;
+  cursor:pointer;
+  transition:0.2s;
+  font-weight:bold;
+}
+
+.gachaBtn:active{
+  transform:scale(0.95);
+}
+
+/* 梅雨 */
+.gachaBtn.tsuyu{
+  background:linear-gradient(135deg,#3aa0ff,#00d4ff);
+  box-shadow:0 0 20px #00d4ff;
+}
+
+/* レインボー */
+.gachaBtn.rainbow{
+  background:linear-gradient(135deg,
+    red,orange,yellow,green,blue,purple);
+  box-shadow:0 0 25px rgba(255,255,255,0.5);
+}
+
+/* フード */
+.gachaBtn.food{
+  background:linear-gradient(135deg,#ff7b00,#ff2d55);
+  box-shadow:0 0 20px #ff7b00;
+}
+
+/* 共通フラッシュ */
+.flash{
+  position:fixed;
+  top:0; left:0;
+  width:100vw; height:100vh;
+  background:white;
+  opacity:0;
+  pointer-events:none;
+  animation:flash 0.5s;
+}
+
+@keyframes flash{
+  0%{opacity:0;}
+  20%{opacity:0.9;}
+  100%{opacity:0;}
+}
+
+/* レインボー演出 */
+.rainbowFlash{
+  position:fixed;
+  top:0; left:0;
+  width:100vw; height:100vh;
+  background:linear-gradient(90deg,
+    red,orange,yellow,green,blue,purple);
+  opacity:0;
+  animation:rainbowFlash 0.6s;
+}
+
+@keyframes rainbowFlash{
+  0%{opacity:0;}
+  30%{opacity:0.8;}
+  100%{opacity:0;}
+}
+
 </style>
 </head>
 <body>
@@ -258,6 +440,23 @@ transform:scale(2);
         <button class="action" onclick="tengokuGacha()">
 🪓天獄🪽 💎1000
 </button>
+
+        <div id="gachaPanel">
+
+        <button class="gachaBtn tsuyu" onclick="tsuyuGacha()">
+    ☔ 超梅雨祭ガチャ（10京）
+  </button>
+
+        <button class="gachaBtn rainbow" onclick="rainbowDragonGacha()">
+    🌈 レインボードラゴンガチャ（10京）
+  </button>
+
+        <button class="gachaBtn food" onclick="tripleFoodGacha()">
+    🍕 トリプルフードガチャ（10京）
+  </button>
+
+</div>
+</div>
       </div>
     </div>
 
@@ -1004,6 +1203,487 @@ skill:"全ダメージ+10000%、全ステータス+5000%"
 }
 ];
 
+const ROBO_WARRIOR = [
+  // ── MECHA RARE ──
+  { emoji:"🤖⛓️", name:"鎖拳メカ・チェインフィスト", rarity:"MECHA RARE", sell: 1200000, type:"robo", skill:"拘束+30%、近接ダメ+100%" },
+  { emoji:"🛡️🤖", name:"警備機兵セントリーMk-II", rarity:"MECHA RARE", sell: 1400000, type:"robo", skill:"防御+150%、タウント付与" },
+  { emoji:"⚙️🤖", name:"歯車剣士ギアブレード", rarity:"MECHA RARE", sell: 1500000, type:"robo", skill:"出血付与+25%、攻撃速度+20%" },
+  { emoji:"🔩🤖", name:"リベット・スピア", rarity:"MECHA RARE", sell: 1600000, type:"robo", skill:"貫通+15%、装甲破壊+30%" },
+  { emoji:"🧲🤖", name:"マグネット・グラップラー", rarity:"MECHA RARE", sell: 1800000, type:"robo", skill:"引き寄せ+2体、金属特効+50%" },
+  // ── MECHA ELITE ──
+  { emoji:"🗡️🤖⛓️", name:"チェインデュエリスト・Ω", rarity:"MECHA ELITE", sell: 4800000, type:"robo", skill:"連撃+2、拘束敵へ+200%" },
+  { emoji:"🛰️🤖", name:"ドローン司令アービター", rarity:"MECHA ELITE", sell: 5200000, type:"robo", skill:"随伴ドローン×2、索敵+100%" },
+  { emoji:"🔫🤖", name:"レールガン・ランページ", rarity:"MECHA ELITE", sell: 5600000, type:"robo", skill:"貫通+150%、チャージ射撃" },
+  { emoji:"🧪🤖", name:"ナノ修理兵リペアラーX", rarity:"MECHA ELITE", sell: 6000000, type:"robo", skill:"毎秒回復+3%、臨時装甲+20%" },
+  { emoji:"🧠🤖", name:"AI戦術士ストラテジスト", rarity:"MECHA ELITE", sell: 6500000, type:"robo", skill:"味方クリ+10%、行動速度+15%" },
+  // ── MECHA SUPER ──
+  { emoji:"🦾⛓️", name:"拘束砕機ブレイカー・ギロチン", rarity:"MECHA SUPER", sell: 18000000, type:"robo", skill:"固定ダメージ+800%、防御無視" },
+  { emoji:"🚀🤖", name:"跳躍強襲メテオ・ランサー", rarity:"MECHA SUPER", sell: 22000000, type:"robo", skill:"落下ダメ+600%、眩暈確率+40%" },
+  { emoji:"🧯🤖", name:"熱制御兵サーマル・バルブ", rarity:"MECHA SUPER", sell: 24000000, type:"robo", skill:"過熱無効、炎上場で攻撃+300%" },
+  { emoji:"🪫⚡🤖", name:"EMP執行ユニット・ブラックアウト", rarity:"MECHA SUPER", sell: 26000000, type:"robo", skill:"全敵感電+2秒、シールド破壊" },
+  { emoji:"🛞🤖", name:"突進装甲バイソン・ローラー", rarity:"MECHA SUPER", sell: 30000000, type:"robo", skill:"体当たり+900%、ノックバック特大" },
+  // ── MECHA LEGEND ──
+  { emoji:"🕹️👑🤖", name:"機皇指令ゼロ・ディレクター", rarity:"MECHA LEGEND", sell: 90000000, type:"robo", skill:"全機体+25%、指令で即行動" },
+  { emoji:"🛰️🛡️🤖", name:"衛星盾将コロナ・バスチオン", rarity:"MECHA LEGEND", sell: 120000000, type:"robo", skill:"衛星バリア、範囲被ダメ-40%" },
+  { emoji:"🧲⛓️👹", name:"鎖魔王アイアン・オーバーロード", rarity:"MECHA LEGEND", sell: 150000000, type:"robo", skill:"拘束上限+3体、拘束中被ダメ+300%" },
+  { emoji:"🩻🤖", name:"解析皇アナトミア", rarity:"MECHA LEGEND", sell: 180000000, type:"robo", skill:"弱点露出100%、クリダメ+200%" },
+  // ── MECHA GOD ──
+  { emoji:"🧠🌐🤖", name:"集積意識ゴッドネット", rarity:"MECHA GOD", sell: 450000000, type:"robo", skill:"全倍率+4000%、ネットワーク同調" },
+  { emoji:"⚙️⛓️👑", name:"機鎖創造神チェイン・アーキテクト", rarity:"MECHA GOD", sell: 700000000, type:"robo", skill:"鎖領域展開、近接敵停止" },
+  { emoji:"🛡️⚡🌌", name:"超越城塞オムニ・フォート", rarity:"MECHA GOD", sell: 900000000, type:"robo", skill:"無敵3秒周期、反射+300%" },
+  { emoji:"🕹️🔥⚡", name:"最終制御者オーバードライブ・ゼロ", rarity:"MECHA ORIGIN", sell: 1500000000, type:"robo", skill:"全ステ+9999%、時間加速x2" },
+];
+
+const CRYSTAL_GOLEM = [
+  // ── CRYSTAL RARE ──
+  { emoji:"💎🪬", name:"祈晶ゴーレム・タリスマ", rarity:"CRYSTAL RARE", sellGem: 800,  incomeGem: 1.2, type:"crystal", skill:"浄化+20%、被ダメ-10%" },
+  { emoji:"🔷🪨", name:"蒼晶岩ブルーサイト", rarity:"CRYSTAL RARE", sellGem: 900,  incomeGem: 1.4, type:"crystal", skill:"氷耐性+40%、鈍足付与" },
+  { emoji:"🔶🗿", name:"琥珀核アンバー・コア", rarity:"CRYSTAL RARE", sellGem: 950,  incomeGem: 1.5, type:"crystal", skill:"出血無効、拘束耐性+30%" },
+  { emoji:"🔺🪨", name:"紅晶刃クリムゾン・エッジ", rarity:"CRYSTAL RARE", sellGem: 1000, incomeGem: 1.6, type:"crystal", skill:"会心+10%、斬撃+50%" },
+  { emoji:"🔹🧊", name:"氷晶衛シバリン", rarity:"CRYSTAL RARE", sellGem: 1100, incomeGem: 1.8, type:"crystal", skill:"凍結付与+15%、被クリ-20%" },
+  // ── CRYSTAL ELITE ──
+  { emoji:"💠🗿", name:"菱紋守リゾマティック", rarity:"CRYSTAL ELITE", sellGem: 2400, incomeGem: 3.6, type:"crystal", skill:"ダメ軽減+25%、挑発" },
+  { emoji:"🔷✨", name:"蒼光導パスファサイト", rarity:"CRYSTAL ELITE", sellGem: 2600, incomeGem: 3.8, type:"crystal", skill:"光属性+120%、盲目付与" },
+  { emoji:"🔰💎", name:"護符核タリス・ノード", rarity:"CRYSTAL ELITE", sellGem: 2800, incomeGem: 4.2, type:"crystal", skill:"味方シールド+8%" },
+  { emoji:"🪬🔮", name:"祈導晶プリズム・セプター", rarity:"CRYSTAL ELITE", sellGem: 3000, incomeGem: 4.6, type:"crystal", skill:"支援効果延長+30%" },
+  { emoji:"💎🧲", name:"宝磁ゴーレム・ジェムポーラー", rarity:"CRYSTAL ELITE", sellGem: 3400, incomeGem: 5.0, type:"crystal", skill:"💎吸引+15%、ドロップ+5%" },
+  // ── CRYSTAL SUPER ──
+  { emoji:"💎🪓", name:"結晶戦斧カーヴドサイト", rarity:"CRYSTAL SUPER", sellGem: 9000, incomeGem: 12, type:"crystal", skill:"破砕+300%、装甲粉砕" },
+  { emoji:"💎🛡️", name:"晶壁城ガーディアン・バスト", rarity:"CRYSTAL SUPER", sellGem: 11000, incomeGem: 14, type:"crystal", skill:"防御+500%、範囲ガード" },
+  { emoji:"💎🌈", name:"虹晶柱スペクトラル・トーテム", rarity:"CRYSTAL SUPER", sellGem: 13000, incomeGem: 16, type:"crystal", skill:"全属性+200%、分光バフ" },
+  { emoji:"💎🌀", name:"渦晶核ボルテクサイト", rarity:"CRYSTAL SUPER", sellGem: 15000, incomeGem: 18, type:"crystal", skill:"範囲吸引、回転斬+400%" },
+  { emoji:"💎🧬", name:"生体晶バイオクリスト", rarity:"CRYSTAL SUPER", sellGem: 17000, incomeGem: 20, type:"crystal", skill:"再生+3%/秒、状態異常耐性+50%" },
+  // ── CRYSTAL LEGEND ──
+  { emoji:"💎👑", name:"王晶体ロイヤル・モノリス", rarity:"CRYSTAL LEGEND", sellGem: 40000, incomeGem: 45, type:"crystal", skill:"全体防御+20%、王命：即時シールド" },
+  { emoji:"💎🧘", name:"静謐核サイレント・ゼン", rarity:"CRYSTAL LEGEND", sellGem: 52000, incomeGem: 60, type:"crystal", skill:"ヘイト-50%、被ダメ時回復" },
+  { emoji:"💎🕯️", name:"聖灯晶ルーメン・ピラー", rarity:"CRYSTAL LEGEND", sellGem: 65000, incomeGem: 70, type:"crystal", skill:"祝福+300%、闇無効" },
+  { emoji:"💎🧿", name:"護法眼アミュレト・ゴーレム", rarity:"CRYSTAL LEGEND", sellGem: 80000, incomeGem: 85, type:"crystal", skill:"呪詛反射+100%、封印" },
+  // ── CRYSTAL ORIGIN ──
+  { emoji:"💎🌌👑", name:"創晶神プリマ・クリスタリア", rarity:"CRYSTAL ORIGIN", sellGem: 250000, incomeGem: 220, type:"crystal", skill:"全倍率+9999%、💎獲得×3" },
+  { emoji:"💎🪬🌈", name:"祈虹核アーク・タリスマティカ", rarity:"CRYSTAL GOD", sellGem: 180000, incomeGem: 180, type:"crystal", skill:"支援2倍延長、💎雨（　　
+];
+
+const EARTH_STAR = [
+  // ── GEO RARE ──
+  { emoji:"🪨🌟", name:"原岩星グラニット・スター", rarity:"GEO RARE", sell: 1500000, type:"earth", skill:"岩場特効+80%、被ノックバック無効" },
+  { emoji:"🧭🌍", name:"地脈案内ジオガイド", rarity:"GEO RARE", sell: 1600000, type:"earth", skill:"地形視界+100%、索敵+30%" },
+  { emoji:"⛰️✨", name:"輝山の衛士ルミナ・ピーク", rarity:"GEO RARE", sell: 1700000, type:"earth", skill:"高所攻撃+120%、落下無効" },
+  { emoji:"🪨🌀", name:"礫渦ランブル・コーン", rarity:"GEO RARE", sell: 1800000, type:"earth", skill:"範囲吸引、岩弾+60%" },
+  { emoji:"🧱🌟", name:"星壁メイソン・バリア", rarity:"GEO RARE", sell: 1900000, type:"earth", skill:"壁生成、被ダメ-10%" },
+  // ── GEO ELITE ──
+  { emoji:"🪐🪨", name:"環土将サテライト・テラ", rarity:"GEO ELITE", sell: 5200000, type:"earth", skill:"衛星岩周回ダメ、ガード+25%" },
+  { emoji:"🧲🌏", name:"磁界王マグネタイト", rarity:"GEO ELITE", sell: 5600000, type:"earth", skill:"金属特効+120%、投射逸れ" },
+  { emoji:"🌋🌟", name:"火山星ヴォルカ・ノヴァ", rarity:"GEO ELITE", sell: 6000000, type:"earth", skill:"溶岩場展開、炎ダメ+300%" },
+  { emoji:"🌪️🪨", name:"砂塵将デューン・テンペスト", rarity:"GEO ELITE", sell: 6400000, type:"earth", skill:"視界減衰、出血+30%" },
+  { emoji:"🌊🪨", name:"海岸星タイド・ストーン", rarity:"GEO ELITE", sell: 6800000, type:"earth", skill:"潮汐強化、波打ち際で+200%" },
+  // ── GEO SUPER ──
+  { emoji:"🌑💫", name:"新月核ルナ・ベッドロック", rarity:"GEO SUPER", sell: 18000000, type:"earth", skill:"闇場強化、潮汐支配、眠り付与" },
+  { emoji:"🪐💥", name:"衝突星インパクター", rarity:"GEO SUPER", sell: 21000000, type:"earth", skill:"隕石落下+700%、スタン" },
+  { emoji:"🛰️🌍", name:"軌道守衛オービタル・ガード", rarity:"GEO SUPER", sell: 23000000, type:"earth", skill:"全体被遠隔-25%、反射+50%" },
+  { emoji:"🕳️🌟", name:"重力井戸グラビトン・コア", rarity:"GEO SUPER", sell: 26000000, type:"earth", skill:"移動-30%（敵）、与ダメ+250%" },
+  { emoji:"🧱🔥", name:"熔壁城バスチオン・マグマ", rarity:"GEO SUPER", sell: 30000000, type:"earth", skill:"防御+700%、接触炎上" },
+  // ── GEO LEGEND ──
+  { emoji:"🌍👑", name:"地球王ガイア・レックス", rarity:"GEO LEGEND", sell: 90000000, type:"earth", skill:"地形適応100%、全体守護+15%" },
+  { emoji:"🌟👼", name:"星護天使アストラ・セラフ", rarity:"GEO LEGEND", sell: 120000000, type:"earth", skill:"聖域化、回復+800%" },
+  { emoji:"🌏🧭", name:"極点支配ノースサウス", rarity:"GEO LEGEND", sell: 150000000, type:"earth", skill:"極域で全ステ+3000%" },
+  { emoji:"🌋👹", name:"灼王マグマ・デモロス", rarity:"GEO LEGEND", sell: 180000000, type:"earth", skill:"炎上領域、耐性無視+200%" },
+  // ── GEO GOD ──
+  { emoji:"🌏💫👑", name:"恒星創地神テラ・スター", rarity:"GEO GOD", sell: 420000000, type:"earth", skill:"全倍率+5000%、恒星輝きで恐慌" },
+  { emoji:"🪐🌌", name:"環宙皇サテュルヌス", rarity:"GEO GOD", sell: 650000000, type:"earth", skill:"周回バフ×3、宇宙場で+7000%" },
+  { emoji:"🕳️👑", name:"深重力王ブラック・モナーク", rarity:"GEO GOD", sell: 900000000, type:"earth", skill:"全敵引力、時間遅延x0.7" },
+  { emoji:"🌟🌏👑", name:"創星地母ガイア・オリジン", rarity:"GEO ORIGIN", sell: 1500000000, type:"earth", skill:"全ステ+9999%、地表改変" },
+];
+
+const TSUYU_MATSURI = [
+  // ── RAINY RARE ──
+  {
+    emoji:"🌧️👻", name:"小雨のユウレイ・ドリズル",
+    rarity:"RAINY RARE", sell:10000000000000000,
+    type:"tsuyu", skill:"回避+30%、雨天時HP回復+15%"
+  },
+  {
+    emoji:"☔🕷️", name:"蜘蛛傘オバケ・レインスパイダー",
+    rarity:"RAINY RARE", sell:12000000000000000,
+    type:"tsuyu", skill:"毒付与+40%、雨天特効+20%"
+  },
+  {
+    emoji:"🌂👁️", name:"透明雨傘の一つ目小僧",
+    rarity:"RAINY RARE", sell:14000000000000000,
+    type:"tsuyu", skill:"視界妨害+50%、ステルス付与"
+  },
+  {
+    emoji:"💧🐸", name:"雨呼びカエル・レインコーラー",
+    rarity:"RAINY RARE", sell:16000000000000000,
+    type:"tsuyu", skill:"LP獲得+30%、雨天収益+25%"
+  },
+  {
+    emoji:"⛈️🦎", name:"嵐蜥蜴ストームゲッコー",
+    rarity:"RAINY RARE", sell:18000000000000000,
+    type:"tsuyu", skill:"移動速度+45%、雷耐性100%"
+  },
+  // ── RAINY ELITE ──
+  {
+    emoji:"🌩️🧙", name:"雷雨魔導士サンダークレリック",
+    rarity:"RAINY ELITE", sell:40000000000000000,
+    type:"tsuyu", skill:"雷魔法ダメ+200%、全体感電"
+  },
+  {
+    emoji:"☔⚔️", name:"豪雨剣士ダウンポア・ブレード",
+    rarity:"RAINY ELITE", sell:55000000000000000,
+    type:"tsuyu", skill:"雨天時攻撃+300%、クリ率+25%"
+  },
+  {
+    emoji:"🌧️🤺", name:"梅雨の剣闘士レインファイター",
+    rarity:"RAINY ELITE", sell:70000000000000000,
+    type:"tsuyu", skill:"連続攻撃+3回、雨天特効+50%"
+  },
+  {
+    emoji:"💦👺", name:"水鬼ウォーター・オニ",
+    rarity:"RAINY ELITE", sell:90000000000000000,
+    type:"tsuyu", skill:"水属性全倍率+150%、溺れ付与"
+  },
+  {
+    emoji:"⛈️🥷", name:"嵐忍者ストーム・シノビ",
+    rarity:"RAINY ELITE", sell:120000000000000000,
+    type:"tsuyu", skill:"暗殺+500%、雨中完全ステルス"
+  },
+  // ── RAINY SUPER ──
+  {
+    emoji:"🌊🏯", name:"洪水城砦アクア・フォートレス",
+    rarity:"RAINY SUPER", sell:300000000000000000,
+    type:"tsuyu", skill:"防御+1000%、水属性バリア生成"
+  },
+  {
+    emoji:"🌩️👑", name:"雷帝ストームキング・ジオウ",
+    rarity:"RAINY SUPER", sell:500000000000000000,
+    type:"tsuyu", skill:"全体雷撃+800%、王者の雨"
+  },
+  {
+    emoji:"☔🤖", name:"防水サイバー戦士レインガード",
+    rarity:"RAINY SUPER", sell:700000000000000000,
+    type:"tsuyu", skill:"水・雷耐性無効化、反射+200%"
+  },
+  {
+    emoji:"💧🐲", name:"深雨龍ディープレイン・ワーム",
+    rarity:"RAINY SUPER", sell:900000000000000000,
+    type:"tsuyu", skill:"地中潜行+貫通攻撃+1200%"
+  },
+  // ── RAINY LEGEND ──
+  {
+    emoji:"🌧️👼", name:"梅雨天使ティアドロップ・セラフ",
+    rarity:"RAINY LEGEND", sell:2000000000000000000,
+    type:"tsuyu", skill:"味方全体回復+500%、聖雨祝福"
+  },
+  {
+    emoji:"⛈️🦹", name:"暴嵐魔将ハリケーン・ダークロード",
+    rarity:"RAINY LEGEND", sell:3500000000000000000,
+    type:"tsuyu", skill:"全属性+2000%、嵐の支配"
+  },
+  {
+    emoji:"🌊⚡👑", name:"天嵐皇ネプチューン・オーバーロード",
+    rarity:"RAINY LEGEND", sell:5000000000000000000,
+    type:"tsuyu", skill:"水・雷全倍率+5000%、全体ノックダウン"
+  },
+  {
+    emoji:"☔🌌🤴", name:"梅雨星界王プルヴィウス・レックス",
+    rarity:"RAINY LEGEND", sell:8000000000000000000,
+    type:"tsuyu", skill:"雨天中全ステータス+8000%"
+  },
+  // ── RAINY GOD ──
+  {
+    emoji:"🌧️💀👑", name:"大梅雨死神ポセイドン・カタストロフ",
+    rarity:"RAINY GOD", sell:15000000000000000000,
+    type:"tsuyu", skill:"全ダメージ+15000%、永続大雨フィールド"
+  },
+  {
+    emoji:"⛈️🧿🌌", name:"嵐眼神インフィニティ・サイクロン",
+    rarity:"RAINY GOD", sell:25000000000000000000,
+    type:"tsuyu", skill:"全倍率+20000%、嵐の眼で全敵無力化"
+  },
+  {
+    emoji:"💧☀️🌈", name:"梅雨晴れ神アマテラス・レイン",
+    rarity:"RAINY GOD", sell:40000000000000000000,
+    type:"tsuyu", skill:"全報酬+30000%、雨晴れ奇跡発動"
+  },
+  {
+    emoji:"🌊⛈️👼🌌", name:"超梅雨創造神ストーム・オリジン",
+    rarity:"TSUYU ORIGIN", sell:99999999999999999999,
+    type:"tsuyu", skill:"全ステータス+99999%、梅雨世界の支配者"
+  },
+];
+
+const RAINBOW_DRAGON = [
+  // ── 色ドラゴン（CHROMATIC RARE）──
+  {
+    emoji:"🔴🐉", name:"紅炎龍スカーレット・ブレイズ",
+    rarity:"CHROMATIC RARE", sell:10000000000000000,
+    type:"rainbow", skill:"炎ダメ+200%、燃焼永続付与"
+  },
+  {
+    emoji:"🟠🐉", name:"橙雷龍オーラ・サンダーラッシュ",
+    rarity:"CHROMATIC RARE", sell:12000000000000000,
+    type:"rainbow", skill:"雷速+250%、オレンジ閃光突進"
+  },
+  {
+    emoji:"🟡🐉", name:"黄金龍ゴールデン・ハーモニア",
+    rarity:"CHROMATIC RARE", sell:14000000000000000,
+    type:"rainbow", skill:"収益+200%、金属溶解攻撃"
+  },
+  {
+    emoji:"🟢🐉", name:"翠風龍エメラルド・ゲイル",
+    rarity:"CHROMATIC RARE", sell:16000000000000000,
+    type:"rainbow", skill:"回復+300%、毒無効・植物特効"
+  },
+  {
+    emoji:"🔵🐉", name:"蒼氷龍サファイア・グレイシャー",
+    rarity:"CHROMATIC RARE", sell:18000000000000000,
+    type:"rainbow", skill:"氷結+350%、水属性全吸収"
+  },
+  {
+    emoji:"🟣🐉", name:"紫魔龍アメジスト・ダークウィング",
+    rarity:"CHROMATIC RARE", sell:20000000000000000,
+    type:"rainbow", skill:"魔法反射+40%、呪縛付与"
+  },
+  {
+    emoji:"🩷🐉", name:"桃幻龍チェリーブロッサム・ミスト",
+    rarity:"CHROMATIC RARE", sell:22000000000000000,
+    type:"rainbow", skill:"幻惑+60%、魅了・混乱同時付与"
+  },
+  // ── スペシャルドラゴン（SPECIAL RARE / ELITE）──
+  {
+    emoji:"🌈🐉", name:"虹彩龍レインボー・クロマ",
+    rarity:"SPECTRUM ELITE", sell:80000000000000000,
+    type:"rainbow", skill:"全属性+300%、虹色オーラ展開"
+  },
+  {
+    emoji:"🌑🐉", name:"虚無龍ヴォイド・ブラック",
+    rarity:"SPECTRUM ELITE", sell:100000000000000000,
+    type:"rainbow", skill:"全デバフ無効、暗黒吸収+500%"
+  },
+  {
+    emoji:"⚪🐉", name:"聖白龍ホーリー・ブランク",
+    rarity:"SPECTRUM ELITE", sell:120000000000000000,
+    type:"rainbow", skill:"全バフ2倍延長、神聖ダメ+400%"
+  },
+  {
+    emoji:"✨🐉", name:"星屑龍スターダスト・クリスタリス",
+    rarity:"SPECTRUM ELITE", sell:150000000000000000,
+    type:"rainbow", skill:"クリ率100%、星光貫通+800%"
+  },
+  {
+    emoji:"🌀🐉", name:"渦巻龍サイクロン・スパイラリス",
+    rarity:"SPECTRUM ELITE", sell:180000000000000000,
+    type:"rainbow", skill:"広域竜巻+600%、全敵スタン"
+  },
+  // ── 役職ドラゴン（SUPER / LEGEND）──
+  {
+    emoji:"👑🐉📜", name:"竜王龍ドラゴニック・ロード",
+    rarity:"DRAGON KING", sell:350000000000000000,
+    type:"rainbow", skill:"竜系全倍率+500%、王令で全体バフ"
+  },
+  {
+    emoji:"⚔️🐉🛡️", name:"騎士龍ドラグナイト・フォルティス",
+    rarity:"DRAGON KNIGHT", sell:450000000000000000,
+    type:"rainbow", skill:"防御+800%・攻撃+800%同時発動"
+  },
+  {
+    emoji:"🧪🐉⚗️", name:"錬金龍アルケミ・ドレイク",
+    rarity:"DRAGON SAGE", sell:400000000000000000,
+    type:"rainbow", skill:"素材変換+999%、💎ドロップ+50%"
+  },
+  {
+    emoji:"🎭🐉🎪", name:"道化龍ジェスター・ドラグーン",
+    rarity:"DRAGON SAGE", sell:420000000000000000,
+    type:"rainbow", skill:"ランダム超バフ×5種同時"
+  },
+  {
+    emoji:"🏛️🐉⚖️", name:"審判龍ジャッジメント・ワーム",
+    rarity:"DRAGON SAGE", sell:480000000000000000,
+    type:"rainbow", skill:"全敵デバフ確定付与+敵防御0に"
+  },
+  {
+    emoji:"🔮🐉🌙", name:"予言龍プロフェシー・ムーンドレイク",
+    rarity:"DRAGON SAGE", sell:550000000000000000,
+    type:"rainbow", skill:"次攻撃クリ確定+先手必勝+200%"
+  },
+  {
+    emoji:"🏆🐉💎", name:"覇者龍チャンピオン・ダイヤドレイク",
+    rarity:"DRAGON LEGEND", sell:1200000000000000000,
+    type:"rainbow", skill:"全ボス特効+1500%、💎追加+5/戦"
+  },
+  {
+    emoji:"🌋🐉🔥", name:"噴火龍ヴォルカノ・インフェルナス",
+    rarity:"DRAGON LEGEND", sell:2000000000000000000,
+    type:"rainbow", skill:"フィールド全炎上+2000%、全地形特効"
+  },
+  {
+    emoji:"❄️🐉👑", name:"極寒龍エタニティ・フロスト・カイザー",
+    rarity:"DRAGON LEGEND", sell:3000000000000000000,
+    type:"rainbow", skill:"全属性吸収+2500%、永続凍結フィールド"
+  },
+  {
+    emoji:"🌈🐉👼✨", name:"聖虹龍オーロラ・セレスティアル",
+    rarity:"DRAGON LEGEND", sell:5000000000000000000,
+    type:"rainbow", skill:"全属性倍率+5000%、神聖虹ビーム"
+  },
+  // ── 頂点スペシャル ──
+  {
+    emoji:"🌈🐉🌌💎", name:"星虹龍コズミック・クロマドレイク",
+    rarity:"DRAGON SUPER LEGEND", sell:9000000000000000000,
+    type:"rainbow", skill:"全倍率+9999%、銀河虹砲即死級"
+  },
+  {
+    emoji:"👑🐉⚡🔥❄️", name:"属性皇龍オムニ・ドラゴニア",
+    rarity:"DRAGON EMPEROR", sell:15000000000000000000,
+    type:"rainbow", skill:"全属性+12000%、皇帝覇令全体支配"
+  },
+  {
+    emoji:"🌈💀🐉🌌👑", name:"終焉虹龍アポカリプス・クロマ",
+    rarity:"DRAGON GOD", sell:30000000000000000000,
+    type:"rainbow", skill:"全ダメ+25000%、虹の終末砲"
+  },
+  {
+    emoji:"✨🌈🐉🌠💫", name:"創世虹神ドラゴン・ビギニング",
+    rarity:"DRAGON ORIGIN", sell:50000000000000000000,
+    type:"rainbow", skill:"全ステータス+50000%、世界創生ビーム"
+  },
+  {
+    emoji:"🌈🌈🐉👑🌌", name:"超神虹皇ウルティマ・レインボー・ゼロ",
+    rarity:"RAINBOW GOD", sell:99000000000000000000,
+    type:"rainbow",
+    skill:"全倍率+99999%・全竜系+50000%・虹の意思で世界を塗り替える"
+  },
+  {
+    emoji:"🔴🟠🟡🟢🔵🟣🐉", name:"七色完全体 プリズマ・インフィニドラゴン",
+    rarity:"PRISM ABSOLUTE", sell:999000000000000000000,
+    type:"rainbow",
+    skill:"全色属性解放+100000%、存在するだけで世界が虹に染まる"
+  },
+];
+
+const TRIPLE_FOOD = [
+  // ── FOOD RARE ──
+  {
+    emoji:"🍕🍔🌮", name:"脂質帝ジャンクフード・トライアングル",
+    rarity:"FOOD RARE", sell:10000000000000000,
+    type:"food", skill:"攻撃+150%、敵を油まみれで鈍化+60%"
+  },
+  {
+    emoji:"🍣🦐🍱", name:"海鮮三重奏オーシャン・ベントウ",
+    rarity:"FOOD RARE", sell:12000000000000000,
+    type:"food", skill:"水属性+200%、HP回復+30%/ターン"
+  },
+  {
+    emoji:"🍩🎂🍫", name:"甘神スウィート・トリニティ",
+    rarity:"FOOD RARE", sell:14000000000000000,
+    type:"food", skill:"魅了確率+70%、全体バフ+100%"
+  },
+  {
+    emoji:"🌽🥦🥕", name:"野菜精霊ベジタブル・トリプレット",
+    rarity:"FOOD RARE", sell:16000000000000000,
+    type:"food", skill:"回復+250%、毒・状態異常全治癒"
+  },
+  {
+    emoji:"🍗🥩🌭", name:"肉食王ミートマスター・バーベキュー",
+    rarity:"FOOD RARE", sell:18000000000000000,
+    type:"food", skill:"物理ダメ+300%、肉ごと粉砕クリ+20%"
+  },
+  // ── FOOD ELITE ──
+  {
+    emoji:"🍜🍛🍝", name:"麺カレーパスタ三神ヌードル・カオス",
+    rarity:"FOOD ELITE", sell:60000000000000000,
+    type:"food", skill:"全体スロウ+50%、毎秒持続ダメ+400%"
+  },
+  {
+    emoji:"🍰🍦🧁", name:"洋菓子三冠パティシエ・エクセレント",
+    rarity:"FOOD ELITE", sell:80000000000000000,
+    type:"food", skill:"クリダメ+400%、甘言で敵全体混乱"
+  },
+  {
+    emoji:"🍺🥂🍸", name:"宴会三杯神パーティ・リカー・マスター",
+    rarity:"FOOD ELITE", sell:100000000000000000,
+    type:"food", skill:"全体狂乱付与、味方攻撃+500%同時"
+  },
+  {
+    emoji:"🌶️🧄🫚", name:"激辛三魔将スパイシー・デビル・ソース",
+    rarity:"FOOD ELITE", sell:120000000000000000,
+    type:"food", skill:"炎ダメ+600%、敵HP30%即時削減"
+  },
+  {
+    emoji:"🍓🫐🍇", name:"果実三霊ベリー・オーバーロード",
+    rarity:"FOOD ELITE", sell:150000000000000000,
+    type:"food", skill:"LP獲得+100%、回復量+800%"
+  },
+  // ── FOOD SUPER ──
+  {
+    emoji:"🍕🍣🍛", name:"世界三大料理神グルメ・トライアンフ",
+    rarity:"FOOD SUPER", sell:400000000000000000,
+    type:"food", skill:"全ダメ+1000%、食属性支配宣言"
+  },
+  {
+    emoji:"🎂🍕🥩", name:"宴神バンクウェット・グランドマスター",
+    rarity:"FOOD SUPER", sell:600000000000000000,
+    type:"food", skill:"報酬+1200%、全体祝宴バフ付与"
+  },
+  {
+    emoji:"🍜🍣🍕", name:"食文化帝国エンペラー・ガストロノーム",
+    rarity:"FOOD SUPER", sell:800000000000000000,
+    type:"food", skill:"全属性+1500%、食文化の覇者"
+  },
+  {
+    emoji:"🍫🌶️🧀", name:"禁断の三重奏フォービドゥン・フォンデュ",
+    rarity:"FOOD SUPER", sell:1000000000000000000,
+    type:"food", skill:"全敵溶解+2000%、デバフ確定3種"
+  },
+  // ── FOOD LEGEND ──
+  {
+    emoji:"🍕🌮🥩", name:"肉と穀の覇神カーニボア・サクリファイス",
+    rarity:"FOOD LEGEND", sell:2500000000000000000,
+    type:"food", skill:"物理全倍率+4000%、肉食特攻"
+  },
+  {
+    emoji:"🍣🍜🍱", name:"和食三聖ウマミ・サンクタム",
+    rarity:"FOOD LEGEND", sell:4000000000000000000,
+    type:"food", skill:"全体回復+3000%、うまみ波動+5000%"
+  },
+  {
+    emoji:"🎂🍰🍩", name:"甘界女王スウィート・クイーン・セレスタ",
+    rarity:"FOOD LEGEND", sell:6000000000000000000,
+    type:"food", skill:"全敵魅了確定+全体攻撃+6000%"
+  },
+  {
+    emoji:"🌶️🍕🍫", name:"背徳三魔食グルト・アビスダイン",
+    rarity:"FOOD LEGEND", sell:8000000000000000000,
+    type:"food", skill:"全ダメ+8000%、背徳バフで自傷反射"
+  },
+  // ── FOOD GOD ──
+  {
+    emoji:"🍕🍣🌮🍛🍜", name:"五大食文化神ペンタ・ガストロ・ロード",
+    rarity:"FOOD GOD", sell:18000000000000000000,
+    type:"food", skill:"全倍率+18000%、5属性食連携超必殺"
+  },
+  {
+    emoji:"🎂🍕🥩🌶️🍣", name:"美食世界皇フルコース・オーバーゴッド",
+    rarity:"FOOD GOD", sell:30000000000000000000,
+    type:"food", skill:"全ステータス+25000%、フルコース審判"
+  },
+  {
+    emoji:"🍕🍕🍕", name:"ピザ三位一体神 ウルティマ・ピッツァ・トリニタス",
+    rarity:"FOOD GOD", sell:50000000000000000000,
+    type:"food", skill:"全倍率+40000%、ピザ宇宙を具現化"
+  },
+  {
+    emoji:"🍕🍿🍔🌮🥩🍣", name:"六食具現神アブソリュート・フードゼロ",
+    rarity:"FOOD ORIGIN", sell:999000000000000000000,
+    type:"food",
+    skill:"全ステータス+999999%、食の概念で存在を塗り替える究極の一口"
+  },
+];
+
+function earthStarGacha(){ return gacha(EARTH_STAR, { priceGem:4000, effects:[quakeRumble, orbitSweep, gravityWell, starlightBloom] }); }
+function crystalGolemGacha(){ return gacha(CRYSTAL_GOLEM, { priceGem:4000, currency:"gem", effects:[crystalSpawn, prismShine, shatterPulse, gemRain] }); }
+function roboWarriorGacha(){ return gacha(ROBO_WARRIOR, { priceGem:4000, effects:[roboBootUp, chainClash, overdriveFlash, empBurst] }); }
+
 let miniBoss=null;
 let miniBossHP=0;
 let miniBossMax=0;
@@ -1566,7 +2246,133 @@ showResults([char]);
 updateUI();
 
 }
-  
+
+function tsuyuGacha(){
+
+  if(GAME.crystal < 1000){
+    return alert("💎不足");
+  }
+
+  GAME.crystal -= 1000;
+
+  const char = JSON.parse(JSON.stringify(
+    TSUYU_MATSURI[Math.floor(Math.random()*TSUYU_MATSURI.length)]
+  ));
+
+  obtain(char);
+
+  screenFlash();
+  updateUI();
+  showResults([char]);
+}　
+
+function rainbowDragonGacha(){
+
+  if(GAME.crystal < 1000){
+    return alert("💎不足");
+  }
+
+  GAME.crystal -= 1000;
+
+  const char = JSON.parse(JSON.stringify(
+    RAINBOW_DRAGON[Math.floor(Math.random()*RAINBOW_DRAGON.length)]
+  ));
+
+  obtain(char);
+
+  rainbowEffect();
+  updateUI();
+  showResults([char]);
+}
+
+function tripleFoodGacha(){
+
+  if(GAME.crystal < 1000){
+    return alert("💎不足");
+  }
+
+  GAME.crystal -= 1000;
+
+  const char = JSON.parse(JSON.stringify(
+    TRIPLE_FOOD[Math.floor(Math.random()*TRIPLE_FOOD.length)]
+  ));
+
+  obtain(char);
+
+  screenFlash();
+  updateUI();
+  showResults([char]);
+}
+
+function roboWarriorGacha(){
+
+  if(GAME.gem < 4000){
+    return alert("💎不足");
+  }
+
+  GAME.gem -= 4000;
+
+  const char = JSON.parse(JSON.stringify(
+    ROBO_WARRIOR[Math.floor(Math.random()*ROBO_WARRIOR.length)]
+  ));
+
+  obtain(char);
+
+  roboBootUp();
+  chainClash();
+  overdriveFlash();
+  empBurst();
+
+  updateUI();
+  showResults([char]);
+}
+
+function crystalGolemGacha(){
+
+  if(GAME.crystal < 4000){
+    return alert("💎不足");
+  }
+
+  GAME.crystal -= 4000;
+
+  const char = JSON.parse(JSON.stringify(
+    CRYSTAL_GOLEM[Math.floor(Math.random()*CRYSTAL_GOLEM.length)]
+  ));
+
+  obtain(char);
+
+  crystalSpawn();
+  prismShine();
+  shatterPulse();
+  gemRain();
+
+  updateUI();
+  showResults([char]);
+}
+
+function earthStarGacha(){
+
+  if(GAME.crystal < 4000){
+    return alert("💎不足");
+  }
+
+  GAME.crystal -= 4000;
+
+  const char = JSON.parse(JSON.stringify(
+    EARTH_STAR[Math.floor(Math.random()*EARTH_STAR.length)]
+  ));
+
+  obtain(char);
+
+  quakeRumble();
+  orbitSweep();
+  gravityWell();
+  starlightBloom();
+
+  updateUI();
+  showResults([char]);
+}
+
 function spawnMiniBoss(){
 
 miniBoss=MINI_BOSSES[
@@ -1793,6 +2599,84 @@ wing.remove();
 }
 
 }
+
+function screenFlash(){
+  const div=document.createElement("div");
+  div.className="flash";
+  document.body.appendChild(div);
+  setTimeout(()=>div.remove(),500);
+}
+
+function rainbowEffect(){
+  const div=document.createElement("div");
+  div.className="rainbowFlash";
+  document.body.appendChild(div);
+  setTimeout(()=>div.remove(),600);
+}
+
+function makeFX(className, duration = 600){
+  const el = document.createElement("div");
+  el.className = className;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), duration);
+}
+
+function roboBootUp(){
+  makeFX("fx_robo_boot", 700);
+}
+
+function chainClash(){
+  makeFX("fx_chain_clash", 500);
+  document.body.style.transform = "translateX(2px)";
+  setTimeout(()=>document.body.style.transform = "", 120);
+}
+
+function overdriveFlash(){
+  makeFX("fx_overdrive", 600);
+}
+
+function empBurst(){
+  makeFX("fx_emp", 800);
+}
+
+function crystalSpawn(){
+  makeFX("fx_crystal_spawn", 700);
+}
+
+function prismShine(){
+  makeFX("fx_prism", 600);
+}
+
+function shatterPulse(){
+  makeFX("fx_shatter", 500);
+  document.body.style.filter = "brightness(2)";
+  setTimeout(()=>document.body.style.filter = "", 150);
+}
+
+function gemRain(){
+  makeFX("fx_gem_rain", 900);
+}
+
+function quakeRumble(){
+  document.body.style.transform = "translateY(3px)";
+  setTimeout(()=>document.body.style.transform = "", 120);
+  makeFX("fx_quake", 700);
+}
+
+function orbitSweep(){
+  makeFX("fx_orbit", 600);
+}
+
+function gravityWell(){
+  document.body.style.filter = "contrast(1.5)";
+  setTimeout(()=>document.body.style.filter = "", 200);
+  makeFX("fx_gravity", 800);
+}
+
+function starlightBloom(){
+  makeFX("fx_star", 600);
+}
+
 /* ====== 基地/LP ====== */
 function expandBase(){
   const cost = 50000 * GAME.baseCap;
