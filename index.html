@@ -1395,6 +1395,268 @@ document.addEventListener('DOMContentLoaded', ()=>{
   updateUI();
   spawnBossAuto();
 });
+
+/* ===== ランクシステム ===== */
+
+const RANK_DATA = [
+"C-","C","C+",
+"B-","B","B+",
+"A-","A","A+",
+"S-","S","S+",
+"U-","U","U+",
+"X-","X","X+",
+"Y-","Y","Y+",
+"Z-","Z","Z+",
+"♾️"
+];
+
+const RANK_HP = [
+1e4,
+1e6,
+1e8,
+
+1e10,
+1e12,
+1e14,
+
+1e16,
+1e18,
+1e20,
+
+1e24,
+1e28,
+1e32,
+
+1e36,
+1e40,
+1e44,
+
+1e48,
+1e52,
+1e56,
+
+1e60,
+1e64,
+1e100,
+
+1e112,
+1e449,
+1e1798,
+
+1e7192
+];
+
+if(!GAME.rank){
+GAME.rank=0;
+GAME.rankCooldown=0;
+GAME.rankLastDecay=Date.now();
+}
+
+function createRankTab(){
+
+const tabArea=document.querySelector(".tabs");
+
+const btn=document.createElement("button");
+btn.className="tabBtn";
+btn.dataset.tab="rank";
+btn.innerText="ランク";
+
+tabArea.appendChild(btn);
+
+const panel=document.createElement("section");
+panel.className="panel";
+panel.id="rank";
+
+panel.innerHTML=`
+<div class="section">
+
+<div class="title">
+🏆 ランクシステム
+</div>
+
+<div class="bossBox">
+
+<div id="rankValue"
+style="font-size:28px;font-weight:900">
+${RANK_DATA[GAME.rank]}
+</div>
+
+<div style="margin-top:10px">
+👹 🪓😇🎮 ゴットゲーマ
+</div>
+
+<div style="margin-top:8px" id="rankBossText">
+挑戦待機
+</div>
+
+<div class="hpBar">
+<div class="hpFill" id="rankBossHp"></div>
+</div>
+
+<div class="gachaBtns" style="margin-top:12px">
+<button class="action" onclick="startRankBattle()">
+⚡️挑戦⚡️
+</button>
+</div>
+
+</div>
+
+</div>
+`;
+
+document.querySelector("main").appendChild(panel);
+
+tabsInit();
+
+}
+
+let rankBossHP=0;
+let rankBossMax=0;
+let rankBattle=false;
+let rankEndTime=0;
+
+function formatRankHP(v){
+
+if(v>=1e7192)return "100 不可思議";
+if(v>=1e1798)return "100 那由他";
+if(v>=1e449)return "100 阿僧祇";
+if(v>=1e112)return "100 矜羯羅";
+if(v>=1e100)return "100 Googol";
+if(v>=1e64)return "100 不可思議";
+if(v>=1e60)return "100 那由他";
+if(v>=1e56)return "100 阿僧祇";
+if(v>=1e52)return "100 恒河沙";
+if(v>=1e48)return "100 極";
+if(v>=1e44)return "100 載";
+if(v>=1e40)return "100 正";
+if(v>=1e36)return "100 澗";
+if(v>=1e32)return "100 溝";
+if(v>=1e30)return "100 クエタ";
+if(v>=1e28)return "100 穣";
+if(v>=1e27)return "100 ロナ";
+if(v>=1e24)return "100 𥝱";
+if(v>=1e20)return "100 垓";
+if(v>=1e16)return "100 京";
+if(v>=1e12)return "100 兆";
+if(v>=1e8)return "100 億";
+
+return "100 万";
+}
+
+function startRankBattle(){
+
+if(Date.now()<GAME.rankCooldown){
+alert("まだ挑戦できません");
+return;
+}
+
+rankBossMax=RANK_HP[Math.min(GAME.rank,RANK_HP.length-1)];
+rankBossHP=rankBossMax;
+
+rankBattle=true;
+rankEndTime=Date.now()+15000;
+
+updateRankBoss();
+
+addLog("🏆 ランク挑戦開始");
+
+}
+
+function updateRankBoss(){
+
+const fill=document.getElementById("rankBossHp");
+const text=document.getElementById("rankBossText");
+
+if(!fill||!text)return;
+
+const p=(rankBossHP/rankBossMax)*100;
+
+fill.style.width=Math.max(0,p)+"%";
+
+text.innerHTML=
+formatRankHP(rankBossHP)+"<br>残り"+
+Math.max(0,Math.ceil((rankEndTime-Date.now())/1000))+
+"秒";
+
+}
+
+document.addEventListener("click",function(){
+
+if(!rankBattle)return;
+
+const income=GAME.owned.reduce(
+(a,c)=>a+Math.floor(c.sell/20),
+0
+);
+
+rankBossHP-=income;
+
+if(rankBossHP<=0){
+
+rankBattle=false;
+
+GAME.rank++;
+
+document.getElementById("rankValue").innerText=
+RANK_DATA[Math.min(
+GAME.rank,
+RANK_DATA.length-1
+)];
+
+flashRainbow();
+
+addLog(
+"🏆 ランク昇格 ▶ "+
+RANK_DATA[Math.min(
+GAME.rank,
+RANK_DATA.length-1
+)]
+);
+
+}
+
+});
+
+setInterval(()=>{
+
+if(!rankBattle)return;
+
+updateRankBoss();
+
+if(Date.now()>=rankEndTime){
+
+rankBattle=false;
+
+GAME.rankCooldown=
+Date.now()+3*24*60*60*1000;
+
+addLog("❌ ランク挑戦失敗（3日待機）");
+
+}
+
+},100);
+
+setInterval(()=>{
+
+const month=30*24*60*60*1000;
+
+if(Date.now()-GAME.rankLastDecay>month){
+
+GAME.rank=Math.max(0,GAME.rank-2);
+
+GAME.rankLastDecay=Date.now();
+
+addLog("📉 ランクが2段階低下");
+
+}
+
+},60000);
+
+document.addEventListener(
+"DOMContentLoaded",
+createRankTab
+);
+  
 </script>
 </body>
 </html>
