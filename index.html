@@ -1983,10 +1983,15 @@ function attackRankBoss(){
 if(!rankBattle)return;
 
 const damage=
+Math.max(
+1,
+Math.floor(
 GAME.perSecond||
 GAME.income||
 GAME.pps||
-1;
+100
+)
+);
 
 rankBossHP-=damage;
 
@@ -2121,8 +2126,7 @@ setTimeout(createRankTab,100);
 }
 );
 
-createRankTab();
-  
+createRankTab(); 
 </script>
 </body>
 </html>
