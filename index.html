@@ -1823,17 +1823,28 @@ GAME.rankLastDecay=Date.now();
 
 function createRankTab(){
 
+if(document.getElementById("rank")){
+
+return;
+
+}
+
 const tabArea=document.querySelector(".tabs");
 
 const btn=document.createElement("button");
+
 btn.className="tabBtn";
+
 btn.dataset.tab="rank";
+
 btn.innerText="ランク";
 
 tabArea.appendChild(btn);
 
 const panel=document.createElement("section");
+
 panel.className="panel";
+
 panel.id="rank";
 
 panel.innerHTML=`
