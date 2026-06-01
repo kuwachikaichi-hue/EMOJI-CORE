@@ -1829,6 +1829,58 @@ return;
 
 }
 
+function attackRankBoss(){
+
+if(!rankBattle)return;
+
+rankBossHP-=getTotalPower();
+
+if(rankBossHP<=0){
+
+rankBattle=false;
+
+GAME.rank++;
+
+const rankValue=document.getElementById("rankValue");
+
+if(rankValue){
+rankValue.innerText=
+RANK_DATA[
+Math.min(
+GAME.rank,
+RANK_DATA.length-1
+)
+];
+}
+
+document.getElementById("rankBossText").innerText=
+"挑戦待機";
+
+document.getElementById("rankBossHp").style.width=
+"0%";
+
+flashRainbow();
+
+addLog(
+"🏆 ランク昇格 ▶ "+
+RANK_DATA[
+Math.min(
+GAME.rank,
+RANK_DATA.length-1
+)
+]
+);
+
+updateUI();
+
+}else{
+
+updateRankBoss();
+
+}
+
+}
+
 const tabArea=document.querySelector(".tabs");
 
 const btn=document.createElement("button");
