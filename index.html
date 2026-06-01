@@ -1953,37 +1953,29 @@ Math.max(0,Math.ceil((rankEndTime-Date.now())/1000))+
 
 }
 
-function attackRankBoss(){
-
-if(!rankBattle)return;
-
-let dmg=1000;
-
-dmg+=countRarity("SUPER")*5000;
-dmg+=countRarity("LEGEND")*50000;
-dmg+=countRarity("CHIMERA")*250000;
-
-rankBossHP-=dmg;
-
-if(rankBossHP<0){
-rankBossHP=0;
-}
-
-updateRankBoss();
-
 if(rankBossHP<=0){
 
 rankBattle=false;
 
 GAME.rank++;
 
-document.getElementById("rankValue").innerText=
+const rankValue=document.getElementById("rankValue");
+
+if(rankValue){
+rankValue.innerText=
 RANK_DATA[
 Math.min(
 GAME.rank,
 RANK_DATA.length-1
 )
 ];
+}
+
+document.getElementById("rankBossText").innerText=
+"挑戦待機";
+
+document.getElementById("rankBossHp").style.width=
+"0%";
 
 flashRainbow();
 
@@ -1998,8 +1990,6 @@ RANK_DATA.length-1
 );
 
 updateUI();
-
-}
 
 }
 
