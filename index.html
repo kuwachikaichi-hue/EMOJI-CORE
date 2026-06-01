@@ -132,6 +132,69 @@ button.life{ background:linear-gradient(135deg,#ff3cf7,#ff0055); }
 .bossBox{ text-align:center; padding:18px; border-radius:18px; background:linear-gradient(145deg,#190b12,#321019); }
 .hpBar{ height:18px; background:#222; border-radius:999px; overflow:hidden; margin-top:10px; }
 .hpFill{ height:100%; background:linear-gradient(90deg,#ff3d3d,#ffcc00); width:0%; transition:.3s; }
+/* ===== 天獄ガチャエフェクト ===== */
+
+.heavenWing{
+position:fixed;
+font-size:32px;
+pointer-events:none;
+z-index:99999;
+animation:wingFall linear forwards;
+filter:
+drop-shadow(0 0 8px #00e5ff)
+drop-shadow(0 0 20px #00aaff);
+}
+
+@keyframes wingFall{
+0%{
+opacity:0;
+transform:
+translateY(-100px)
+translateX(0)
+rotate(0deg)
+scale(.5);
+}
+10%{
+opacity:1;
+}
+100%{
+opacity:0;
+transform:
+translateY(120vh)
+translateX(var(--drift))
+rotate(360deg)
+scale(1.5);
+}
+}
+
+.heavenFlash{
+position:fixed;
+inset:0;
+pointer-events:none;
+z-index:99998;
+background:
+radial-gradient(
+circle,
+rgba(0,229,255,.9) 0%,
+rgba(0,120,255,.4) 40%,
+transparent 80%
+);
+animation:heavenFlashAnim 2s forwards;
+}
+
+@keyframes heavenFlashAnim{
+0%{
+opacity:0;
+transform:scale(.5);
+}
+50%{
+opacity:1;
+}
+100%{
+opacity:0;
+transform:scale(2);
+}
+}
 </style>
 </head>
 <body>
@@ -974,6 +1037,31 @@ showResults([char]);
 
 updateUI();
 }
+
+function tengokuGacha(){
+
+if(GAME.crystal<1000){
+return alert("💎不足");
+}
+
+GAME.crystal-=1000;
+
+const char=
+JSON.parse(JSON.stringify(
+TENGOKU_GACHA[
+Math.floor(Math.random()*TENGOKU_GACHA.length)
+]
+));
+
+obtain(char);
+
+heavenEffect();
+
+showResults([char]);
+
+updateUI();
+
+}
   
 function spawnMiniBoss(){
 
@@ -1159,6 +1247,48 @@ document.body.style.filter="";
 
 }
 
+function heavenEffect(){
+
+const flash=document.createElement("div");
+flash.className="heavenFlash";
+document.body.appendChild(flash);
+
+setTimeout(()=>{
+flash.remove();
+},2000);
+
+/* 羽100枚ばら撒き */
+
+for(let i=0;i<100;i++){
+
+const wing=document.createElement("div");
+
+wing.className="heavenWing";
+wing.innerText="🪽";
+
+wing.style.left=Math.random()*100+"vw";
+
+wing.style.top="-50px";
+
+wing.style.setProperty(
+"--drift",
+(Math.random()*400-200)+"px"
+);
+
+wing.style.animationDuration=
+(2+Math.random()*3)+"s";
+
+wing.style.opacity=Math.random();
+
+document.body.appendChild(wing);
+
+setTimeout(()=>{
+wing.remove();
+},5000);
+
+}
+
+}
 /* ====== 基地/LP ====== */
 function expandBase(){
   const cost = 50000 * GAME.baseCap;
