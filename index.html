@@ -644,8 +644,8 @@ const GAME = {
 
   lastDiamondGain: Date.now()
 
-};
-
+}
+  GAME.crystal = GAME.crystal ?? 0;
 /* ====== 追加：ダイヤルーム修正 ====== */
 
 function updateDiamondRoom(){
@@ -2306,11 +2306,13 @@ function tripleFoodGacha(){
 
 function roboWarriorGacha(){
 
-  if(GAME.gem < 4000){
+  GAME.crystal = GAME.crystal ?? 0;
+
+  if(GAME.crystal < 4000){
     return alert("💎不足");
   }
 
-  GAME.gem -= 4000;
+  GAME.crystal -= 4000;
 
   const char = JSON.parse(JSON.stringify(
     ROBO_WARRIOR[Math.floor(Math.random()*ROBO_WARRIOR.length)]
@@ -2318,16 +2320,18 @@ function roboWarriorGacha(){
 
   obtain(char);
 
-  roboBootUp();
-  chainClash();
-  overdriveFlash();
-  empBurst();
+  if(typeof roboBootUp === "function") roboBootUp();
+  if(typeof chainClash === "function") chainClash();
+  if(typeof overdriveFlash === "function") overdriveFlash();
+  if(typeof empBurst === "function") empBurst();
 
   updateUI();
   showResults([char]);
 }
 
 function crystalGolemGacha(){
+
+  GAME.crystal = GAME.crystal ?? 0;
 
   if(GAME.crystal < 4000){
     return alert("💎不足");
@@ -2341,16 +2345,18 @@ function crystalGolemGacha(){
 
   obtain(char);
 
-  crystalSpawn();
-  prismShine();
-  shatterPulse();
-  gemRain();
+  if(typeof crystalSpawn === "function") crystalSpawn();
+  if(typeof prismShine === "function") prismShine();
+  if(typeof shatterPulse === "function") shatterPulse();
+  if(typeof gemRain === "function") gemRain();
 
   updateUI();
   showResults([char]);
 }
 
 function earthStarGacha(){
+
+  GAME.crystal = GAME.crystal ?? 0;
 
   if(GAME.crystal < 4000){
     return alert("💎不足");
@@ -2364,10 +2370,10 @@ function earthStarGacha(){
 
   obtain(char);
 
-  quakeRumble();
-  orbitSweep();
-  gravityWell();
-  starlightBloom();
+  if(typeof quakeRumble === "function") quakeRumble();
+  if(typeof orbitSweep === "function") orbitSweep();
+  if(typeof gravityWell === "function") gravityWell();
+  if(typeof starlightBloom === "function") starlightBloom();
 
   updateUI();
   showResults([char]);
