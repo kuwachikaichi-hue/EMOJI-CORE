@@ -461,16 +461,18 @@ transform:scale(2);
   align-items: center;
   justify-content: center;
   text-align: center;
+
+  /* 縦書き防止 */
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
   white-space: normal;
-  writing-mode: horizontal-tb !important;
+  word-break: keep-all;   /* 日本語が1文字ずつ折り返されるのを防ぐ */
+
+  grid-column: auto;
   color: #fff;
   cursor: pointer;
-
-  /* grid-column をリセット（全幅化しない） */
-  grid-column: auto;
 }
 
-/* 天獄: 特別扱いなし・他と同サイズ */
 .gachaBtn.tengoku {
   grid-column: auto;
   min-height: 70px;
@@ -496,8 +498,14 @@ transform:scale(2);
   align-items: center;
   justify-content: center;
   text-align: center;
+
+  /* 縦書き防止 */
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
   white-space: normal;
+  word-break: keep-all;
 }
+
 
 
 
