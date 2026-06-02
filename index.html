@@ -312,47 +312,37 @@ transform:scale(2);
 
 /* ===== ガチャ配置 ===== */
 #gachaPanel{
-  display:grid;
-  grid-template-columns:repeat(2,1fr);
-  gap:12px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
   width:100%;
-  margin-top:20px;
 }
 
-/* 共通ボタン */
 .gachaBtn{
-  width:100%;
-  height:90px;
+  flex:1 1 calc(50% - 5px);
+
+  min-height:70px;
 
   display:flex;
   align-items:center;
   justify-content:center;
 
-  writing-mode:horizontal-tb !important;
-  text-orientation:mixed !important;
-  white-space:normal;
-
-  text-align:center;
-  font-size:18px;
+  font-size:16px;
   font-weight:bold;
 
-  padding:12px;
+  writing-mode:horizontal-tb !important;
+  white-space:normal;
+  text-align:center;
+
   border:none;
-  border-radius:16px;
+  border-radius:12px;
 
   color:#fff;
   cursor:pointer;
-  transition:.2s;
 }
 
-.gachaBtn:active{
-  transform:scale(.95);
-}
-
-/* 天獄だけ横2マス */
 .gachaBtn.tengoku{
-  grid-column:1 / span 2;
-  height:100px;
+  flex:1 1 100%;
 }
 
 /* 梅雨 */
@@ -500,17 +490,35 @@ transform:scale(2);
 
 <div id="gachaPanel">
 
-  <button class="gachaBtn tsuyu">☔ 超梅雨ガチャ☁️</button>
-  <button class="gachaBtn rainbow">🌈 レインボードラゴン🐉</button>
+  <button class="gachaBtn tsuyu" onclick="tsuyuGacha()">
+    ☔ 超梅雨ガチャ☁️
+  </button>
 
-  <button class="gachaBtn food">🍕 トリプルフード🍟</button>
-  <button class="gachaBtn robot">🕹️ ロボット戦士⛓️</button>
+  <button class="gachaBtn rainbow" onclick="rainbowDragonGacha()">
+    🌈 レインボードラゴン🐉
+  </button>
 
-  <button class="gachaBtn earth">🌏 アーススター💫</button>
-  <button class="gachaBtn crystal">💎 クリスタルゴーレム🪬</button>
-  <button class="action" onclick="tengokuGacha()">
-🪓天獄🪽 💎1000
-</button>
+  <button class="gachaBtn food" onclick="foodGacha()">
+    🍕 トリプルフード🍟
+  </button>
+
+  <button class="gachaBtn robo" onclick="roboWarriorGacha()">
+    🕹️ ロボット戦士⛓️
+  </button>
+
+  <button class="gachaBtn earth" onclick="earthStarGacha()">
+    🌏 アーススター💫
+  </button>
+
+  <button class="gachaBtn crystal" onclick="crystalGolemGacha()">
+    💎 クリスタルゴーレム🪬
+  </button>
+
+  <button class="gachaBtn tengoku" onclick="tengokuGacha()">
+    🔥🔥🔥 天獄ガチャ 🔥🔥🔥
+  </button>
+
+</div>
 </div>
 </div>
 </div>
