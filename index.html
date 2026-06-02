@@ -310,33 +310,49 @@ transform:scale(2);
   100%{transform:translate(0,0);}
 }
 
+/* ===== ガチャ配置 ===== */
 #gachaPanel{
   display:grid;
-  grid-template-columns:1fr 1fr;
+  grid-template-columns:repeat(2,1fr);
   gap:12px;
   width:100%;
+  margin-top:20px;
 }
 
+/* 共通ボタン */
 .gachaBtn{
   width:100%;
-  min-height:80px;
-  height:auto;
+  height:90px;
 
   display:flex;
   align-items:center;
   justify-content:center;
 
-  text-align:center;
+  writing-mode:horizontal-tb !important;
+  text-orientation:mixed !important;
   white-space:normal;
 
-  writing-mode:horizontal-tb; /* ←超重要 */
+  text-align:center;
   font-size:18px;
+  font-weight:bold;
+
   padding:12px;
+  border:none;
+  border-radius:16px;
+
+  color:#fff;
+  cursor:pointer;
+  transition:.2s;
 }
 
-/* 天獄だけ横2個分 */
+.gachaBtn:active{
+  transform:scale(.95);
+}
+
+/* 天獄だけ横2マス */
 .gachaBtn.tengoku{
   grid-column:1 / span 2;
+  height:100px;
 }
 
 /* 梅雨 */
@@ -347,15 +363,53 @@ transform:scale(2);
 
 /* レインボー */
 .gachaBtn.rainbow{
-  background:linear-gradient(135deg,
-    red,orange,yellow,green,blue,purple);
-  box-shadow:0 0 25px rgba(255,255,255,0.5);
+  background:linear-gradient(
+    135deg,
+    red,
+    orange,
+    yellow,
+    green,
+    blue,
+    purple
+  );
+  box-shadow:0 0 25px rgba(255,255,255,.5);
 }
 
 /* フード */
 .gachaBtn.food{
   background:linear-gradient(135deg,#ff7b00,#ff2d55);
   box-shadow:0 0 20px #ff7b00;
+}
+
+/* ロボット */
+.gachaBtn.robo{
+  background:linear-gradient(135deg,#d9d9d9,#7a7a7a);
+  box-shadow:0 0 20px #bdbdbd;
+}
+
+/* アーススター */
+.gachaBtn.earth{
+  background:linear-gradient(135deg,#1db954,#3ddc84);
+  box-shadow:0 0 20px #3ddc84;
+}
+
+/* ゴーレム */
+.gachaBtn.crystal{
+  background:linear-gradient(135deg,#00d4ff,#7b61ff);
+  box-shadow:0 0 20px #7b61ff;
+}
+
+/* 天獄 */
+.gachaBtn.tengoku{
+  background:linear-gradient(
+    135deg,
+    #00e5ff,
+    #0088ff,
+    #00e5ff
+  );
+  box-shadow:
+    0 0 20px #00e5ff,
+    0 0 40px #0088ff;
 }
 
 /* 共通フラッシュ */
