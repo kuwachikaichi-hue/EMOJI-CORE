@@ -140,6 +140,7 @@ button.life{ background:linear-gradient(135deg,#ff3cf7,#ff0055); }
 .bossBox{ text-align:center; padding:18px; border-radius:18px; background:linear-gradient(145deg,#190b12,#321019); }
 .hpBar{ height:18px; background:#222; border-radius:999px; overflow:hidden; margin-top:10px; }
 .hpFill{ height:100%; background:linear-gradient(90deg,#ff3d3d,#ffcc00); width:0%; transition:.3s; }
+
 /* ===== 天獄ガチャエフェクト ===== */
 
 .heavenWing{
@@ -384,6 +385,32 @@ transform:scale(2);
   100% { opacity: 0; }
 }
 
+/* ===== 公式ブログ ===== */
+.blogPost {
+  background: linear-gradient(145deg, #0d1628, #121d33);
+  border: 1px solid rgba(0, 229, 255, 0.15);
+  border-radius: 14px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.blogDate {
+  font-size: 11px;
+  color: var(--cyan);
+  opacity: 0.7;
+  margin-bottom: 4px;
+}
+.blogTitle {
+  font-size: 16px;
+  font-weight: 900;
+  margin-bottom: 8px;
+  color: #fff;
+}
+.blogBody {
+  font-size: 13px;
+  line-height: 1.8;
+  color: rgba(255, 255, 255, 0.85);
+}
+
 </style>
 </head>
 <body>
@@ -410,9 +437,10 @@ transform:scale(2);
     <button class="tabBtn" data-tab="miniBoss">小ボス</button>
     <button class="tabBtn" data-tab="moonRoad">ムーンロード</button>
     <button class="tabBtn" data-tab="diamondRoom">ダイヤルーム</button>
+    <button class="tabBtn" data-tab="blog">公式ブログ</button>
   </div>
 </header>
-
+  
 <main>
   <section class="panel active" id="home">
     <div class="section">
@@ -477,6 +505,47 @@ transform:scale(2);
       <div class="list" id="achievements"></div>
     </div>
   </section>
+
+  <section class="panel" id="blog">
+  <div class="section">
+    <div class="title">📰 公式ブログ</div>
+
+    <!-- =====================================================
+         ↓↓↓ ここから記事を書く欄です（管理者はここを編集）↓↓↓
+         =====================================================
+         書き方：
+           <div class="blogPost"> ～ </div> で1記事を囲む
+           <div class="blogDate">日付</div> で日付を書く
+           <div class="blogTitle">タイトル</div> でタイトルを書く
+           <div class="blogBody">本文</div> で本文を書く
+         ===================================================== -->
+
+    <div class="blogPost">
+      <div class="blogDate">2026/06/02</div>
+      <div class="blogTitle">🎉 公式ブログ開設！</div>
+      <div class="blogBody">
+        CYBER EMOJI COREの公式ブログを開設しました！<br>
+        今後はここでアップデート情報やイベント情報をお知らせします。お楽しみに！
+      </div>
+    </div>
+
+    <!-- ここに記事を追加する（上のblockをコピーして増やす） -->
+    <!--
+    <div class="blogPost">
+      <div class="blogDate">日付をここに書く</div>
+      <div class="blogTitle">タイトルをここに書く</div>
+      <div class="blogBody">
+        本文をここに書く
+      </div>
+    </div>
+    -->
+
+    <!-- =====================================================
+         ↑↑↑ 記事を書く欄ここまで ↑↑↑
+         ===================================================== -->
+
+  </div>
+</section>
 
   <section class="panel" id="boss">
     <div class="section">
