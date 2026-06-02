@@ -1803,29 +1803,28 @@ let miniCombo=0;
 
 let ALL_MOON_CHARACTERS=[];
 
-function buildMoonPool(){
+ffunction buildMoonPool(){
+  ALL_MOON_CHARACTERS = [
+    ...CHARACTERS,
+    ...DIMENSION_CHARACTERS,
+    ...ANIMAL_ARMY,
+    ...FAIRY_POOL,
+    ...ROBOT_PET_POOL,
+    ...TENGOKU_GACHA,   // ← 末尾にカンマを付ける
+    ...TRIPLE_FOOD,
+    ...RAINBOW_DRAGON,
+    ...TSUYU_MATSURI,
+    ...EARTH_STAR,
+    ...ROBO_WARRIOR,
+  ];
 
-ALL_MOON_CHARACTERS=[
-...CHARACTERS,
-...DIMENSION_CHARACTERS,
-...ANIMAL_ARMY,
-...FAIRY_POOL,
-...ROBOT_PET_POOL,
-...TENGOKU_GACHA 
-...TRIPLE_FOOD,
-...RAINBOW_DRAGON,
-...TSUYU_MATSURI,
-...EARTH_STAR,
-...ROBO_WARRIOR,
-];
-
-Object.values(MONTH_EVENT_POOLS)
-.flat()
-.forEach(c=>{
-ALL_MOON_CHARACTERS.push(c);
-});
-
+  Object.values(MONTH_EVENT_POOLS)
+    .flat()
+    .forEach(c=>{
+      ALL_MOON_CHARACTERS.push(c);
+    });
 }
+
 
 function refreshMoonRoad(){
 
@@ -2365,135 +2364,66 @@ updateUI();
 }
 
 function tsuyuGacha(){
-
-  if(GAME.money < 10000000000000000){
-    return alert("お金不足");
-  }
-
-  GAME.money -= 10000000000000000;
-
-  const char = JSON.parse(JSON.stringify(
-    TSUYU_MATSURI[Math.floor(Math.random()*TSUYU_MATSURI.length)]
-  ));
-
-  obtain(char);
-
-  screenFlash();
-  updateUI();
-  showResults([char]);
-}　
+  return gacha(TSUYU_MATSURI, { priceMoney: 10000000000000000, effects: [screenFlash] });
+}
 
 function rainbowDragonGacha(){
-
-  if(GAME.money < 10000000000000000){
-    return alert("お金不足");
-  }
-
-  GAME.money -= 10000000000000000;
-
-  const char = JSON.parse(JSON.stringify(
-    RAINBOW_DRAGON[Math.floor(Math.random()*RAINBOW_DRAGON.length)]
-  ));
-
-  obtain(char);
-
-  rainbowEffect();
-  updateUI();
-  showResults([char]);
+  return gacha(RAINBOW_DRAGON, { priceMoney: 10000000000000000, effects: [rainbowEffect] });
 }
 
 function foodGacha(){
-
-  if(GAME.money < 10000000000000000){
-    return alert("お金不足");
-  }
-
-  GAME.money -= 10000000000000000;
-
-  const char = JSON.parse(JSON.stringify(
-    TRIPLE_FOOD[Math.floor(Math.random()*TRIPLE_FOOD.length)]
-  ));
-
-  obtain(char);
-
-  screenFlash();
-  updateUI();
-  showResults([char]);
+  return gacha(TRIPLE_FOOD, { priceMoney: 10000000000000000, effects: [screenFlash] });
 }
 
 function roboWarriorGacha(){
-
-  GAME.crystal = GAME.crystal ?? 0;
-
-  if(GAME.crystal < 4000){
-    return alert("💎不足");
-  }
-
-  GAME.crystal -= 4000;
-
-  const char = JSON.parse(JSON.stringify(
-    ROBO_WARRIOR[Math.floor(Math.random()*ROBO_WARRIOR.length)]
-  ));
-
-  obtain(char);
-
-  if(typeof roboBootUp === "function") roboBootUp();
-  if(typeof chainClash === "function") chainClash();
-  if(typeof overdriveFlash === "function") overdriveFlash();
-  if(typeof empBurst === "function") empBurst();
-
-  updateUI();
-  showResults([char]);
+  return gacha(ROBO_WARRIOR, {
+    priceCrystal: 4000,
+    effects: [roboBootUp, chainClash, overdriveFlash, empBurst]
+  });
 }
 
 function crystalGolemGacha(){
-
-  GAME.crystal = GAME.crystal ?? 0;
-
-  if(GAME.crystal < 4000){
-    return alert("💎不足");
-  }
-
-  GAME.crystal -= 4000;
-
-  const char = JSON.parse(JSON.stringify(
-    CRYSTAL_GOLEM[Math.floor(Math.random()*CRYSTAL_GOLEM.length)]
-  ));
-
-  obtain(char);
-
-  if(typeof crystalSpawn === "function") crystalSpawn();
-  if(typeof prismShine === "function") prismShine();
-  if(typeof shatterPulse === "function") shatterPulse();
-  if(typeof gemRain === "function") gemRain();
-
-  updateUI();
-  showResults([char]);
+  return gacha(CRYSTAL_GOLEM, {
+    priceCrystal: 4000,
+    effects: [crystalSpawn, prismShine, shatterPulse, gemRain]
+  });
 }
 
 function earthStarGacha(){
+  return gacha(EARTH_STAR, {
+    priceCrystal: 4000,
+    effects: [quakeRumble, orbitSweep, gravityWell, starlightBloom]
+  });
+}
 
-  GAME.crystal = GAME.crystal ?? 0;
+function gacha(pool, opts){
+  const { priceCrystal = 0, priceMoney = 0, count = 1, effects = [] } = opts || {};
 
-  if(GAME.crystal < 4000){
-    return alert("💎不足");
+  // 資源チェック
+  if(priceCrystal > 0){
+    GAME.crystal = GAME.crystal ?? 0;
+    if(GAME.crystal < priceCrystal) { alert("💎不足"); return; }
+    if(GAME.owned.length + count > GAME.baseCap) { alert("基地容量不足"); return; }
+    GAME.crystal -= priceCrystal;
+  }else if(priceMoney > 0){
+    if(GAME.money < priceMoney) { alert("お金不足"); return; }
+    if(GAME.owned.length + count > GAME.baseCap) { alert("基地容量不足"); return; }
+    GAME.money -= priceMoney;
   }
 
-  GAME.crystal -= 4000;
+  const results = [];
+  for(let i=0;i<count;i++){
+    const char = JSON.parse(JSON.stringify(pool[Math.floor(Math.random()*pool.length)]));
+    results.push(char);
+    obtain(char);
+  }
 
-  const char = JSON.parse(JSON.stringify(
-    EARTH_STAR[Math.floor(Math.random()*EARTH_STAR.length)]
-  ));
-
-  obtain(char);
-
-  if(typeof quakeRumble === "function") quakeRumble();
-  if(typeof orbitSweep === "function") orbitSweep();
-  if(typeof gravityWell === "function") gravityWell();
-  if(typeof starlightBloom === "function") starlightBloom();
+  // 演出
+  effects.forEach(fn => { if(typeof fn === "function") fn(); });
 
   updateUI();
-  showResults([char]);
+  showResults(results);
+  return results;
 }
 
 function spawnMiniBoss(){
