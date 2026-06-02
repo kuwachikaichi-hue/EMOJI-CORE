@@ -505,7 +505,7 @@ transform:scale(2);
     🌈 レインボードラゴン🐉10京円
   </button>
 
-　 <button class="gachaBtn food" onclick="tripleFoodGacha()">
+　 <button class="gachaBtn food" onclick="foodGacha()">
 　　　🍕 トリプルフード🍟
   </button>
 
@@ -2402,7 +2402,7 @@ function rainbowDragonGacha(){
   showResults([char]);
 }
 
-function tripleFoodGacha(){
+function foodGacha(){
 
   if(GAME.money < 10000000000000000){
     return alert("お金不足");
