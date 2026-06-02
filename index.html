@@ -1803,14 +1803,14 @@ let miniCombo=0;
 
 let ALL_MOON_CHARACTERS=[];
 
-ffunction buildMoonPool(){
+function buildMoonPool(){
   ALL_MOON_CHARACTERS = [
     ...CHARACTERS,
     ...DIMENSION_CHARACTERS,
     ...ANIMAL_ARMY,
     ...FAIRY_POOL,
     ...ROBOT_PET_POOL,
-    ...TENGOKU_GACHA,   // ← 末尾にカンマを付ける
+    ...TENGOKU_GACHA,
     ...TRIPLE_FOOD,
     ...RAINBOW_DRAGON,
     ...TSUYU_MATSURI,
@@ -1824,7 +1824,6 @@ ffunction buildMoonPool(){
       ALL_MOON_CHARACTERS.push(c);
     });
 }
-
 
 function refreshMoonRoad(){
 
