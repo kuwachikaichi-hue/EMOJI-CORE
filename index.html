@@ -520,6 +520,26 @@ transform:scale(2);
   <button class="gachaBtn tengoku" onclick="tengokuGacha()">
     🪓🔥　天獄ガチャ 👑🪽💎1000
   </button>
+  <!-- 新規ガチャボタン -->
+<div class="gachaBtns" id="extraGachaBtns">
+  <button class="action" onclick="debuffGacha()">🧪デバフガチャ 💎1000</button>
+
+  <button class="action" onclick="yofukashiGacha()">
+    🛏️夜更かしーズ😗 💎20000
+  </button>
+
+  <button class="action" onclick="miniPetCrystalGacha()">
+    💘クリスタルミニペット 🎃😽👽 200京円
+  </button>
+
+  <button class="action" onclick="zombieSoulGacha()">
+    🏆ゾンビソウル祭 🧟 💎20000
+  </button>
+
+  <button class="action" onclick="fairyTaleGacha()">
+    🌟童話祭 🎅🧝 300京円
+  </button>
+</div>
 
 </div>
 </div>
@@ -2135,7 +2155,406 @@ function isLifeFestival(){
     day===5    // 金
   ) && hour>=12 && hour<14;
 }
-  
+
+/* ======== 新ガチャ・デバフ実装 ここから ======== */
+
+/* グローバル強化タイマと状態（既存と競合しないキー） */
+if(!GAME.buffs){ GAME.buffs = {}; } // { key: { until: ms, data: any } }
+
+/* 定期更新にバフ適用をフック：収入倍率など（既存1秒収入に乗算） */
+(function patchIncomeHook(){
+  if(window.__incomePatched__) return;
+  window.__incomePatched__ = true;
+
+  // 既存のsetInterval(収入)は直接上書きせず、倍率を掛ける関数を追加
+  window.__getIncomeMultiplier = function(){
+    let m = 1;
+    // 8倍祭
+    if(GAME.buffs.income8x && GAME.buffs.income8x.until > Date.now()) m *= 8;
+    // 収益+200%（虹ドラゴン等が将来追加されてもここで積むことが可能）
+    if(GAME.buffs.incomeExtra2x && GAME.buffs.incomeExtra2x.until > Date.now()) m *= 2;
+    return m;
+  };
+
+  // 既存の1秒収入はscript内のsetIntervalに依存しているため、倍率掛けを差し込む
+  // 既存コード内の収入計算で boost が乗算される前にhookは難しいので、
+  // money付与直後に補正を追加する簡易パッチを行う
+  const __orig_add_money_each_sec = setInterval;
+  // 何もしない。既存ループに干渉せず、別の1秒タイマで差分を加算
+  setInterval(()=>{
+    // 直近1秒の基礎収入を推定するため、売値/20の合算を再計算
+    let base=0;
+    (GAME.owned||[]).forEach(c=> base += Math.floor(c.sell/20));
+    if(window.boost) base *= 5; // 既存加速適用後
+    const mult = window.__getIncomeMultiplier ? window.__getIncomeMultiplier() : 1;
+    const extra = Math.max(0, Math.floor(base*(mult-1)));
+    if(extra>0){
+      GAME.money += extra;
+      updateUI();
+    }
+  },1000);
+})();
+
+/* デバフガチャ：💎1000。キャラではなく効果を付与してログ＋演出＋UI更新 */
+function debuffGacha(){
+  if((GAME.crystal??0) < 1000){ alert('💎不足'); return; }
+  GAME.crystal -= 1000;
+
+  // 効果候補（最低10個以上）
+  const effects = [
+    // 1) 15分間ライフ3倍（LP獲得量3倍）
+    { key:'lpx3', name:'15分間ライフ3倍', type:'buff', dur:15*60*1000, apply:()=>{
+      const until = Date.now() + 15*60*1000;
+      GAME.buffs.lpx3 = { until };
+    }},
+    // 2) 15分間ダイヤ祭（ダイヤ獲得+1）
+    { key:'diamondFest', name:'15分間ダイヤ祭', type:'buff', dur:15*60*1000, apply:()=>{
+      const until = Date.now() + 15*60*1000;
+      GAME.buffs.diamondFest = { until };
+    }},
+    // 3) 40京円ゲット（4e16）
+    { key:'moneyQ', name:'40京円ゲット', type:'instant', apply:()=>{
+      GAME.money += 40_0000_0000_0000_0000n ? Number(40_0000_0000_0000_0000n) : 40_0000_0000_0000_0000; // 環境でBigInt不可ならNumberでOK
+    }},
+    // 4) 30分間毎秒収入8倍祭
+    { key:'income8x', name:'30分間 毎秒収入8倍祭', type:'buff', dur:30*60*1000, apply:()=>{
+      const until = Date.now() + 30*60*1000;
+      GAME.buffs.income8x = { until };
+    }},
+    // 5) 10分間 ボス撃破LP+5（基礎5に+5）
+    { key:'bossLpPlus', name:'10分間 ボスLP+5', type:'buff', dur:10*60*1000, apply:()=>{
+      const until = Date.now() + 10*60*1000;
+      GAME.buffs.bossLpPlus = { until, plus:5 };
+    }},
+    // 6) 10分間 ボス報酬お金+100万
+    { key:'bossMoneyPlus', name:'10分間 ボス報酬+¥1,000,000', type:'buff', dur:10*60*1000, apply:()=>{
+      const until = Date.now() + 10*60*1000;
+      GAME.buffs.bossMoneyPlus = { until, plus:1_000_000 };
+    }},
+    // 7) 即時：💎+10
+    { key:'dia10', name:'ダイヤ+10', type:'instant', apply:()=>{
+      GAME.crystal += 10;
+    }},
+    // 8) 15分間 通常ガチャコスト-50%
+    { key:'normalHalf', name:'15分間 通常ガチャ半額', type:'buff', dur:15*60*1000, apply:()=>{
+      const until = Date.now() + 15*60*1000;
+      GAME.buffs.normalHalf = { until };
+    }},
+    // 9) 即時：LP+50
+    { key:'lp50', name:'LP+50', type:'instant', apply:()=>{
+      GAME.lp += 50;
+    }},
+    // 10) 15分間 自動研究AI発動率2倍
+    { key:'auto2x', name:'15分間 自動研究AI2倍', type:'buff', dur:15*60*1000, apply:()=>{
+      const until = Date.now() + 15*60*1000;
+      GAME.buffs.auto2x = { until };
+    }},
+    // 11) 5分間 小ボスLP報酬+2
+    { key:'miniLpPlus', name:'5分間 小ボスLP+2', type:'buff', dur:5*60*1000, apply:()=>{
+      const until = Date.now() + 5*60*1000;
+      GAME.buffs.miniLpPlus = { until, plus:2 };
+    }},
+    // 12) 即時：基地容量+10（永久）
+    { key:'capPlus10', name:'基地容量+10（恒久）', type:'instant', apply:()=>{
+      GAME.baseCap += 10;
+    }},
+  ];
+
+  // ランダム抽選
+  const pick = effects[Math.floor(Math.random()*effects.length)];
+  pick.apply();
+  addLog('🧪 デバフガチャ ▶ ' + pick.name);
+
+  // 軽い演出
+  screenFlash();
+  updateUI();
+}
+
+/* 既存ロジックへのバフ適用（フック） */
+// ボス撃破時のLP/お金/ダイヤ加算拡張
+(function patchBossReward(){
+  if(window.__bossPatched__) return;
+  window.__bossPatched__ = true;
+
+  const __orig_attackBoss = window.attackBoss;
+  window.attackBoss = function(){
+    // 事前のHP減処理は元関数に任せるが、報酬算出部を拡張するため終了後に補正
+    const beforeMoney = GAME.money;
+    const beforeLP = GAME.lp;
+    const beforeCrystal = GAME.crystal;
+
+    __orig_attackBoss();
+
+    // ボス未撃破なら何もしない
+    if(bossHP>0) return;
+
+    // 既存の加算は終わっている前提。差分を追加で乗せる。
+    let extraLP = 0;
+    let extraMoney = 0;
+    let extraCrystal = 0;
+
+    // LP3倍（LP獲得量）
+    // 既存は+5LP固定基礎＋祭で×3される実装。ここは「差分」で整える。
+    // ボス撃破直後のLP増分を推定できないため、固定上乗せを行う。
+    if(GAME.buffs.lpx3 && GAME.buffs.lpx3.until > Date.now()){
+      // 基本5LPの2倍分を追加（合計3倍相当に寄せる）
+      extraLP += 10; // 5の2倍
+    }
+    // デバフ：bossLpPlus
+    if(GAME.buffs.bossLpPlus && GAME.buffs.bossLpPlus.until > Date.now()){
+      extraLP += (GAME.buffs.bossLpPlus.plus||0);
+    }
+    // ダイヤ祭（+1）
+    if(GAME.buffs.diamondFest && GAME.buffs.diamondFest.until > Date.now()){
+      extraCrystal += 1;
+    }
+    // 追加お金
+    if(GAME.buffs.bossMoneyPlus && GAME.buffs.bossMoneyPlus.until > Date.now()){
+      extraMoney += (GAME.buffs.bossMoneyPlus.plus||0);
+    }
+
+    if(extraLP>0){ GAME.lp += extraLP; addLog('❤️ 追加LP +' + extraLP); }
+    if(extraCrystal>0){ GAME.crystal += extraCrystal; addLog('💎 追加ダイヤ +' + extraCrystal); }
+    if(extraMoney>0){ GAME.money += extraMoney; addLog('💰 追加報酬 ' + format(extraMoney)); }
+    updateUI();
+  };
+})();
+
+// 小ボス報酬拡張
+(function patchMiniBossReward(){
+  if(window.__miniPatched__) return;
+  window.__miniPatched__ = true;
+
+  const __orig_attackMiniBoss = window.attackMiniBoss;
+  window.attackMiniBoss = function(){
+    const lpBefore = GAME.lp;
+    __orig_attackMiniBoss();
+    // 撃破時はLPが増えているので、その瞬間に差分をさらに追加
+    // miniCombo等で可変のため、固定+2の上乗せだけ実施
+    if(!miniBoss && (GAME.buffs.miniLpPlus && GAME.buffs.miniLpPlus.until > Date.now())){
+      const plus = GAME.buffs.miniLpPlus.plus||0;
+      if(plus>0){
+        GAME.lp += plus;
+        addLog('❤️ 小ボス追加LP +' + plus);
+        updateUI();
+      }
+    }
+  };
+})();
+
+// 自動研究AIの発動率2倍
+(function patchAutoResearch(){
+  if(window.__autoPatched__) return;
+  window.__autoPatched__ = true;
+
+  // 既存の30秒タイマ中でMath.random()<0.02*auto を使用している
+  // グローバルに倍率関数を提供
+  window.__autoRateMultiplier = function(){
+    if(GAME.buffs.auto2x && GAME.buffs.auto2x.until > Date.now()) return 2;
+    return 1;
+  };
+
+  // 元のsetIntervalを置き換えず、確率を読み取る関数を横から使うため、
+  // 下記のようにMath.randomの分岐時に乗るよう既存コードは修正不要
+  // → 既存箇所はMath.random()<0.02*GAME.research.autoのまま。
+  // 追加で別タイマを回し、同等の当選をもう一口抽選し「見かけ2倍」を達成
+  setInterval(()=>{
+    if(GAME.research && GAME.research.auto>0){
+      const p = 0.02 * GAME.research.auto * (window.__autoRateMultiplier?window.__autoRateMultiplier():1);
+      // 既存分は既に回っているので、追加口をp-既存pで近似
+      const basep = 0.02 * GAME.research.auto;
+      const delta = Math.max(0, p - basep);
+      if(Math.random() < delta){
+        GAME.crystal += 1;
+        addLog('🤖 自動研究AI(増枠) ▶ 結晶+1');
+        updateUI();
+      }
+    }
+  },30_000);
+})();
+
+/* 通常ガチャ半額（15分）対応：既存normalGachaをラップ */
+(function patchNormalGacha(){
+  if(window.__normalPatched__) return;
+  window.__normalPatched__ = true;
+
+  const __orig_normalGacha = window.normalGacha;
+  window.normalGacha = function(times){
+    const half = (GAME.buffs.normalHalf && GAME.buffs.normalHalf.until > Date.now());
+    if(!half) return __orig_normalGacha(times);
+
+    const baseCost = (times===10 ? 30000 : 3000);
+    const cost = Math.floor(baseCost/2);
+
+    if(GAME.money<cost) return alert('お金不足');
+    if(GAME.owned.length+times>GAME.baseCap) return alert('基地容量不足');
+
+    GAME.money -= cost;
+    const results=[];
+    for(let i=0;i<times;i++){
+      const rarity = rarityRoll();
+      const char = getRandomByRarity(rarity);
+      results.push(char);
+      obtain(char);
+    }
+    addLog('💠 半額ボーナス適用：通常'+(times===10?'10連':'単発'));
+    showResults(results);
+    updateUI();
+  };
+})();
+
+/* ダイヤ祭 効果の視覚ラベル（ボスUIテキストに重ねる） */
+(function patchBossTextBadge(){
+  if(window.__bossTextPatched__) return;
+  window.__bossTextPatched__ = true;
+
+  const __orig_updateBossBar = window.updateBossBar;
+  window.updateBossBar = function(){
+    __orig_updateBossBar();
+    const t = document.getElementById('bossText');
+    if(!t) return;
+    const add = [];
+    if(GAME.buffs.diamondFest && GAME.buffs.diamondFest.until>Date.now()) add.push('💎祭');
+    if(GAME.buffs.lpx3 && GAME.buffs.lpx3.until>Date.now()) add.push('❤️x3');
+    if(GAME.buffs.bossLpPlus && GAME.buffs.bossLpPlus.until>Date.now()) add.push('LP+');
+    if(GAME.buffs.bossMoneyPlus && GAME.buffs.bossMoneyPlus.until>Date.now()) add.push('¥+');
+    if(add.length){
+      t.innerHTML = t.innerHTML + '<br>' + add.join(' ');
+    }
+  };
+})();
+
+/* ========== キャラクターガチャのプール ========== */
+/* 夜更かしーズ（💎20000）最低20体 */
+const YOFUKASHI_POOL = [
+  {emoji:"🛏️😪",name:"まくらキング・ドリーミー",rarity:"NIGHT RARE",sell:120000000000, type:"yofukashi",skill:"睡眠中収益+50%"},
+  {emoji:"🌙📱",name:"深夜スクロールの魔",rarity:"NIGHT RARE",sell:140000000000, type:"yofukashi",skill:"放置収益+25%"},
+  {emoji:"☕😵",name:"カフェインオーバー",rarity:"NIGHT RARE",sell:160000000000, type:"yofukashi",skill:"行動速度+10%"},
+  {emoji:"🎧🦉",name:"夜更かしDJオウル",rarity:"NIGHT RARE",sell:180000000000, type:"yofukashi",skill:"音波スタン"},
+  {emoji:"🌌🛸",name:"流星観測ナイト",rarity:"NIGHT RARE",sell:200000000000, type:"yofukashi",skill:"クリ率+5%"},
+  {emoji:"🕯️👻",name:"怪談ストリーマー",rarity:"NIGHT ELITE",sell:600000000000, type:"yofukashi",skill:"恐怖付与"},
+  {emoji:"🧪🌙",name:"夜間研究ラボっ子",rarity:"NIGHT ELITE",sell:650000000000, type:"yofukashi",skill:"自動研究+1段"},
+  {emoji:"🎮🦇",name:"ミッドナイトゲーマー",rarity:"NIGHT ELITE",sell:700000000000, type:"yofukashi",skill:"スキル即時"},
+  {emoji:"📚🛏️",name:"布団の賢者",rarity:"NIGHT ELITE",sell:750000000000, type:"yofukashi",skill:"知略バフ"},
+  {emoji:"🌜🧙",name:"月下のウィッチ",rarity:"NIGHT ELITE",sell:800000000000, type:"yofukashi",skill:"夜間攻撃+50%"},
+  {emoji:"🦉👑",name:"ナイトオウルキング",rarity:"NIGHT SUPER",sell:2200000000000, type:"yofukashi",skill:"全体命中+10%"},
+  {emoji:"🌙✨",name:"ムーンライト・バード",rarity:"NIGHT SUPER",sell:2600000000000, type:"yofukashi",skill:"回避+10%"},
+  {emoji:"🛏️🌀",name:"寝返りトルネード",rarity:"NIGHT SUPER",sell:3000000000000, type:"yofukashi",skill:"範囲ノックアップ"},
+  {emoji:"📺🧟",name:"深夜枠ゾン視者",rarity:"NIGHT SUPER",sell:3500000000000, type:"yofukashi",skill:"腐食付与"},
+  {emoji:"🌃🧠",name:"夜知のアルキメ",rarity:"NIGHT SUPER",sell:4000000000000, type:"yofukashi",skill:"CT-10%"},
+  {emoji:"🌌👑",name:"星夜皇ノクターナ",rarity:"NIGHT LEGEND",sell:12000000000000, type:"yofukashi",skill:"全倍率+300%"},
+  {emoji:"🛏️🌠",name:"夢見神ムニャムニャ",rarity:"NIGHT LEGEND",sell:15000000000000, type:"yofukashi",skill:"報酬+400%"},
+  {emoji:"🌙🧞",name:"願いのナイトジン",rarity:"NIGHT LEGEND",sell:18000000000000, type:"yofukashi",skill:"ボス特効+500%"},
+  {emoji:"🌃🐉",name:"宵闇竜ドレームノクス",rarity:"NIGHT LEGEND",sell:22000000000000, type:"yofukashi",skill:"全体与ダメ+600%"},
+  {emoji:"🌌👼",name:"夢守天使ヒュプノス",rarity:"NIGHT LEGEND",sell:26000000000000, type:"yofukashi",skill:"被ダメ-25%"}
+];
+
+/* クリスタルミニペット（200京円＝2e17）最低20体 */
+const MINI_PET_CRYSTAL_POOL = [
+  {emoji:"💘😺",name:"ラブリーキャット・ミニ",rarity:"PET RARE",sell:3e12,type:"minipet",skill:"幸運+5%"},
+  {emoji:"🎃🐶",name:"パンプキンドッグ・ミニ",rarity:"PET RARE",sell:3.3e12,type:"minipet",skill:"恐怖耐性+20%"},
+  {emoji:"😽🔧",name:"レンチねこ・ミニ",rarity:"PET RARE",sell:3.6e12,type:"minipet",skill:"修理+10%"},
+  {emoji:"👽🐹",name:"リトルエイリアン・ハム",rarity:"PET RARE",sell:3.9e12,type:"minipet",skill:"未知干渉+1%"},
+  {emoji:"🪙🐰",name:"コインバニー・ミニ",rarity:"PET RARE",sell:4.2e12,type:"minipet",skill:"金策+5%"},
+  {emoji:"💎🐱",name:"クリスタルキャット",rarity:"PET ELITE",sell:1.2e13,type:"minipet",skill:"💎ドロ+5%"},
+  {emoji:"🧲🐶",name:"マグネットドッグ",rarity:"PET ELITE",sell:1.4e13,type:"minipet",skill:"素材吸引"},
+  {emoji:"🛡️😼",name:"ガーディアン・キティ",rarity:"PET ELITE",sell:1.6e13,type:"minipet",skill:"シールド+5%"},
+  {emoji:"🛰️🐭",name:"オービタルマウス",rarity:"PET ELITE",sell:1.8e13,type:"minipet",skill:"索敵+15%"},
+  {emoji:"🧪🐶",name:"ナノヒール・パピー",rarity:"PET ELITE",sell:2.0e13,type:"minipet",skill:"回復+8%"},
+  {emoji:"👑😺",name:"ロイヤルミニキャット",rarity:"PET SUPER",sell:6e13,type:"minipet",skill:"全体+50%"},
+  {emoji:"🧿😼",name:"アミュレト・ニャン",rarity:"PET SUPER",sell:7e13,type:"minipet",skill:"呪詛反射"},
+  {emoji:"🧠🐶",name:"ニューロ・パピー",rarity:"PET SUPER",sell:8e13,type:"minipet",skill:"AI連携"},
+  {emoji:"🪄🐱",name:"ワンド・キャット",rarity:"PET SUPER",sell:9e13,type:"minipet",skill:"初動加速"},
+  {emoji:"🌈🐹",name:"プリズム・ハム",rarity:"PET SUPER",sell:1.1e14,type:"minipet",skill:"多属性+100%"},
+  {emoji:"💘👑",name:"ハートクイーン・ミニ",rarity:"PET LEGEND",sell:3.5e14,type:"minipet",skill:"報酬+300%"},
+  {emoji:"🎃👑",name:"パンプキンロード・ミニ",rarity:"PET LEGEND",sell:4.0e14,type:"minipet",skill:"恐怖領域"},
+  {emoji:"😽👑",name:"エンプレス・ニャン",rarity:"PET LEGEND",sell:4.5e14,type:"minipet",skill:"全体+400%"},
+  {emoji:"👽👑",name:"ソヴリン・エイリアミニ",rarity:"PET LEGEND",sell:5.0e14,type:"minipet",skill:"未知相性+500%"},
+  {emoji:"💎🌌",name:"ミニ・コアクリスタ",rarity:"PET CORE",sell:7.0e14,type:"minipet",skill:"💎×2（確率）"}
+];
+
+/* ゾンビソウル祭（💎20000）最低20体 */
+const ZOMBIE_SOUL_POOL = [
+  {emoji:"🧟",name:"よろめきゾン",rarity:"ZOMBIE RARE",sell:1.2e12,type:"zombie",skill:"感染+5%"},
+  {emoji:"🧠",name:"脳食いソウル",rarity:"ZOMBIE RARE",sell:1.4e12,type:"zombie",skill:"知略低下"},
+  {emoji:"🦴",name:"骨歩きスケルトン",rarity:"ZOMBIE RARE",sell:1.6e12,type:"zombie",skill:"防御破砕+5%"},
+  {emoji:"🩸",name:"ブラッドサッカー",rarity:"ZOMBIE RARE",sell:1.8e12,type:"zombie",skill:"吸収+3%"},
+  {emoji:"⚰️",name:"棺の主",rarity:"ZOMBIE RARE",sell:2.0e12,type:"zombie",skill:"蘇生+1"},
+  {emoji:"🧟‍♀️",name:"レディ・ロッテン",rarity:"ZOMBIE ELITE",sell:6e12,type:"zombie",skill:"魅了腐食"},
+  {emoji:"🧟‍♂️",name:"ゲローム",rarity:"ZOMBIE ELITE",sell:6.5e12,type:"zombie",skill:"毒霧"},
+  {emoji:"🦷",name:"ガジガジ・モーラー",rarity:"ZOMBIE ELITE",sell:7e12,type:"zombie",skill:"防御無視+10%"},
+  {emoji:"🪓",name:"斧屍ブッチャー",rarity:"ZOMBIE ELITE",sell:7.5e12,type:"zombie",skill:"流血"},
+  {emoji:"🧬",name:"変異体ミュータ",rarity:"ZOMBIE ELITE",sell:8e12,type:"zombie",skill:"変異バフ"},
+  {emoji:"👑🧟",name:"ゾンビキング",rarity:"ZOMBIE SUPER",sell:2.2e13,type:"zombie",skill:"群れ強化"},
+  {emoji:"🩻",name:"X線の騎士",rarity:"ZOMBIE SUPER",sell:2.6e13,type:"zombie",skill:"弱点露出"},
+  {emoji:"🧪☣️",name:"疫病源プラーグ",rarity:"ZOMBIE SUPER",sell:3.0e13,type:"zombie",skill:"伝染拡大"},
+  {emoji:"🪦",name:"墓守グレイヴ",rarity:"ZOMBIE SUPER",sell:3.5e13,type:"zombie",skill:"硬化"},
+  {emoji:"🕯️",name:"黄泉の灯",rarity:"ZOMBIE SUPER",sell:4.0e13,type:"zombie",skill:"恐怖域"},
+  {emoji:"👑💀",name:"死王ネクロ・ロード",rarity:"ZOMBIE LEGEND",sell:1.2e14,type:"zombie",skill:"全倍率+300%"},
+  {emoji:"🧟‍♂️👑",name:"屍帝アッシュ",rarity:"ZOMBIE LEGEND",sell:1.5e14,type:"zombie",skill:"報酬+400%"},
+  {emoji:"🧠👑",name:"脳王グールブレイン",rarity:"ZOMBIE LEGEND",sell:1.8e14,type:"zombie",skill:"特効+500%"},
+  {emoji:"⚰️👑",name:"棺帝サルコファ",rarity:"ZOMBIE LEGEND",sell:2.2e14,type:"zombie",skill:"装甲粉砕"},
+  {emoji:"🧬👑",name:"終変ネクロゲン",rarity:"ZOMBIE LEGEND",sell:2.6e14,type:"zombie",skill:"全体+600%"}
+];
+
+/* 童話祭（300京円＝3e17）最低20体 */
+const FAIRY_TALE_POOL = [
+  {emoji:"🧝🌲",name:"森のエルフ",rarity:"TALE RARE",sell:1.2e13,type:"tale",skill:"矢雨"},
+  {emoji:"🐺👗",name:"赤ずきんウルフ",rarity:"TALE RARE",sell:1.4e13,type:"tale",skill:"奇襲"},
+  {emoji:"🍎👑",name:"白雪のクイーン",rarity:"TALE RARE",sell:1.6e13,type:"tale",skill:"毒林檎"},
+  {emoji:"🪄🧚",name:"小さな妖精",rarity:"TALE RARE",sell:1.8e13,type:"tale",skill:"加護"},
+  {emoji:"🧌🌉",name:"橋のトロル",rarity:"TALE RARE",sell:2.0e13,type:"tale",skill:"徴収"},
+  {emoji:"🎅🛷",name:"サンタ・ストライダー",rarity:"TALE ELITE",sell:6e13,type:"tale",skill:"贈与+報酬"},
+  {emoji:"🧝‍♂️🏹",name:"弓聖ロビン",rarity:"TALE ELITE",sell:6.5e13,type:"tale",skill:"会心"},
+  {emoji:"🪽🧚",name:"ティンカー・ウィング",rarity:"TALE ELITE",sell:7e13,type:"tale",skill:"飛行強化"},
+  {emoji:"🦆👑",name:"みにくいあひる姫",rarity:"TALE ELITE",sell:7.5e13,type:"tale",skill:"変身"},
+  {emoji:"🫘🌱",name:"豆の木の主",rarity:"TALE ELITE",sell:8e13,type:"tale",skill:"成長"},
+  {emoji:"🧌👑",name:"巨人王グランデ",rarity:"TALE SUPER",sell:2.2e14,type:"tale",skill:"踏みつけ"},
+  {emoji:"🧙‍♀️📖",name:"物語の魔女",rarity:"TALE SUPER",sell:2.6e14,type:"tale",skill:"書換"},
+  {emoji:"🫅🗡️",name:"王子の護衛",rarity:"TALE SUPER",sell:3.0e14,type:"tale",skill:"守護"},
+  {emoji:"🧚‍♂️✨",name:"きらめき精",rarity:"TALE SUPER",sell:3.5e14,type:"tale",skill:"光芒"},
+  {emoji:"🐉📜",name:"書記竜スクリブ",rarity:"TALE SUPER",sell:4.0e14,type:"tale",skill:"知識"},
+  {emoji:"👑🧝",name:"森界女王ティタニア",rarity:"TALE LEGEND",sell:1.2e15,type:"tale",skill:"全+300%"},
+  {emoji:"🎅👑",name:"聖夜皇クリスト",rarity:"TALE LEGEND",sell:1.5e15,type:"tale",skill:"報酬+400%"},
+  {emoji:"🧚👑",name:"妖精王オベロン",rarity:"TALE LEGEND",sell:1.8e15,type:"tale",skill:"特効+500%"},
+  {emoji:"🐉👑",name:"物語竜レジェンドラ",rarity:"TALE LEGEND",sell:2.2e15,type:"tale",skill:"全+600%"},
+  {emoji:"📖👼",name:"御伽の守護天",rarity:"TALE LEGEND",sell:2.6e15,type:"tale",skill:"加護+時短"}
+];
+
+/* ========== ガチャ実行関数 ========== */
+// 夜更かしーズ（💎20000）
+function yofukashiGacha(){
+  return gacha(YOFUKASHI_POOL, {
+    priceCrystal: 20000,
+    effects: [screenFlash]
+  });
+}
+// クリスタルミニペット（200京円）
+function miniPetCrystalGacha(){
+  const PRICE = 300000000000000000n ? Number(200000000000000000n) : 200000000000000000; // 2e17
+  return gacha(MINI_PET_CRYSTAL_POOL, {
+    priceMoney: PRICE,
+    effects: [prismShine]
+  });
+}
+// ゾンビソウル祭（💎20000）
+function zombieSoulGacha(){
+  return gacha(ZOMBIE_SOUL_POOL, {
+    priceCrystal: 20000,
+    effects: [warningEffect]
+  });
+}
+// 童話祭（300京円）
+function fairyTaleGacha(){
+  const PRICE = 300000000000000000n ? Number(300000000000000000n) : 300000000000000000; // 3e17
+  return gacha(FAIRY_TALE_POOL, {
+    priceMoney: PRICE,
+    effects: [starlightBloom]
+  });
+}
+
+/* ======== 新ガチャ・デバフ実装 ここまで ======== */
+
 /* ====== 取得/図鑑/実績 ====== */
 function obtain(char){
   GAME.owned.push(char);
