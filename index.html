@@ -659,6 +659,8 @@ onclick="buyDiamondMoney()">
 400億円→💎1
 </button>
 
+<button onclick="buyDiamond1000()">💰40兆→💎1000</button>
+  
 </div>
 
 </div>
@@ -779,6 +781,26 @@ function buyDiamondMoney(){
   GAME.crystal += 1;
 
   addLog("💰 400億 → 💎1");
+
+  updateUI();
+
+}
+
+function buyDiamond1000(){
+
+  if(GAME.money < 40000000000000){
+
+    alert("40兆円必要");
+
+    return;
+
+  }
+
+  GAME.money -= 40000000000000;
+
+  GAME.crystal += 1000;
+
+  addLog("💰 40兆 → 💎1000");
 
   updateUI();
 
