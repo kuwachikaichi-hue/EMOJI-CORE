@@ -81,7 +81,13 @@ button.life{ background:linear-gradient(135deg,#ff3cf7,#ff0055); }
 .card .emoji{ font-size:34px; }
 .card .name{ font-size:12px; font-weight:800; margin-top:6px; }
 .card .rarity{ font-size:11px; margin-top:5px; opacity:.8; }
-.card .sell{ font-size:11px; color:#6effd5; margin-top:4px; }
+.card .sell{
+  font-size:11px; color:#6effd5; margin-top:4px; 
+           /* 既存のスタイルはそのまま + 以下を追加 */
+  white-space: normal;     /* 1行固定を解除 */
+  overflow-wrap: anywhere; /* 単語中でも折り返し可能（長い数値に強い） */
+  word-break: break-all;   /* 旧ブラウザ向けの保険 */
+  line-height: 1.2;        /* お好みで */}
 .sellBtn{
   margin-top:8px; width:100%; border:none; padding:8px; border-radius:10px;
   font-weight:900; font-size:12px; background:linear-gradient(135deg,#ff355b,#ff8844);
