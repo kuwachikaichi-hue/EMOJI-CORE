@@ -441,6 +441,73 @@ transform:scale(2);
   100%{opacity:0;}
 }
 
+/* === 追加・修正: ガチャ一覧を常に2カラムに統一 === */
+#gachaPanel{
+  display:grid;
+  grid-template-columns: repeat(2, 1fr); /* 2列固定 */
+  gap:16px;
+  row-gap:16px;
+  column-gap:16px;
+  width:100%;
+  margin-top:20px;
+}
+
+/* 既存の .gachaBtn 共通サイズを少し大きめかつ通常ボタン級に */
+.gachaBtn{
+  min-height: 80px;           /* 高さを通常.actionに近づける/少し大きめ */
+  padding: 12px 14px;
+  font-size: 16px;
+  font-weight: 900;
+  border-radius: 14px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  white-space: normal;
+}
+
+/* 天獄ガチャは「横に1個だけ」＝片側を1マス占有（全幅ではない） */
+.gachaBtn.tengoku{
+  grid-column: auto; /* 全幅化を解除（1マス分だけにする） */
+  min-height: 90px;  /* 目立たせるなら少しだけ高く */
+}
+
+/* === 追加・修正: 新規ガチャボタン群（extraGachaBtns） === */
+#gachaPanel + .gachaBtns#extraGachaBtns,
+#gachaPanel ~ .gachaBtns#extraGachaBtns,
+#gachaBtns#extraGachaBtns,
+#gachaBtns #extraGachaBtns,
+#gachaPanel #extraGachaBtns,
+#extraGachaBtns{
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important; /* 2列固定 */
+  gap: 16px !important;
+  margin-top: 16px;
+}
+
+/* 新規ガチャボタンのサイズを通常 .action と同等に */
+#extraGachaBtns .action{
+  padding: 12px 14px;
+  border-radius: 14px;
+  font-weight: 900;
+  font-size: 16px;
+  min-height: 60px;  /* 通常.actionに合わせる */
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  white-space: normal;
+}
+
+/* モバイル（狭幅）でのフォールバック: 1列に落としたい場合はコメント解除
+@media (max-width: 420px){
+  #gachaPanel,
+  #extraGachaBtns{
+    grid-template-columns: 1fr !important;
+  }
+}
+*/
+
 </style>
 </head>
 <body>
@@ -518,27 +585,15 @@ transform:scale(2);
   </button>
 
   <button class="gachaBtn tengoku" onclick="tengokuGacha()">
-    🪓🔥　天獄ガチャ 👑🪽💎1000
-  </button>
-  <!-- 新規ガチャボタン -->
+  🪓🔥　天獄ガチャ 👑🪽💎1000
+</button>
+
 <div class="gachaBtns" id="extraGachaBtns">
   <button class="action" onclick="debuffGacha()">🧪デバフガチャ 💎1000</button>
-
-  <button class="action" onclick="yofukashiGacha()">
-    🛏️夜更かしーズ😗 💎20000
-  </button>
-
-  <button class="action" onclick="miniPetCrystalGacha()">
-    💘クリスタルミニペット 🎃😽👽 200京円
-  </button>
-
-  <button class="action" onclick="zombieSoulGacha()">
-    🏆ゾンビソウル祭 🧟 💎20000
-  </button>
-
-  <button class="action" onclick="fairyTaleGacha()">
-    🌟童話祭 🎅🧝 300京円
-  </button>
+  <button class="action" onclick="yofukashiGacha()">🛏️夜更かしーズ😗 💎20000</button>
+  <button class="action" onclick="miniPetCrystalGacha()">💘クリスタルミニペット 🎃😽👽 200京円</button>
+  <button class="action" onclick="zombieSoulGacha()">🏆ゾンビソウル祭 🧟 💎20000</button>
+  <button class="action" onclick="fairyTaleGacha()">🌟童話祭 🎅🧝 300京円</button>
 </div>
 
 </div>
