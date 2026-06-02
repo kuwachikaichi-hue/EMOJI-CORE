@@ -441,82 +441,64 @@ transform:scale(2);
   100%{opacity:0;}
 }
 
-/* === 追加修正: 常に2カラム・縦長抑制・天獄の特別扱いを撤廃 === */
-
-/* ガチャ一覧を常時2カラム、余白は20pxに統一 */
-#gachaPanel{
-  display:grid;
+/* ===== ガチャパネル ===== */
+#gachaPanel {
+  display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap:20px;
-  row-gap:20px;
-  column-gap:20px;
-  width:100%;
-  margin-top:30px;
-}
-
-/* ボタンの縦長化を抑える: フォントはそのまま、min-heightを控えめに */
-.gachaBtn{
-  min-height: 64px;           /* 70pxよりやや抑えめで縦長感を軽減 */
-  padding: 10px 12px;         /* 余白も少し控えめに */
-  font-size: 16px;
-  font-weight: 700;           /* bold相当を少しだけ軽く */
-  border-radius: 12px;
-
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
-  white-space: normal;
-  writing-mode: horizontal-tb !important;
-
-  /* 旧flexレイアウトの名残を無効化（Grid運用に統一） */
-  flex: initial !important;
-}
-
-/* 天獄ガチャの特別扱いを外す（1マス占有・高さ強調を解除） */
-.gachaBtn.tengoku{
-  grid-column: auto !important;  /* 全幅化しない */
-  min-height: 64px !important;   /* ほかと同等に */
-  box-shadow: 0 0 20px #00e5ff, 0 0 40px #0088ff; /* 見た目は維持してOKなら残す */
-}
-
-/* 追加ガチャボタン群も2カラム固定 + 余白16→20へ合わせる */
-#gachaPanel + .gachaBtns#extraGachaBtns,
-#gachaPanel ~ .gachaBtns#extraGachaBtns,
-#gachaBtns#extraGachaBtns,
-#gachaBtns #extraGachaBtns,
-#gachaPanel #extraGachaBtns,
-#extraGachaBtns{
-  display: grid !important;
-  grid-template-columns: repeat(2, 1fr) !important;
-  gap: 20px !important;
+  gap: 16px;
+  width: 100%;
   margin-top: 20px;
 }
 
-/* 新規ガチャボタンのサイズも縦長になりにくい値に */
-#extraGachaBtns .action{
-  min-height: 56px;           /* 60→56で圧縮 */
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-weight: 700;
+.gachaBtn {
+  min-height: 70px;
+  padding: 12px 14px;
   font-size: 16px;
+  font-weight: bold;
+  border-radius: 12px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: normal;
+  writing-mode: horizontal-tb !important;
+  color: #fff;
+  cursor: pointer;
 
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
+  /* grid-column をリセット（全幅化しない） */
+  grid-column: auto;
+}
+
+/* 天獄: 特別扱いなし・他と同サイズ */
+.gachaBtn.tengoku {
+  grid-column: auto;
+  min-height: 70px;
+  background: linear-gradient(135deg, #00e5ff, #0088ff, #00e5ff);
+  box-shadow: 0 0 20px #00e5ff, 0 0 40px #0088ff;
+}
+
+/* ===== extraGachaBtns ===== */
+#extraGachaBtns {
+  display: grid !important;
+  grid-template-columns: repeat(2, 1fr) !important;
+  gap: 16px !important;
+  margin-top: 16px;
+}
+
+#extraGachaBtns .action {
+  min-height: 70px;
+  padding: 12px 14px;
+  font-size: 16px;
+  font-weight: bold;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   white-space: normal;
 }
 
-/* モバイルで1列落としを使う場合はコメントアウトを解除 */
-/*
-@media (max-width: 420px){
-  #gachaPanel,
-  #extraGachaBtns{
-    grid-template-columns: 1fr !important;
-  }
-}
-*/
 
 
 </style>
