@@ -476,6 +476,7 @@ transform:scale(2);
     <button class="btn-dark"    onclick="miniPetCrystalGacha()">💘 クリスタルミニペット🎃😽👽<br>200京円</button>
     <button class="btn-zombie"  onclick="zombieSoulGacha()">🏆 ゾンビソウル祭🧟<br>💎20000</button>
     <button class="btn-tale"    onclick="fairyTaleGacha()">🌟 童話祭🎅🧝<br>300京円</button>
+    <button class="btn-dark" onclick="whiteWeatherGacha()">☁️ ホワイトウェザー🤍<br>3000京円</button>
   </div>
 </div>
 
@@ -2507,6 +2508,175 @@ const FAIRY_TALE_POOL = [
   {emoji:"📖👼",name:"御伽の守護天",rarity:"TALE LEGEND",sell:150000000000000000000, type:"tale",skill:"加護+時短"}
 ];
 
+const WHITE_WEATHER_POOL = [
+  // ── WHITE RARE ──
+  {
+    emoji:"☁️🌤️", name:"薄雲ひとひら・クリア",
+    rarity:"WHITE RARE", sell:2500000000000000000000,
+    type:"white", skill:"視界+30%、晴れ間特効+20%"
+  },
+  {
+    emoji:"🌫️🤍", name:"霧霞フォグ・ヴェール",
+    rarity:"WHITE RARE", sell:3000000000000000000000,
+    type:"white", skill:"ステルス付与+50%、命中低下"
+  },
+  {
+    emoji:"❄️☁️", name:"氷雲クリスタル・サーカス",
+    rarity:"WHITE RARE", sell:3500000000000000000000,
+    type:"white", skill:"氷耐性100%、霜ダメ+80%"
+  },
+  {
+    emoji:"🌬️🌿", name:"白風グリーン・ブリーズ",
+    rarity:"WHITE RARE", sell:4000000000000000000000,
+    type:"white", skill:"移動速度+40%、風属性+100%"
+  },
+  {
+    emoji:"☁️🐑", name:"羊雲ウール・ドリフター",
+    rarity:"WHITE RARE", sell:4500000000000000000000,
+    type:"white", skill:"回復+60%、癒しオーラ付与"
+  },
+  {
+    emoji:"🌥️⚡", name:"積乱雲エレクトロ・キュムラス",
+    rarity:"WHITE RARE", sell:5000000000000000000000,
+    type:"white", skill:"雷蓄積+30%、嵐前兆バフ"
+  },
+
+  // ── WHITE ELITE ──
+  {
+    emoji:"🤍🌪️", name:"白嵐スノーウィンド・セクター",
+    rarity:"WHITE ELITE", sell:12000000000000000000000,
+    type:"white", skill:"全体スロウ+60%、白嵐フィールド展開"
+  },
+  {
+    emoji:"☁️🔱", name:"天雲将クラウド・トライデント",
+    rarity:"WHITE ELITE", sell:16000000000000000000000,
+    type:"white", skill:"大気圧攻撃+200%、対空特効+80%"
+  },
+  {
+    emoji:"🌨️🧙", name:"吹雪魔導士ブリザード・クレリック",
+    rarity:"WHITE ELITE", sell:20000000000000000000000,
+    type:"white", skill:"氷魔法+300%、全体凍結確率+40%"
+  },
+  {
+    emoji:"🌫️👁️", name:"霧の観測者スモッグ・アイ",
+    rarity:"WHITE ELITE", sell:24000000000000000000000,
+    type:"white", skill:"弱点露出100%、敵命中-50%"
+  },
+  {
+    emoji:"☁️🦅", name:"雲翔ホワイトホーク・シーカー",
+    rarity:"WHITE ELITE", sell:28000000000000000000000,
+    type:"white", skill:"飛行特効+250%、急降下クリ確定"
+  },
+
+  // ── WHITE SUPER ──
+  {
+    emoji:"🌤️👑", name:"晴嵐皇クリア・テンペスト",
+    rarity:"WHITE SUPER", sell:80000000000000000000000,
+    type:"white", skill:"全属性+400%、天候支配宣言"
+  },
+  {
+    emoji:"❄️🐉", name:"白銀龍アイシクル・ドレイク",
+    rarity:"WHITE SUPER", sell:120000000000000000000000,
+    type:"white", skill:"氷龍属性+600%、永続凍結フィールド"
+  },
+  {
+    emoji:"🌫️🛸", name:"霧中UFOフォグ・アークシップ",
+    rarity:"WHITE SUPER", sell:160000000000000000000000,
+    type:"white", skill:"全ステルス化+誘導ミサイル+800%"
+  },
+  {
+    emoji:"☁️⚔️", name:"雲剣将クラウド・ブレイカー",
+    rarity:"WHITE SUPER", sell:200000000000000000000000,
+    type:"white", skill:"大気斬+1000%、防御無視付与"
+  },
+
+  // ── WHITE LEGEND ──
+  {
+    emoji:"🌤️🌌", name:"天穹神クリアスカイ・ゼニス",
+    rarity:"WHITE LEGEND", sell:600000000000000000000000,
+    type:"white", skill:"全倍率+2000%、天空の絶対支配"
+  },
+  {
+    emoji:"❄️👼", name:"聖氷天使ホーリー・フロスト・セラフ",
+    rarity:"WHITE LEGEND", sell:900000000000000000000000,
+    type:"white", skill:"全体回復+3000%、氷聖域展開"
+  },
+  {
+    emoji:"🌫️👑🐲", name:"霧皇龍ミスト・カイザードレイク",
+    rarity:"WHITE LEGEND", sell:1200000000000000000000000,
+    type:"white", skill:"ステルス全軍化+ドラゴン倍率+4000%"
+  },
+  {
+    emoji:"☁️💎", name:"雲晶帝クラウド・クリスタル・レックス",
+    rarity:"WHITE LEGEND", sell:1800000000000000000000000,
+    type:"white", skill:"💎獲得×5・全ダメ+5000%"
+  },
+
+  // ── WHITE GOD ──
+  {
+    emoji:"🌤️❄️👑", name:"白天神クリアフロスト・オーバーロード",
+    rarity:"WHITE GOD", sell:6000000000000000000000000,
+    type:"white", skill:"全倍率+12000%、天候全制御・永続晴れ氷フィールド"
+  },
+  {
+    emoji:"☁️🌌💀", name:"天雲死皇ネビュラ・カタストロフ",
+    rarity:"WHITE GOD", sell:10000000000000000000000000,
+    type:"white", skill:"全ダメ+20000%、大気崩壊フィールド展開"
+  },
+
+  // ── WHITE ORIGIN ──
+  {
+    emoji:"🤍☁️🌈🌌", name:"白天創造神ホワイトウェザー・オリジン",
+    rarity:"WHITE ORIGIN", sell:99999999999999999999999999,
+    type:"white", skill:"全ステータス+99999%・天候世界を塗り替える究極の白"
+  },
+];
+
+
+// ホワイトウェザーガチャ（3000京円 = 3e18）
+const WHITE_WEATHER_PRICE = 3e18;
+
+function whiteWeatherGacha() {
+  return gacha(WHITE_WEATHER_POOL, {
+    priceMoney: WHITE_WEATHER_PRICE,
+    effects: [whiteWeatherEffect]
+  });
+}
+
+function whiteWeatherEffect() {
+  const d = document.createElement('div');
+  d.style.position = 'fixed';
+  d.style.inset = '0';
+  d.style.background = 'radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.2) 40%, transparent 70%)';
+  d.style.opacity = '0';
+  d.style.pointerEvents = 'none';
+  d.style.zIndex = '99990';
+  d.style.transition = 'opacity 0.5s ease';
+  document.body.appendChild(d);
+  requestAnimationFrame(() => { d.style.opacity = '1'; });
+  setTimeout(() => { d.style.opacity = '0'; }, 500);
+  setTimeout(() => { d.remove(); }, 1000);
+
+  for (let i = 0; i < 40; i++) {
+    const p = document.createElement('div');
+    p.textContent = '•';
+    p.style.position = 'fixed';
+    p.style.left = Math.random() * 100 + 'vw';
+    p.style.top = '-5vh';
+    p.style.color = 'rgba(255,255,255,0.9)';
+    p.style.fontSize = (8 + Math.random() * 8) + 'px';
+    p.style.pointerEvents = 'none';
+    p.style.zIndex = '99991';
+    const drift = (Math.random() * 40 - 20);
+    const dur = 1500 + Math.random() * 1200;
+    p.animate([
+      { transform: 'translate(0, 0)', opacity: 1 },
+      { transform: `translate(${drift}px, 110vh)`, opacity: 0 }
+    ], { duration: dur, easing: 'ease-out', fill: 'forwards' });
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), dur + 50);
+  }
+}
 
 /* ========== ガチャ実行関数 ========== */
 // 夜更かしーズ（💎20000）
