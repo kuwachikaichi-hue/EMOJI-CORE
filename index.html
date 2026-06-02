@@ -2343,11 +2343,11 @@ updateUI();
 
 function tsuyuGacha(){
 
-  if(GAME.crystal < 1000){
-    return alert("💎不足");
+  if(GAME.money < 10000000000000000){
+    return alert("お金不足");
   }
 
-  GAME.crystal -= 1000;
+  GAME.money -= 10000000000000000;
 
   const char = JSON.parse(JSON.stringify(
     TSUYU_MATSURI[Math.floor(Math.random()*TSUYU_MATSURI.length)]
@@ -2362,11 +2362,11 @@ function tsuyuGacha(){
 
 function rainbowDragonGacha(){
 
-  if(GAME.crystal < 1000){
-    return alert("💎不足");
+  if(GAME.money < 10000000000000000){
+    return alert("お金不足");
   }
 
-  GAME.crystal -= 1000;
+  GAME.money -= 10000000000000000;
 
   const char = JSON.parse(JSON.stringify(
     RAINBOW_DRAGON[Math.floor(Math.random()*RAINBOW_DRAGON.length)]
@@ -2381,11 +2381,11 @@ function rainbowDragonGacha(){
 
 function tripleFoodGacha(){
 
-  if(GAME.crystal < 1000){
-    return alert("💎不足");
+  if(GAME.money < 10000000000000000){
+    return alert("お金不足");
   }
 
-  GAME.crystal -= 1000;
+  GAME.money -= 10000000000000000;
 
   const char = JSON.parse(JSON.stringify(
     TRIPLE_FOOD[Math.floor(Math.random()*TRIPLE_FOOD.length)]
