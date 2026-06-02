@@ -310,106 +310,47 @@ transform:scale(2);
   100%{transform:translate(0,0);}
 }
 
-/* ===== ガチャパネル ===== */
-#gachaPanel {
+/* ===== ガチャグリッド統一 ===== */
+.gachaGrid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-  width: 100%;
-  margin-top: 30px;
+  gap: 10px;
+  margin-top: 12px;
 }
 
-.gachaBtn {
-  min-height: 70px;
-  padding: 12px 14px;
-  font-size: 16px;
-  font-weight: bold;
-  border-radius: 12px;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-
-  /* 縦書き防止 */
-  writing-mode: horizontal-tb;
-  text-orientation: mixed;
-  white-space: normal;
-  word-break: keep-all;
-
-  /* flex 指定を削除し、grid に任せる */
-  color: #fff;
-  cursor: pointer;
-}
-
-/* 梅雨 */
-.gachaBtn.tsuyu {
-  background: linear-gradient(135deg, #3aa0ff, #00d4ff);
-  box-shadow: 0 0 20px #00d4ff;
-}
-
-/* レインボー */
-.gachaBtn.rainbow {
-  background: linear-gradient(135deg, red, orange, yellow, green, blue, purple);
-  box-shadow: 0 0 25px rgba(255, 255, 255, 0.5);
-}
-
-/* フード */
-.gachaBtn.food {
-  background: linear-gradient(135deg, #ff7b00, #ff2d55);
-  box-shadow: 0 0 20px #ff7b00;
-}
-
-/* ロボット */
-.gachaBtn.robo {
-  background: linear-gradient(135deg, #d9d9d9, #7a7a7a);
-  box-shadow: 0 0 20px #bdbdbd;
-}
-
-/* アーススター */
-.gachaBtn.earth {
-  background: linear-gradient(135deg, #1db954, #3ddc84);
-  box-shadow: 0 0 20px #3ddc84;
-}
-
-/* ゴーレム */
-.gachaBtn.crystal {
-  background: linear-gradient(135deg, #00d4ff, #7b61ff);
-  box-shadow: 0 0 20px #7b61ff;
-}
-
-/* 天獄 ― 他と同じサイズ、grid-column を auto に戻す */
-.gachaBtn.tengoku {
-  background: linear-gradient(135deg, #00e5ff, #0088ff, #00e5ff);
-  box-shadow: 0 0 20px #00e5ff, 0 0 40px #0088ff;
-}
-
-/* ===== extraGachaBtns ===== */
-#extraGachaBtns {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-  margin-top: 20px;
-}
-
-#extraGachaBtns .action {
-  min-height: 70px;
-  padding: 12px 14px;
-  font-size: 16px;
-  font-weight: bold;
-  border-radius: 12px;
+.gachaGrid button {
+  min-height: 72px;
+  padding: 12px 10px;
+  font-size: 13px;
+  font-weight: 900;
+  border-radius: 14px;
   border: none;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   writing-mode: horizontal-tb;
-  text-orientation: mixed;
   white-space: normal;
   word-break: keep-all;
   color: #fff;
   cursor: pointer;
+  line-height: 1.4;
 }
+
+/* 色テーマ */
+.btn-cyan   { background: linear-gradient(135deg,#00e5ff,#0077ff); }
+.btn-life   { background: linear-gradient(135deg,#ff3cf7,#ff0055); }
+.btn-tsuyu  { background: linear-gradient(135deg,#3aa0ff,#00d4ff); box-shadow:0 0 20px #00d4ff; }
+.btn-rainbow{ background: linear-gradient(135deg,red,orange,yellow,green,blue,purple); box-shadow:0 0 25px rgba(255,255,255,.5); }
+.btn-food   { background: linear-gradient(135deg,#ff7b00,#ff2d55); box-shadow:0 0 20px #ff7b00; }
+.btn-robo   { background: linear-gradient(135deg,#d9d9d9,#7a7a7a); box-shadow:0 0 20px #bdbdbd; color:#111; }
+.btn-earth  { background: linear-gradient(135deg,#1db954,#3ddc84); box-shadow:0 0 20px #3ddc84; }
+.btn-crystal{ background: linear-gradient(135deg,#00d4ff,#7b61ff); box-shadow:0 0 20px #7b61ff; }
+.btn-tengoku{ background: linear-gradient(135deg,#00e5ff,#0088ff,#00e5ff); box-shadow:0 0 20px #00e5ff,0 0 40px #0088ff; }
+.btn-dark   { background: linear-gradient(135deg,#1a1a2e,#16213e); border:1px solid rgba(255,255,255,.15); }
+.btn-night  { background: linear-gradient(135deg,#1a0533,#3d0070); box-shadow:0 0 20px #7b00ff; }
+.btn-zombie { background: linear-gradient(135deg,#1a2e00,#3a6600); box-shadow:0 0 20px #5fff00; }
+.btn-tale   { background: linear-gradient(135deg,#2e0033,#6b00a8); box-shadow:0 0 20px #cc00ff; }
 
 /* ===== フラッシュ演出（変更なし） ===== */
 .flash {
@@ -475,68 +416,35 @@ transform:scale(2);
 <main>
   <section class="panel active" id="home">
     <div class="section">
-      <div class="title">⚡ CYBER EMOJI CORE</div>
-      <div class="small">ネオン放置型インフレガチャゲーム</div>
-      <div class="gachaBtns">
-        <button class="action" onclick="normalGacha(1)">通常ガチャ ¥3,000</button>
-        <button class="action" onclick="normalGacha(10)">通常10連 ¥30,000</button>
-        <button class="action life" onclick="lifeGacha(1)">LIFEガチャ 20LP</button>
-        <button class="action life" onclick="lifeGacha(10)">LIFE10連 200LP</button>
-        <button class="action life" onclick="dimensionGacha()">異世界個体 600LP</button>
-        <button class="action" onclick="animalArmyGacha()">
-🐾アニマルアーミー 💎55
-</button>
+  <div class="title">⚡ CYBER EMOJI CORE</div>
+  <div class="small">ネオン放置型インフレガチャゲーム</div>
 
-        <button class="action" onclick="fairyGacha()">
-🧚フェアリー 💎60
-</button>
+  <div class="gachaGrid">
+    <!-- 通常系 -->
+    <button class="btn-cyan"    onclick="normalGacha(1)">通常ガチャ<br>¥3,000</button>
+    <button class="btn-cyan"    onclick="normalGacha(10)">通常10連<br>¥30,000</button>
+    <button class="btn-life"    onclick="lifeGacha(1)">LIFEガチャ<br>20LP</button>
+    <button class="btn-life"    onclick="lifeGacha(10)">LIFE10連<br>200LP</button>
+    <button class="btn-life"    onclick="dimensionGacha()">異世界個体<br>600LP</button>
+    <button class="btn-dark"    onclick="animalArmyGacha()">🐾 アニマルアーミー<br>💎55</button>
+    <button class="btn-dark"    onclick="fairyGacha()">🧚 フェアリー<br>💎60</button>
+    <button class="btn-dark"    onclick="robotPetGacha()">🤖 ロボペット<br>💎60</button>
 
-        <button class="action" onclick="robotPetGacha()">
-🤖ロボペット 💎60
-</button>
-
-</div> <!-- gachaBtnsを閉じる -->
-
-<div id="gachaPanel">
-
-  <button class="gachaBtn tsuyu" onclick="tsuyuGacha()">
-    ☔ 超梅雨ガチャ☁️10京円
-  </button>
-
-  <button class="gachaBtn rainbow" onclick="rainbowDragonGacha()">
-    🌈 レインボードラゴン🐉10京円
-  </button>
-
-　 <button class="gachaBtn food" onclick="foodGacha()">
-    🍕 トリプルフード🍟100京円
-  </button>
-
-  <button class="gachaBtn robo" onclick="roboWarriorGacha()">
-    🕹️ ロボット戦士⛓️💎4000
-  </button>
-
-  <button class="gachaBtn earth" onclick="earthStarGacha()">
-    🌏 アーススター💫💎4000
-  </button>
-
-  <button class="gachaBtn tengoku" onclick="tengokuGacha()">
-  🪓🔥　天獄ガチャ 👑🪽💎1000
-</button>
-
-<div class="gachaBtns" id="extraGachaBtns">
-  <button class="action" onclick="debuffGacha()">🧪デバフガチャ 💎1000</button>
-  <button class="action" onclick="yofukashiGacha()">🛏️夜更かしーズ😗 💎20000</button>
-  <button class="action" onclick="miniPetCrystalGacha()">💘クリスタルミニペット 🎃😽👽 200京円</button>
-  <button class="action" onclick="zombieSoulGacha()">🏆ゾンビソウル祭 🧟 💎20000</button>
-  <button class="action" onclick="fairyTaleGacha()">🌟童話祭 🎅🧝 300京円</button>
+    <!-- 特殊系 -->
+    <button class="btn-tsuyu"   onclick="tsuyuGacha()">☔ 超梅雨ガチャ☁️<br>10京円</button>
+    <button class="btn-rainbow" onclick="rainbowDragonGacha()">🌈 レインボードラゴン🐉<br>10京円</button>
+    <button class="btn-food"    onclick="foodGacha()">🍕 トリプルフード🍟<br>100京円</button>
+    <button class="btn-robo"    onclick="roboWarriorGacha()">🕹️ ロボット戦士⛓️<br>💎4000</button>
+    <button class="btn-earth"   onclick="earthStarGacha()">🌏 アーススター💫<br>💎4000</button>
+    <button class="btn-crystal" onclick="crystalGolemGacha()">💎 ゴーレム<br>💎4000</button>
+    <button class="btn-tengoku" onclick="tengokuGacha()">🪓🔥 天獄ガチャ👑🪽<br>💎1000</button>
+    <button class="btn-dark"    onclick="debuffGacha()">🧪 デバフガチャ<br>💎1000</button>
+    <button class="btn-night"   onclick="yofukashiGacha()">🛏️ 夜更かしーズ😗<br>💎20000</button>
+    <button class="btn-dark"    onclick="miniPetCrystalGacha()">💘 クリスタルミニペット🎃😽👽<br>200京円</button>
+    <button class="btn-zombie"  onclick="zombieSoulGacha()">🏆 ゾンビソウル祭🧟<br>💎20000</button>
+    <button class="btn-tale"    onclick="fairyTaleGacha()">🌟 童話祭🎅🧝<br>300京円</button>
+  </div>
 </div>
-
-</div>
-</div>
-</div>
-</div>
-      </div>
-    </div>
 
     <div class="section">
       <div class="title">👥 所持キャラクター</div>
