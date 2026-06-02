@@ -312,36 +312,31 @@ transform:scale(2);
 
 #gachaPanel{
   display:grid;
-  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-columns:1fr 1fr;
   gap:12px;
-  margin-top:20px;
   width:100%;
 }
 
-/* 通常ガチャ */
 .gachaBtn{
   width:100%;
-  min-height:90px;
-  padding:12px;
-  font-size:18px;
-  border:none;
-  border-radius:12px;
-  color:#fff;
-  font-weight:bold;
-  cursor:pointer;
-  transition:.2s;
+  min-height:80px;
+  height:auto;
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  text-align:center;
   white-space:normal;
-  word-break:break-word;
+
+  writing-mode:horizontal-tb; /* ←超重要 */
+  font-size:18px;
+  padding:12px;
 }
 
-/* 天獄だけ横2列 */
+/* 天獄だけ横2個分 */
 .gachaBtn.tengoku{
-  grid-column:1 / -1;
-  min-height:100px;
-}
-
-.gachaBtn:active{
-  transform:scale(.95);
+  grid-column:1 / span 2;
 }
 
 /* 梅雨 */
