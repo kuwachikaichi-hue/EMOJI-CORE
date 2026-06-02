@@ -2773,63 +2773,99 @@ updateUI();
 
 }
 
-function tsuyuGacha(){
-  return gacha(TSUYU_MATSURI, { priceMoney: 10000000000000000, effects: [screenFlash] });
+// 10京円 = 1e16
+function tsuyuGacha() {
+  return gacha(TSUYU_MATSURI, { priceMoney: 1e16, effects: [screenFlash] });
 }
 
-function rainbowDragonGacha(){
-  return gacha(RAINBOW_DRAGON, { priceMoney: 10000000000000000, effects: [rainbowEffect] });
+function rainbowDragonGacha() {
+  return gacha(RAINBOW_DRAGON, { priceMoney: 1e16, effects: [rainbowEffect] });
 }
 
-function foodGacha(){
-  return gacha(TRIPLE_FOOD, { priceMoney: 10000000000000000, effects: [screenFlash] });
+function foodGacha() {
+  return gacha(TRIPLE_FOOD, { priceMoney: 1e16, effects: [screenFlash] });
 }
 
-function roboWarriorGacha(){
+// 200京円 = 2e17
+function miniPetCrystalGacha() {
+  return gacha(MINI_PET_CRYSTAL_POOL, { priceMoney: 2e17, effects: [prismShine] });
+}
+
+// 300京円 = 3e17
+function fairyTaleGacha() {
+  return gacha(FAIRY_TALE_POOL, { priceMoney: 3e17, effects: [starlightBloom] });
+}
+
+// 以下は変更なし（💎コストなので問題なし）
+function roboWarriorGacha() {
   return gacha(ROBO_WARRIOR, {
     priceCrystal: 4000,
     effects: [roboBootUp, chainClash, overdriveFlash, empBurst]
   });
 }
 
-function crystalGolemGacha(){
+function crystalGolemGacha() {
   return gacha(CRYSTAL_GOLEM, {
     priceCrystal: 4000,
     effects: [crystalSpawn, prismShine, shatterPulse, gemRain]
   });
 }
 
-function earthStarGacha(){
+function earthStarGacha() {
   return gacha(EARTH_STAR, {
     priceCrystal: 4000,
     effects: [quakeRumble, orbitSweep, gravityWell, starlightBloom]
   });
 }
 
-function gacha(pool, opts){
-  const { priceCrystal = 0, priceMoney = 0, count = 1, effects = [] } = opts || {};
+function yofukashiGacha() {
+  return gacha(YOFUKASHI_POOL, { priceCrystal: 20000, effects: [screenFlash] });
+}
 
-  // 資源チェック
-  if(priceCrystal > 0){
-    GAME.crystal = GAME.crystal ?? 0;
-    if(GAME.crystal < priceCrystal) { alert("💎不足"); return; }
-    if(GAME.owned.length + count > GAME.baseCap) { alert("基地容量不足"); return; }
+function zombieSoulGacha() {
+  return gacha(ZOMBIE_SOUL_POOL, { priceCrystal: 20000, effects: [warningEffect] });
+}
+
+function gacha(pool, opts) {
+  const count = opts.count ?? 1;
+  const priceCrystal = opts.priceCrystal ?? 0;
+  const priceMoney = opts.priceMoney ?? 0;
+
+  // 容量チェック（共通）
+  if (GAME.owned.length + count > GAME.baseCap) {
+    alert("基地容量不足");
+    return;
+  }
+
+  // コスト種別チェック
+  if (priceCrystal > 0) {
+    if ((GAME.crystal ?? 0) < priceCrystal) {
+      alert("💎不足");
+      return;
+    }
     GAME.crystal -= priceCrystal;
-  }else if(priceMoney > 0){
-    if(GAME.money < priceMoney) { alert("お金不足"); return; }
-    if(GAME.owned.length + count > GAME.baseCap) { alert("基地容量不足"); return; }
+  } else if (priceMoney > 0) {
+    if (GAME.money < priceMoney) {
+      alert("お金不足");
+      return;
+    }
     GAME.money -= priceMoney;
+  } else {
+    // コストが両方0 → 無料ガチャ扱いになるため明示的にブロック
+    alert("コスト設定エラー");
+    return;
   }
 
   const results = [];
-  for(let i=0;i<count;i++){
-    const char = JSON.parse(JSON.stringify(pool[Math.floor(Math.random()*pool.length)]));
+  for (let i = 0; i < count; i++) {
+    const char = JSON.parse(JSON.stringify(
+      pool[Math.floor(Math.random() * pool.length)]
+    ));
     results.push(char);
     obtain(char);
   }
 
-  // 演出
-  effects.forEach(fn => { if(typeof fn === "function") fn(); });
+  (opts.effects ?? []).forEach(fn => { if (typeof fn === "function") fn(); });
 
   updateUI();
   showResults(results);
