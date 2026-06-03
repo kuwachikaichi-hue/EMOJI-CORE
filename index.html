@@ -660,6 +660,77 @@ transform:scale(2);
   0% { opacity:0; } 40% { opacity:1; } 100% { opacity:0; }
 }
 
+/* セーブUI */
+  #saveDock {
+    position: fixed; right: 12px; bottom: 12px; z-index: 9999;
+    display: grid; gap: 6px;
+  }
+  #saveDock button {
+    padding: 8px 10px; border: none; border-radius: 10px;
+    font-weight: 900; font-size: 12px; cursor: pointer; color: #00131b;
+    background: linear-gradient(135deg, #00e5ff, #0077ff);
+    box-shadow: 0 0 10px rgba(0,150,255,.35);
+  }
+  #savePanel {
+    position: fixed; right: 12px; bottom: 100px; z-index: 9999;
+    width: min(460px, 92vw); max-height: 60vh; overflow: auto;
+    background: #08111f; border: 1px solid rgba(0,229,255,.3);
+    box-shadow: 0 0 20px rgba(0,229,255,.15); border-radius: 12px; padding: 10px;
+    display: none;
+  }
+  #savePanel textarea {
+    width: 100%; height: 180px; background: #000d1a; color: #fff;
+    border: 1px solid rgba(0,229,255,.4); border-radius: 8px; padding: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+  }
+
+/* スマホ対応の固定広告バー */
+  #adBarSticky {
+    position: sticky;
+    top: 56px; /* header内tabsの下あたりに固定 */
+    z-index: 90;
+    margin: 8px 0 12px 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid rgba(0,229,255,0.25);
+    background: linear-gradient(135deg, #0a1a2e, #0d2040);
+    box-shadow: 0 0 14px rgba(0,229,255,0.12);
+  }
+  #adBarSticky .adRow {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px;
+    min-height: 40px; color: #fff; line-height: 1.4;
+    font-size: 13px; font-weight: 700;
+    word-break: break-word;
+  }
+  #adBarSticky .adMark {
+    position: absolute; right: 8px; top: 4px;
+    font-size: 9px; color: rgba(255,255,255,0.3); letter-spacing: 1px;
+  }
+  @media (max-width: 480px) {
+    #adBarSticky .adRow {
+      font-size: 12px; padding: 8px 10px; min-height: 36px;
+    }
+  }
+</style>
+<div id="saveDock">
+  <button id="btnSaveOpen">保存/読込</button>
+</div>
+<div id="savePanel">
+  <div style="font-weight:900;color:#00e5ff;margin-bottom:6px;">手動セーブ/ロード</div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">
+    <button id="btnExport">JSONを書き出す</button>
+    <button id="btnImport">JSONを読み込む</button>
+    <button id="btnCopy">テキストをコピー</button>
+    <button id="btnClear" style="background:linear-gradient(135deg,#ff355b,#ff8844);color:#fff;">初期化</button>
+    <button id="btnClose">閉じる</button>
+  </div>
+  <textarea id="saveText" placeholder="ここにJSONを貼り付け/表示されます"></textarea>
+  <div style="margin-top:6px;font-size:12px;opacity:.8;">
+    注意: 他人のデータを読み込むと上書きされます。自己責任でお願いします。
+  </div>
+</div>
 </style>
 </head>
 <body>
@@ -988,9 +1059,304 @@ onclick="buyDiamondMoney()">
   </div>
 </div>
 <!-- ★ここから下はあなたのコードそのまま + 修正追加 -->
-
+<!-- 見えなくなる環境向けに、既存adBarの下にバックアップ表示を追加 -->
+<div id="adBarSticky" aria-live="polite">
+  <div class="adRow" id="adStickyRow"><span style="font-size:18px">📰</span><span id="adStickyText" style="color:rgba(0,229,255,0.95)"></span></div>
+  <div class="adMark">AD</div>
+</div>
+  
 <script>
 
+// ===== パフォーマンス改善パッチ v1 =====
+(function perfPatch(){
+  // 1) updateUIを集約（同フレーム内は1回だけDOM反映）
+  if (window.__uiBatched__) return;
+  window.__uiBatched__ = true;
+  const origUpdateUI = window.updateUI || function(){};
+  let uiDirty = false;
+  let rafId = 0;
+  function flushUI(){
+    rafId = 0;
+    uiDirty = false;
+    try { origUpdateUI(); } catch(e){}
+  }
+  window.updateUI = function(){
+    uiDirty = true;
+    if (rafId) return;
+    rafId = requestAnimationFrame(flushUI);
+  };
+  // 2) ログの再描画を軽量化（差分のみ）
+  const origRenderLogs = window.renderLogs || function(){};
+  let lastLogLen = -1;
+  window.renderLogs = function(){
+    try {
+      const len = (window.GAME?.logs?.length)||0;
+      if (len === lastLogLen) return; // 変化なしならスキップ
+      lastLogLen = len;
+    } catch(e){}
+    origRenderLogs();
+  };
+  // 3) 結果ポップアップのカード数が多い場合のReflow抑制
+  const origShowResults = window.showResults || function(){};
+  window.showResults = function(results){
+    // DocumentFragmentで一括挿入（reflow回数削減）
+    try {
+      const popup=document.getElementById('popup');
+      const box=document.getElementById('results');
+      if (!popup || !box) return origShowResults(results);
+      box.innerHTML='';
+      const frag = document.createDocumentFragment();
+      (results||[]).forEach(c=>{
+        const div=document.createElement('div');
+        div.className='card';
+        if(c.rarity==='LEGEND') div.classList.add('legendGlow');
+        if(c.rarity==='CHIMERA' || c.rarity==='EVENT') div.classList.add('chimeraGlow');
+        div.innerHTML=`
+          <div class="emoji">${c.emoji}</div>
+          <div class="name">${c.name}</div>
+          <div class="rarity">${c.rarity}</div>
+          <div class="sell">${(window.formatSafe?formatSafe(c.sell):'¥'+Number(c.sell||0).toLocaleString())}</div>
+        `;
+        frag.appendChild(div);
+      });
+      box.appendChild(frag);
+      popup.classList.add('active');
+    } catch(e){
+      origShowResults(results);
+    }
+  };
+  // 4) エフェクト要素の上限と自動クリーン
+  const FX_MAX = 120; // 同時最大
+  function pruneFx(){
+    const all = document.body.querySelectorAll('.heavenWing,.heavenFlash,.flash,.rainbowFlash,[class^="fx_"]');
+    if (all.length <= FX_MAX) return;
+    const rm = all.length - FX_MAX;
+    for (let i=0;i<rm;i++){
+      const n = all[i];
+      if (n && n.parentNode) n.parentNode.removeChild(n);
+    }
+  }
+  setInterval(pruneFx, 1000);
+  // 5) 収益タイマのDOM最小化（数字の差分だけ描画）
+  const moneyEl = document.getElementById('money');
+  let lastMoneyShown = null;
+  setInterval(()=>{
+    try{
+      if (!window.GAME) return;
+      const cur = window.formatSafe ? formatSafe(GAME.money) : '¥'+Number(GAME.money||0).toLocaleString();
+      if (cur !== lastMoneyShown && moneyEl) {
+        lastMoneyShown = cur;
+        moneyEl.innerText = cur;
+      }
+    }catch(e){}
+  }, 200);
+})();
+
+// ===== トレード起動セーフガード v1 =====
+(function tradeSafeBoot(){
+  // GAMEが未定義なら最小構成で用意
+  if (typeof window.GAME !== 'object' || !window.GAME) {
+    window.GAME = {
+      money: 0, lp: 0, crystal: 0, baseCap: 5,
+      owned: [], dex: [], achievements: [],
+      research: { luck:0, legend:0, event:0, chimera:0, life:0, cap:0, auto:0, time:0 },
+      logs: [], moonRoad: [], diamondStored: 0,
+      lastMoonRefresh: 0, lastDiamondGain: Date.now(), emozoo: 0, buffs: {}
+    };
+  } else {
+    // 欠損の埋め
+    GAME.owned = Array.isArray(GAME.owned) ? GAME.owned : [];
+    GAME.baseCap = Number.isFinite(GAME.baseCap) ? GAME.baseCap : 5;
+    GAME.logs = Array.isArray(GAME.logs) ? GAME.logs : [];
+    GAME.emozoo = Number.isFinite(GAME.emozoo) ? GAME.emozoo : 0;
+    GAME.buffs = (typeof GAME.buffs === 'object' && GAME.buffs) ? GAME.buffs : {};
+  }
+  // 交換ポップアップが存在しない場合は最小UIを自動挿入
+  if (!document.getElementById('tradePopup')) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="tradePopup" id="tradePopup" style="position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:9999;">
+        <div class="tradeBox" style="width:100%;max-width:540px;max-height:90vh;overflow:auto;background:#08111f;border-radius:20px;padding:16px;border:1px solid rgba(0,229,255,.3);">
+          <div class="tradeTitle" style="font-size:18px;font-weight:900;color:#00e5ff;margin-bottom:12px;text-align:center;">🔀 キャラクター交換</div>
+          <div class="tradeStep active" id="tradeStep1">
+            <div class="tradeMeta">交換開始</div>
+            <div id="spellDisplay" class="num-mono" style="background:#000d1a;border:1px solid rgba(0,229,255,.4);border-radius:10px;padding:12px;min-height:80px;color:#00e5ff;"></div>
+            <button class="tradeAction danger" onclick="(document.getElementById('tradePopup').classList.remove('active'))" style="margin-top:8px;">閉じる</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap.firstChild);
+  }
+  // renderInventoryの最小実装（未定義のときだけ）
+  if (typeof window.renderInventory !== 'function') {
+    window.renderInventory = function(){
+      const box = document.getElementById('inventory');
+      if (!box || !window.GAME) return;
+      box.innerHTML = '';
+      const reversed = GAME.owned.map((c,i)=>({c,i})).reverse();
+      const frag = document.createDocumentFragment();
+      reversed.forEach(({c, i: originalIdx})=>{
+        const div = document.createElement('div');
+        div.className='card';
+        div.innerHTML = `
+          <div class="emoji">${c.emoji||'❔'}</div>
+          <div class="name">${c.name||'？？？'}</div>
+          <div class="rarity">${c.rarity||''}</div>
+          <div class="sell">売却 ¥${Number(c.sell||0).toLocaleString()}</div>
+          <button class="sellBtn">売却</button>
+          <button class="tradeBtn">交換</button>
+        `;
+        div.querySelector('.sellBtn').addEventListener('click', ()=> {
+          if (!GAME.owned[originalIdx]) return;
+          GAME.money += Number(GAME.owned[originalIdx].sell||0);
+          GAME.owned.splice(originalIdx,1);
+          (window.addLog||console.log)('💸 売却 ▶ '+(c.name||'？'));
+          if (typeof window.updateUI === 'function') updateUI();
+          else renderInventory();
+        }, {passive:true});
+        frag.appendChild(div);
+      });
+      box.appendChild(frag);
+    };
+  }
+  // TradeHandlersが未読み込みでも、在庫の「交換」ボタン押下で案内を出す
+  function bindInventoryTradeButtons(){
+    const box = document.getElementById('inventory');
+    if (!box) return;
+    box.querySelectorAll('.card .tradeBtn').forEach((btn, idx)=>{
+      if (btn.__bound) return;
+      btn.__bound = true;
+      btn.addEventListener('click', ()=>{
+        // 既存のTradeHandlersがあれば使う
+        if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function') {
+          TradeHandlers.openStart(idx);
+          return;
+        }
+        // フォールバック：簡易メッセージ
+        alert('交換機能の初期化を完了しました。もう一度押して開始してください。');
+      }, {passive:true});
+    });
+  }
+  // 初回バインド（遅延で数回試す）
+  let tries = 0;
+  const iv = setInterval(()=>{
+    tries++;
+    try { renderInventory(); bindInventoryTradeButtons(); } catch(e){}
+    if (tries>=5) clearInterval(iv);
+  }, 200);
+  // DOM準備後も再バインド
+  document.addEventListener('DOMContentLoaded', ()=>{
+    try { renderInventory(); bindInventoryTradeButtons(); } catch(e){}
+  });
+})();
+
+// ===== 手動セーブ/ロードUI v1 =====
+(function manualSaveLoad(){
+  const elDock = document.getElementById('saveDock');
+  const elPanel = document.getElementById('savePanel');
+  const elText = document.getElementById('saveText');
+  const $ = s=>document.querySelector(s);
+  function openPanel(){ elPanel.style.display = 'block'; }
+  function closePanel(){ elPanel.style.display = 'none'; }
+  $('#btnSaveOpen').onclick = openPanel;
+  $('#btnClose').onclick = closePanel;
+  // 互換ラッパ
+  function doExport(){
+    try{
+      const data = (typeof save==='function') ? (localStorage.getItem('CYBER_EMOJI_CORE_SAVE_V2') || JSON.stringify(window.GAME||{},null,2))
+                 : JSON.stringify(window.GAME||{}, null, 2);
+      elText.value = data;
+    }catch(e){
+      elText.value = JSON.stringify(window.GAME||{}, null, 2);
+    }
+  }
+  function doImport(){
+    try{
+      const obj = JSON.parse(elText.value||'{}');
+      if (!obj || typeof obj!=='object') throw new Error('JSON形式が不正');
+      // 既存のload/saveに揃える
+      Object.assign(window.GAME, obj);
+      if (typeof save==='function') save();
+      if (typeof updateUI==='function') updateUI();
+      alert('読み込み完了');
+    }catch(e){
+      alert('読み込み失敗：'+(e?.message||'JSONエラー'));
+    }
+  }
+  function doCopy(){
+    const s = elText.value || '';
+    navigator.clipboard?.writeText(s).then(()=>alert('コピーしました')).catch(()=>{
+      elText.select(); document.execCommand('copy'); alert('コピーしました');
+    });
+  }
+  function doClear(){
+    if (!confirm('全データを初期化します。よろしいですか？')) return;
+    try{
+      localStorage.removeItem('CYBER_EMOJI_CORE_SAVE_V2');
+      // 最小初期化
+      window.GAME = {
+        money: 100000, lp: 0, crystal: 0, baseCap: 5, owned: [],
+        dex: [], achievements: [], legendPity: 0,
+        research: { luck:0, legend:0, event:0, chimera:0, life:0, cap:0, auto:0, time:0 },
+        logs: [], moonRoad: [], diamondStored: 0, lastMoonRefresh: 0, lastDiamondGain: Date.now(),
+        emozoo: 0, buffs: {}
+      };
+      if (typeof save==='function') save();
+      if (typeof updateUI==='function') updateUI();
+      elText.value = JSON.stringify(window.GAME, null, 2);
+      alert('初期化しました');
+    }catch(e){
+      alert('初期化に失敗：'+(e?.message||'不明'));
+    }
+  }
+  $('#btnExport').onclick = doExport;
+  $('#btnImport').onclick = doImport;
+  $('#btnCopy').onclick = doCopy;
+  $('#btnClear').onclick = doClear;
+  // 初期表示
+  doExport();
+})();
+
+// ===== スマホ広告バー可視化パッチ v1 =====
+(function adStickyPatch(){
+  const LIST = (window.AD_LIST && AD_LIST.length) ? AD_LIST : [
+    {icon:"📰",text:"最新情報をチェック！"}, {icon:"⚔️",text:"ボス襲来に備えよう！"}
+  ];
+  let idx = 0;
+  const row = document.getElementById('adStickyRow');
+  const text = document.getElementById('adStickyText');
+  function show(){
+    const ad = LIST[idx % LIST.length];
+    if (row && text) {
+      row.style.opacity = '0';
+      setTimeout(()=>{
+        row.innerHTML = `<span style="font-size:18px">${ad.icon||'📰'}</span><span id="adStickyText" style="color:rgba(0,229,255,0.95)">${ad.text||''}</span>`;
+        row.style.opacity = '1';
+      }, 180);
+    }
+    idx++;
+  }
+  // 既存のadBarが画面外押し出しで見えない場合も、こちらはstickyで常時見える
+  document.addEventListener('DOMContentLoaded', ()=>{
+    show();
+    setInterval(show, 3000);
+  });
+  // ヘッダが小さい/大きい時の衝突回避（tab行の高さに追従）
+  const hdr = document.querySelector('header');
+  const sticky = document.getElementById('adBarSticky');
+  function alignTop(){
+    try{
+      const rect = hdr?.getBoundingClientRect();
+      const tabRow = document.querySelector('.tabs');
+      const tabsH = tabRow ? tabRow.getBoundingClientRect().height : 40;
+      sticky.style.top = Math.max(40, Math.floor((rect?.height||80) - tabsH) ) + 'px';
+    }catch(e){}
+  }
+  window.addEventListener('resize', alignTop, {passive:true});
+  setTimeout(alignTop, 0);
+  setTimeout(alignTop, 500);
+})();
+  
 /* ===== 0円表示/計算ズレ修正ユーティリティ ===== */
 
 /* BigInt/未定義/文字列混在を安全に数値化 */
