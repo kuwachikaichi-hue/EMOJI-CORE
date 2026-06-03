@@ -581,6 +581,10 @@ transform:scale(2);
 .tradeMeta { font-size: 11px; opacity: .65; margin-top: 8px; line-height: 1.7; }
 .tradeError { color: #ff355b; font-weight: 900; font-size: 13px; margin-top: 8px; }
 
+.num-mono {
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
 
 </style>
 </head>
@@ -1006,479 +1010,259 @@ onclick="buyDiamondMoney()">
 
 <script>
 
-/* =====================================================
-   2段階キャラクター交換システム（復活の呪文方式）
-   完全オフライン動作 / 音声なし / チート対策済み
-   ===================================================== */
+/* ===== 0円表示/計算ズレ修正ユーティリティ ===== */
 
-/* ---- ユーティリティ ---- */
+/* BigInt/未定義/文字列混在を安全に数値化 */
+(function attachSafeNumberUtils(){
+  if (window.toNum && window.formatSafe) return;
 
-// UUIDv4生成（通信不要）
-function generateUUID() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0;
-    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-  });
-}
-
-// プレイヤーIDの永続化（初回のみ生成）
-if (!GAME.playerId) {
-  GAME.playerId = generateUUID();
-  save();
-}
-
-// 受け取り済みGUIDブラックリスト（チート対策③）
-if (!Array.isArray(GAME.receivedCharIds)) {
-  GAME.receivedCharIds = [];
-}
-
-// キャラクター生成時に charInstanceId を付与するパッチ
-(function patchObtainForInstanceId() {
-  const _origObtain = window.obtain;
-  window.obtain = function(char) {
-    // まだIDがなければ発行（チート対策①）
-    if (!char.charInstanceId) {
-      char.charInstanceId = generateUUID();
+  window.toNum = function toNum(v, fallback = 0) {
+    try {
+      if (v === null || v === undefined) return fallback;
+      if (typeof v === 'number') return isFinite(v) ? v : fallback;
+      if (typeof v === 'bigint') {
+        // 1e21以上などはNumberに収まらないため桁落ちするが表示用はOK
+        const n = Number(v);
+        return isFinite(n) ? n : fallback;
+      }
+      if (typeof v === 'string') {
+        // "123_456" のような形式やカンマ混じりに耐性
+        const s = v.replace(/[,_\s]/g, '');
+        const n = Number(s);
+        return isFinite(n) ? n : fallback;
+      }
+      if (typeof v === 'object' && 'valueOf' in v) {
+        const n = Number(v.valueOf());
+        return isFinite(n) ? n : fallback;
+      }
+      return fallback;
+    } catch {
+      return fallback;
     }
-    return _origObtain(char);
+  };
+
+  /* "¥"整形の安全版（sellや価格、報酬などすべてに使う） */
+  window.formatSafe = function formatSafe(v) {
+    const n = toNum(v, 0);
+    try {
+      return '¥' + n.toLocaleString();
+    } catch {
+      // toLocaleString不可な環境向けフォールバック
+      return '¥' + String(n);
+    }
   };
 })();
 
-/* ---- 呪文エンコード / デコード ---- */
+/* ===== 価格・売値の表示/計算を formatSafe/toNum へ寄せるパッチ ===== */
+(function patchPricingAndDisplay(){
+  // 1) グローバルformatの差し替え（既存formatを安全に上書き）
+  (function patchFormat(){
+    const orig = window.format;
+    window.format = function(n){
+      return window.formatSafe ? window.formatSafe(n) :
+             (orig ? orig(n) : ('¥' + (Number(n)||0).toLocaleString()));
+    };
+  })();
 
-// キャラクターオブジェクト → 呪文文字列（Base64+簡易XOR）
-function encodeSpell(char, senderId) {
-  const payload = {
-    c: char,           // キャラクターデータ
-    sid: senderId,     // 送信者プレイヤーID（チート対策②）
-    ts: Date.now()     // タイムスタンプ
-  };
-  const json = JSON.stringify(payload);
-  // 簡易XOR難読化（キー: 42）
-  const xored = Array.from(json).map(ch => {
-    return String.fromCharCode(ch.charCodeAt(0) ^ 42);
-  }).join('');
-  // Base64エンコード（日本語対応）
-  try {
-    return btoa(unescape(encodeURIComponent(xored)));
-  } catch(e) {
-    return btoa(xored);
-  }
-}
+  // 2) obtainでのmoney加算にtoNumを適用
+  (function patchObtain(){
+    const orig = window.obtain;
+    if (!orig || window.__obtainPatched__) return;
+    window.__obtainPatched__ = true;
+    window.obtain = function(char){
+      // sellの正規化
+      if (char && typeof char.sell === 'undefined') {
+        // 一部プールは sellCrystal を持つため、そのままでもOKだが
+        // money加算は行わない（既存設計を尊重）
+      }
+      const sellNum = toNum(char && char.sell, 0);
+      try {
+        // 既存のobtainで push + money += Math.floor(sell/4) + dex + log + UI更新
+        const before = toNum(window.GAME && GAME.money, 0);
+        const res = orig(char);
+        // 念のため money がNaNになっていたら復旧
+        if (window.GAME && (!isFinite(GAME.money) || typeof GAME.money !== 'number')) {
+          GAME.money = before + Math.floor(sellNum/4);
+        }
+        return res;
+      } catch(e) {
+        // フォールバック（obtainが例外でも最低限反映）
+        if (window.GAME) {
+          GAME.owned = GAME.owned || [];
+          GAME.owned.push(char);
+          GAME.money = toNum(GAME.money, 0) + Math.floor(sellNum/4);
+          if (char && char.name && !GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+          if (typeof addLog === 'function') addLog('獲得 ▶ ' + (char.name || '？'));
+          if (typeof updateUI === 'function') updateUI();
+        }
+      }
+    };
+  })();
 
-// 呪文文字列 → キャラクターオブジェクト（失敗時はnull）
-function decodeSpell(spell) {
-  try {
-    const xored = decodeURIComponent(escape(atob(spell)));
-    const json = Array.from(xored).map(ch => {
-      return String.fromCharCode(ch.charCodeAt(0) ^ 42);
-    }).join('');
-    return JSON.parse(json);
-  } catch(e) {
-    return null;
-  }
-}
+  // 3) showResults の価格表示をformatSafeに（既にパッチがある場合も上書きOK）
+  (function patchShowResultsRender(){
+    const orig = window.showResults;
+    window.showResults = function(results){
+      try { if (typeof orig === 'function') orig(results); } catch(e){}
+      try {
+        const box = document.getElementById('results');
+        if (!box) return;
+        // カードDOM内の .sell を走査して安全整形
+        box.querySelectorAll('.card .sell').forEach(el=>{
+          const txt = el.textContent || '';
+          // 価格数値を抽出し直して安全整形
+          const m = txt.match(/(-?\d[\d,_.]*)/);
+          if (m) {
+            const val = toNum(m[1], 0);
+            el.textContent = (txt.includes('売却') ? '売却 ' : '') + formatSafe(val);
+          }
+        });
+      } catch(e){}
+    };
+  })();
 
-/* ---- チートチェック ---- */
+  // 4) インベントリ/ムーンロードの表示をformatSafeへ
+  (function patchRenderers(){
+    const patchOne = (fnName, fixer) => {
+      const orig = window[fnName];
+      if (!orig) return;
+      window[fnName] = function(){
+        const res = orig.apply(this, arguments);
+        try { fixer(); } catch(e){}
+        return res;
+      };
+    };
 
-// 呪文の正当性検証（エラーメッセージ文字列 or null）
-function validateSpell(payload) {
-  if (!payload || !payload.c || !payload.sid) {
-    return '❌ 呪文が壊れています';
-  }
-  // チート対策②：自分の呪文を自分で読み込もうとしていないか
-  if (payload.sid === GAME.playerId) {
-    return '❌ 自分の呪文は読み込めません';
-  }
-  const char = payload.c;
-  if (!char.charInstanceId) {
-    return '❌ 個体IDのないキャラです（古い呪文の可能性）';
-  }
-  // チート対策③：過去に受け取ったIDは拒否
-  if (GAME.receivedCharIds.includes(char.charInstanceId)) {
-    return '❌ この呪文は既に使用済みです（再利用不可）';
-  }
-  return null; // OK
-}
+    patchOne('renderInventory', function(){
+      const box = document.getElementById('inventory');
+      if (!box) return;
+      box.querySelectorAll('.card .sell').forEach(el=>{
+        const m = (el.textContent||'').match(/(-?\d[\d,_.]*)/);
+        if (m) el.textContent = '売却 ' + formatSafe(toNum(m[1],0));
+      });
+    });
 
-/* ---- 交換状態管理 ---- */
+    patchOne('renderMoonRoad', function(){
+      const box = document.getElementById('moonRoadShop');
+      if (!box) return;
+      box.querySelectorAll('.card .sell').forEach(el=>{
+        const m = (el.textContent||'').match(/(-?\d[\d,_.]*)/);
+        if (m) el.textContent = formatSafe(toNum(m[1],0));
+      });
+    });
+  })();
 
-const TRADE = {
-  step: 0,
-  myChar: null,         // 交換に出す自分のキャラ（インベントリから除去済み）
-  myCharIdx: -1,        // 元のインデックス（ロールバック用）
-  mySpell: '',          // 自分の呪文
-  timerInterval: null,  // カウントダウンタイマー
-  timerSec: 30          // 残り秒数
-};
+  // 5) gacha共通関数の価格判定強化（0円誤判定を防ぐ）
+  (function patchGacha(){
+    const orig = window.gacha;
+    if (!orig || window.__gachaPatched__) return;
+    window.__gachaPatched__ = true;
 
-/* ---- ポップアップ制御 ---- */
+    window.gacha = function(pool, opts){
+      const count = (opts && toNum(opts.count, 1)) || 1;
+      const priceCrystal = toNum(opts && opts.priceCrystal, 0);
+      const priceMoney = toNum(opts && opts.priceMoney, 0);
 
-function showTradeStep(stepId) {
-  document.querySelectorAll('.tradeStep').forEach(el => el.classList.remove('active'));
-  const target = document.getElementById(stepId);
-  if (target) target.classList.add('active');
-}
-
-// 1人目として交換開始（インベントリのキャラを渡す）
-function startTrade(charIdx) {
-  const char = GAME.owned[charIdx];
-  if (!char) return;
-
-  // charInstanceId がなければここで付与
-  if (!char.charInstanceId) char.charInstanceId = generateUUID();
-
-  // ポップアップを表示
-  const popup = document.getElementById('tradePopup');
-  if (!popup) return;
-  popup.classList.add('active');
-
-  // 状態初期化
-  TRADE.myChar = JSON.parse(JSON.stringify(char));
-  TRADE.myCharIdx = charIdx;
-  TRADE.step = 1;
-
-  // キャラをインベントリからいったん除去
-  GAME.owned.splice(charIdx, 1);
-  save();
-  updateUI();
-
-  // 呪文を生成して演出
-  TRADE.mySpell = encodeSpell(TRADE.myChar, GAME.playerId);
-  showTradeStep('tradeStep1');
-
-  // 呪文文字を1文字ずつ降らせる演出
-  animateSpellDrop('spellDisplay', TRADE.mySpell, () => {
-    document.getElementById('step1Nav').style.display = 'block';
-    document.getElementById('step1NextBtn').style.display = 'block';
-  });
-}
-
-// 呪文文字を1文字ずつ降らせるアニメーション
-function animateSpellDrop(elementId, spell, onDone) {
-  const el = document.getElementById(elementId);
-  if (!el) { if (onDone) onDone(); return; }
-  el.innerHTML = '';
-  const chars = spell.split('');
-  let i = 0;
-  // 最初の数文字で画面シェイク
-  shakeScreen();
-  const interval = setInterval(() => {
-    if (i >= chars.length) {
-      clearInterval(interval);
-      // 全文字揃ったら最後にもう一度シェイク
-      setTimeout(shakeScreen, 80);
-      if (onDone) onDone();
-      return;
-    }
-    const span = document.createElement('span');
-    span.className = 'spellChar';
-    span.textContent = chars[i];
-    el.appendChild(span);
-    // 8文字ごとにシェイク
-    if ((i + 1) % 8 === 0) shakeScreen();
-    i++;
-  }, 28); // 1文字あたり28ms
-}
-
-// 画面シェイク
-function shakeScreen() {
-  document.body.classList.remove('shaking');
-  void document.body.offsetWidth; // リフロー強制
-  document.body.classList.add('shaking');
-  setTimeout(() => document.body.classList.remove('shaking'), 400);
-}
-
-/* ---- ステップ遷移 ---- */
-
-// 1人目：「相手が入力した」→ 2人目の呪文入力欄へ
-function tradeStep1ToStep2() {
-  TRADE.step = 2;
-  document.getElementById('step2Input').value = '';
-  document.getElementById('step2Error').textContent = '';
-  showTradeStep('tradeStep2');
-}
-
-// 1人目が2人目の呪文を読み込む
-function tradeStep2Confirm() {
-  const spell = document.getElementById('step2Input').value.trim();
-  const errEl = document.getElementById('step2Error');
-  errEl.textContent = '';
-
-  const payload = decodeSpell(spell);
-  const err = validateSpell(payload);
-  if (err) { errEl.textContent = err; return; }
-
-  // 容量チェック
-  if (GAME.owned.length >= GAME.baseCap) {
-    errEl.textContent = '❌ 基地容量不足です';
-    return;
-  }
-
-  // 受け取り済みリストに追加（チート対策③）
-  GAME.receivedCharIds.push(payload.c.charInstanceId);
-
-  // キャラを獲得
-  const receivedChar = payload.c;
-  GAME.owned.push(receivedChar);
-  if (!GAME.dex.includes(receivedChar.name)) GAME.dex.push(receivedChar.name);
-  addLog('🔀 交換入手 ▶ ' + receivedChar.name);
-  save();
-  updateUI();
-
-  // パーティクル爆発
-  fireParticles();
-
-  // 完了ステップへ
-  TRADE.step = 4;
-  showTradeStep('tradeStep4');
-  document.getElementById('tradeResultInfo').innerHTML =
-    `<b>${receivedChar.emoji} ${receivedChar.name}</b><br>レアリティ：${receivedChar.rarity}<br>交換完了！`;
-
-  // TRADE.myChar はすでに消えているので自分のキャラは交換済み
-  TRADE.myChar = null;
-}
-
-/* ---- 2人目側：呪文を受け取って自分のを出力する ---- */
-
-// 2人目として「呪文を読み込む」ボタン（ポップアップを2人目モードで開く）
-function openTradeAsReceiver() {
-  const popup = document.getElementById('tradePopup');
-  if (!popup) return;
-  popup.classList.add('active');
-  document.getElementById('step0Input').value = '';
-  document.getElementById('step0Error').textContent = '';
-  showTradeStep('tradeStep0');
-}
-
-// 2人目：呪文確定 → 受け取り + 自分の呪文を出力
-function tradeStep0Confirm() {
-  const spell = document.getElementById('step0Input').value.trim();
-  const errEl = document.getElementById('step0Error');
-  errEl.textContent = '';
-
-  const payload = decodeSpell(spell);
-  const err = validateSpell(payload);
-  if (err) { errEl.textContent = err; return; }
-
-  if (GAME.owned.length >= GAME.baseCap) {
-    errEl.textContent = '❌ 基地容量不足です';
-    return;
-  }
-  if (GAME.owned.length === 0) {
-    errEl.textContent = '❌ 交換に出せるキャラがいません';
-    return;
-  }
-
-  // 受け取り済みリストに追加（チート対策③）
-  GAME.receivedCharIds.push(payload.c.charInstanceId);
-
-  // 1人目のキャラを獲得
-  const receivedChar = payload.c;
-  GAME.owned.push(receivedChar);
-  if (!GAME.dex.includes(receivedChar.name)) GAME.dex.push(receivedChar.name);
-  addLog('🔀 交換入手 ▶ ' + receivedChar.name);
-
-  // パーティクル演出
-  fireParticles();
-
-  // 2人目自身のキャラを1体消す（frontier優先回避）
-  const myCharIdx = GAME.owned.findIndex(c => c !== receivedChar && c.type !== 'frontier');
-  if (myCharIdx === -1) {
-    const fallbackIdx = GAME.owned.findIndex(c => c !== receivedChar);
-    if (fallbackIdx === -1) {
-      errEl.textContent = '❌ 交換に出せるキャラが見つかりません';
-      // ロールバック
-      const reIdx = GAME.owned.indexOf(receivedChar);
-      if (reIdx !== -1) GAME.owned.splice(reIdx, 1);
-      return;
-    }
-    TRADE.myChar = JSON.parse(JSON.stringify(GAME.owned[fallbackIdx]));
-    GAME.owned.splice(fallbackIdx, 1);
-  } else {
-    TRADE.myChar = JSON.parse(JSON.stringify(GAME.owned[myCharIdx]));
-    GAME.owned.splice(myCharIdx, 1);
-  }
-
-  if (!TRADE.myChar.charInstanceId) TRADE.myChar.charInstanceId = generateUUID();
-
-  save();
-  updateUI();
-
-  // ステップ3（2人目の呪文出力 + タイマー）へ
-  showTradeStep('tradeStep3');
-  TRADE.mySpell = encodeSpell(TRADE.myChar, GAME.playerId);
-
-  // 呪文をアニメーション表示
-  animateSpellDrop('spellDisplay2', TRADE.mySpell, null);
-
-  // 30秒カウントダウン開始
-  startTradeTimer();
-}
-
-/* ---- タイマー ---- */
-
-function startTradeTimer() {
-  TRADE.timerSec = 30;
-  clearInterval(TRADE.timerInterval);
-
-  const timerEl = document.getElementById('tradeTimer');
-  const dangerFrame = document.getElementById('dangerFrame');
-
-  TRADE.timerInterval = setInterval(() => {
-    TRADE.timerSec--;
-    if (timerEl) timerEl.textContent = TRADE.timerSec;
-
-    // 残り10秒で警告演出
-    if (TRADE.timerSec <= 10) {
-      if (timerEl) timerEl.classList.add('danger');
-      if (dangerFrame) dangerFrame.style.display = 'block';
-      shakeScreen();
-    }
-
-    if (TRADE.timerSec <= 0) {
-      clearInterval(TRADE.timerInterval);
-      if (dangerFrame) dangerFrame.style.display = 'none';
-      // タイムアウト：交換画面を閉じてメインに戻る
-      addLog('⏰ 交換タイムアウト（2人目側）');
-      closeTrade();
-      alert('⏰ タイムリミット！交換画面を閉じます。\nあなたのキャラは交換されました。');
-    }
-  }, 1000);
-}
-
-/* ---- パーティクル爆発 ---- */
-
-function fireParticles() {
-  const colors = ['#00e5ff', '#ff3cf7', '#ffd700', '#00ff9d', '#ff355b', '#fff'];
-  const cx = window.innerWidth / 2;
-  const cy = window.innerHeight / 2;
-
-  for (let i = 0; i < 80; i++) {
-    const p = document.createElement('div');
-    p.className = 'particle';
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 120 + Math.random() * 250;
-    const px = Math.cos(angle) * dist;
-    const py = Math.sin(angle) * dist;
-    p.style.cssText = `
-      left:${cx}px; top:${cy}px;
-      background:${colors[Math.floor(Math.random() * colors.length)]};
-      width:${4 + Math.random() * 8}px;
-      height:${4 + Math.random() * 8}px;
-    `;
-    p.style.setProperty('--px', px + 'px');
-    p.style.setProperty('--py', py + 'px');
-    document.body.appendChild(p);
-    setTimeout(() => p.remove(), 1050);
-  }
-  shakeScreen();
-}
-
-/* ---- キャンセル/クローズ ---- */
-
-function cancelTrade() {
-  if (TRADE.myChar) {
-    // キャラをインベントリに戻す
-    GAME.owned.push(TRADE.myChar);
-    TRADE.myChar = null;
-    addLog('🔀 交換キャンセル（キャラを返却）');
-    save();
-    updateUI();
-  }
-  clearInterval(TRADE.timerInterval);
-  const df = document.getElementById('dangerFrame');
-  if (df) df.style.display = 'none';
-  closeTrade();
-}
-
-function closeTrade() {
-  clearInterval(TRADE.timerInterval);
-  const dangerFrame = document.getElementById('dangerFrame');
-  if (dangerFrame) dangerFrame.style.display = 'none';
-  const popup = document.getElementById('tradePopup');
-  if (popup) popup.classList.remove('active');
-  TRADE.step = 0;
-  TRADE.myChar = null;
-}
-
-/* ---- インベントリ描画パッチ（交換ボタン追加） ---- */
-
-(function patchRenderInventoryForTrade() {
-  // 既存の renderInventory を上書き
-  const _origRenderInventory = window.renderInventory;
-
-  window.renderInventory = function() {
-    const box = document.getElementById('inventory');
-    if (!box) return;
-    box.innerHTML = '';
-
-    const reversed = GAME.owned.map((c, i) => ({ c, i })).reverse();
-    reversed.forEach(({ c, i: originalIdx }) => {
-      const div = document.createElement('div');
-      div.className = 'card';
-      if (c.rarity === 'LEGEND') div.classList.add('legendGlow');
-      if (c.rarity === 'CHIMERA' || c.rarity === 'EVENT') div.classList.add('chimeraGlow');
-      if (c.type === 'frontier') {
-        div.classList.add('frontier-card', 'frontier-glow');
-        div.style.overflow = 'visible';
+      if (!Array.isArray(pool) || pool.length === 0) {
+        alert('内部エラー：ガチャプールが空です');
+        return;
       }
 
-      div.innerHTML = `
-        <div class="emoji">${c.emoji}</div>
-        <div class="name">${c.name}</div>
-        <div class="rarity">${c.rarity}</div>
-        <div class="sell">売却 ${format(c.sell)}</div>
-        <div class="cardBtnRow">
-          <button class="sellBtn">売却</button>
-          <button class="tradeBtn">🔀 交換</button>
-        </div>
-      `;
+      if (!window.GAME) { alert('内部エラー：GAME未初期化'); return; }
+      if ((GAME.owned || []).length + count > toNum(GAME.baseCap, 0)) {
+        alert('基地容量不足');
+        return;
+      }
 
-      // 売却ボタン
-      div.querySelector('.sellBtn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        sellCharacterByIndex(originalIdx);
-      });
+      if (priceCrystal > 0 && priceMoney > 0) {
+        alert('内部エラー：コスト定義が重複（💎と¥の同時指定）');
+        return;
+      }
 
-      // 交換ボタン
-      div.querySelector('.tradeBtn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        const ok = confirm(
-          `「${c.name}」を交換に出しますか？\n` +
-          `※ボタンを押した瞬間インベントリから消えます。\n` +
-          `　キャンセルボタンで戻せます。`
-        );
-        if (ok) startTrade(originalIdx);
-      });
+      if (priceCrystal <= 0 && priceMoney <= 0) {
+        alert('コスト設定エラー（0または未定義）');
+        return;
+      }
 
-      box.appendChild(div);
-    });
-  };
+      if (priceCrystal > 0) {
+        if (toNum(GAME.crystal, 0) < priceCrystal) { alert('💎不足'); return; }
+        GAME.crystal = toNum(GAME.crystal, 0) - priceCrystal;
+      } else if (priceMoney > 0) {
+        if (toNum(GAME.money, 0) < priceMoney) { alert('お金不足'); return; }
+        GAME.money = toNum(GAME.money, 0) - priceMoney;
+      }
+
+      const results = [];
+      for (let i = 0; i < count; i++) {
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        const char = JSON.parse(JSON.stringify(pick));
+        // sell正規化（未定義でもrenderで落ちないように）
+        if (typeof char.sell === 'undefined') char.sell = toNum(char.sell, 0);
+        results.push(char);
+        obtain(char);
+      }
+
+      if (opts && Array.isArray(opts.effects)) {
+        opts.effects.forEach(fn => { try { if (typeof fn === 'function') fn(); } catch{} });
+      }
+
+      if (typeof updateUI === 'function') updateUI();
+      if (typeof showResults === 'function') showResults(results);
+      return results;
+    };
+  })();
+
+  // 6) ヘッダの金額表示（#money）を常にformatSafeで上書き
+  (function patchUpdateUI(){
+    const orig = window.updateUI;
+    window.updateUI = function(){
+      try { if (typeof orig === 'function') orig(); } catch(e){}
+      try {
+        const m = document.getElementById('money');
+        if (m && window.GAME) {
+          m.innerText = formatSafe(GAME.money);
+        }
+      } catch(e){}
+    };
+  })();
+
+  // 7) MoonRoad購入の価格計算をtoNumで厳密化
+  (function patchMoonRoadBuy(){
+    const orig = window.buyMoonCharacter;
+    if (!orig) return;
+    window.buyMoonCharacter = function(index){
+      const c = (window.GAME && GAME.moonRoad && GAME.moonRoad[index]) || null;
+      if (!c) return;
+      const sell = toNum(c.sell, 0);
+      const price = sell * 10;
+      if (toNum(GAME.money, 0) < price) { alert('お金不足'); return; }
+      if ((GAME.owned||[]).length >= toNum(GAME.baseCap, 0)) { alert('基地容量不足'); return; }
+      GAME.money = toNum(GAME.money, 0) - price;
+      obtain(JSON.parse(JSON.stringify(c)));
+      GAME.moonRoad.splice(index, 1);
+      if (typeof renderMoonRoad === 'function') renderMoonRoad();
+      if (typeof updateUI === 'function') updateUI();
+    };
+  })();
+
+  // 8) EZ変換後のmoneyリセットのチラつきを抑制（UI先更新→save）
+  (function patchConvertConfirmEnd(){
+    const orig = window.convertToEmozooConfirm;
+    if (!orig) return;
+    window.convertToEmozooConfirm = function(){
+      try { orig(); } catch(e){}
+      try {
+        // convert内でmoney=10000にしているため、ここで明示フォーマット更新
+        const m = document.getElementById('money');
+        if (m && window.GAME) {
+          m.innerText = formatSafe(GAME.money);
+        }
+        if (typeof save === 'function') save();
+      } catch(e){}
+    };
+  })();
 })();
 
-/* ---- 初期化：DOM構築＆2人目ボタン追加 ---- */
-
-document.addEventListener('DOMContentLoaded', () => {
-  // 交換ポップアップHTMLが未設置なら設置（冪等）
-  if (!document.getElementById('tradePopup')) {
-    // 2) のHTMLブロックをそのまま使う場合は、事前にDOMへ入れてください。
-    // ここでは何もしません（HTMLを直置きする前提）。
-  }
-
-  // メインメニューに「2人目として受け取る」ボタンを追加
-  const homeSection = document.querySelector('#home .section:last-of-type .gachaBtns');
-  if (homeSection && !homeSection.querySelector('.action[data-role="openTradeReceiver"]')) {
-    const btn = document.createElement('button');
-    btn.className = 'action';
-    btn.dataset.role = 'openTradeReceiver';
-    btn.style.background = 'linear-gradient(135deg,#00ff9d,#00a3ff)';
-    btn.style.color = '#000';
-    btn.textContent = '🔀 交換呪文を受け取る（2人目）';
-    btn.onclick = openTradeAsReceiver;
-    homeSection.appendChild(btn);
-  }
-});
 
 
 /* ===== 広告バー設定 =====
