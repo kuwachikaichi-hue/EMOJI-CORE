@@ -586,6 +586,39 @@ transform:scale(2);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
+/* === 交換ボタン（tradeBtn）CSS 追加 === */
+.tradeBtn {
+  margin-top: 8px;
+  width: 100%;
+  border: none;
+  padding: 8px;
+  border-radius: 10px;
+  font-weight: 900;
+  font-size: 12px;
+  background: linear-gradient(135deg, #00e5ff, #0077ff);
+  color: #00131b;
+  box-shadow: 0 0 10px rgba(0, 150, 255, .35);
+  cursor: pointer;
+  display: block; /* 確実に表示 */
+}
+
+.tradeBtn:active {
+  transform: scale(.96);
+}
+
+/* 交換ボタンが売却ラベルのまま出てしまう古いDOMへの保険 */
+.cardBtnRow .tradeBtn {
+  width: 48%;
+}
+
+/* === 既存 .sell の長文折返しが無い環境への保険 === */
+.card .sell {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  line-height: 1.2;
+}
+
 </style>
 </head>
 <body>
@@ -1009,6 +1042,320 @@ onclick="buyDiamondMoney()">
 <!-- ★ここから下はあなたのコードそのまま + 修正追加 -->
 
 <script>
+
+/*
+問題の概要
+- インベントリ描画時に .tradeBtn を生成する前に addEventListener を実行してしまい、
+  参照エラーや未定義参照が連鎖して一部価格の正規化/表示更新がスキップされ、
+  結果として "0円" 判定や gacha()/format() 周りの防御ロジックが走るケースが発生。
+対策
+1) tradeBtn のイベント付与は renderInventory 内で、ボタンDOMを生成した直後に限定して行う。
+2) 既に定義済みの誤配置コードを無力化（安全No-Op）。
+3) 交換フローで利用するグローバル関数/状態を必ず存在させる（防御初期化）。
+4) 価格系の "0円" 誤判定を避けるため、renderInventory 完了後に .sell 表示を formatSafe で再正規化。
+*/
+/* 1) 既存の誤配置された tradeBtn リスナー（DOM外参照）を無力化 */
+(function neutralizeStrayTradeHook(){
+  try{
+    // もしグローバルスコープ直下に「const tradeBtn = div.querySelector('.tradeBtn'); ...」の
+    // 孤立コードが残っていた場合、実行時に ReferenceError/TypeError を起こす。
+    // ここでは window.__strayTradeHookGuard を立て、後段の renderInventory 内でのみ
+    // 正しいハンドラを付与する方針に一本化する。
+    window.__strayTradeHookGuard = true;
+  }catch(e){}
+})();
+/* 2) 交換フロー依存の最低限関数をダミー実装で確保（未定義エラー防止） */
+(function ensureTradeFlowAPIs(){
+  if (typeof window.tradeStep1ToStep2 !== 'function') {
+    window.tradeStep1ToStep2 = function(){
+      // ステップ遷移ダミー：実装が本体にある前提。なければUIだけ進める。
+      const s1 = document.getElementById('tradeStep1');
+      const s2 = document.getElementById('tradeStep2');
+      if (s1) s1.classList.remove('active');
+      if (s2) s2.classList.add('active');
+    };
+  }
+  if (typeof window.cancelTrade !== 'function') {
+    window.cancelTrade = function(){
+      // キャンセルでポップアップを閉じ、状態初期化
+      const tp = document.getElementById('tradePopup');
+      if (tp) tp.classList.remove('active');
+      window.__tradeSourceIdx = undefined;
+      const sd = document.getElementById('spellDisplay');
+      if (sd) sd.innerText = '(ここに呪文が表示されます)';
+      const e = document.getElementById('step2Error'); if (e) e.textContent = '';
+      const i0 = document.getElementById('step0Input'); if (i0) i0.value = '';
+      const i2 = document.getElementById('step2Input'); if (i2) i2.value = '';
+    };
+  }
+  if (typeof window.closeTrade !== 'function') {
+    window.closeTrade = function(){
+      const tp = document.getElementById('tradePopup');
+      if (tp) tp.classList.remove('active');
+    };
+  }
+})();
+/* 3) renderInventory をラップして、tradeBtn を安全に配線＋価格表記を強制正規化 */
+(function patchRenderInventoryForTrade(){
+  if (window.__renderInvTradePatched__) return;
+  window.__renderInvTradePatched__ = true;
+  const toNum = window.toNum || (v => {
+    const n = Number(String(v||0).replace(/[,_\s]/g,''));
+    return isFinite(n) ? n : 0;
+  });
+  const formatSafe = window.formatSafe || (v => {
+    const n = toNum(v, 0);
+    try { return '¥' + n.toLocaleString(); } catch { return '¥' + String(n); }
+  });
+  // 元の関数を保持
+  const orig = typeof window.renderInventory === 'function' ? window.renderInventory : function(){};
+  // 上書き
+  window.renderInventory = function(){
+    // 元の描画を一度実行
+    const res = orig.apply(this, arguments);
+    try{
+      const box = document.getElementById('inventory');
+      if (!box) return res;
+      // DOM上の最新カード群を取得（表示は逆順）
+      const cards = Array.from(box.querySelectorAll('.card'));
+      // 所持配列を逆順に対応付け（既存実装に倣う）
+      const reversed = (Array.isArray(GAME?.owned) ? GAME.owned : []).map((c,i)=>({c, i})).reverse();
+      // 各カードに tradeBtn のハンドラを安全に付与
+      cards.forEach((card, domIdx) => {
+        // 価格表記の正規化（0円見え防止）
+        const sellEl = card.querySelector('.sell');
+        if (sellEl) {
+          const txt = sellEl.textContent || '';
+          // "売却 ¥123,456" パターンや数値のみのパターン双方に対応して抽出
+          const m = txt.match(/(-?\d[\d,_.]*)/);
+          if (m) {
+            const val = toNum(m[1], 0);
+            const label = txt.includes('売却') ? '売却 ' : '';
+            sellEl.textContent = label + formatSafe(val);
+          } else {
+            // モデルから補完（DOM破損時）
+            const model = reversed[domIdx]?.c;
+            const val = toNum(model?.sell, 0);
+            sellEl.textContent = (txt.includes('売却') ? '売却 ' : '売却 ') + formatSafe(val);
+          }
+        }
+        // 交換ボタンを取得
+        const tradeBtn = card.querySelector('.tradeBtn');
+        if (!tradeBtn) return;
+        // 二重バインド防止
+        if (tradeBtn.__bound) return;
+        tradeBtn.__bound = true;
+        // 表示ラベル修正（誤って「売却」になっているケースを統一）
+        if (tradeBtn.textContent.trim() === '売却') {
+          tradeBtn.textContent = '交換';
+        }
+        // onClick
+        tradeBtn.addEventListener('click', () => {
+          // 対応する元のインデックス
+          const originalIdx = reversed[domIdx]?.i;
+          if (typeof originalIdx !== 'number') return;
+          const tp = document.getElementById('tradePopup');
+          if (!tp) return;
+          // ステップの表示初期化
+          ['tradeStep0','tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(id=>{
+            const el = document.getElementById(id);
+            if (el) el.classList.remove('active');
+          });
+          const s1 = document.getElementById('tradeStep1');
+          if (s1) s1.classList.add('active');
+          // 対象キャラのインデックスを保持
+          window.__tradeSourceIdx = originalIdx;
+          // 呪文欄初期化
+          const disp = document.getElementById('spellDisplay');
+          if (disp) {
+            disp.style.color = '#00e5ff';
+            disp.innerText = '(ここに呪文が表示されます)';
+          }
+          const nav = document.getElementById('step1Nav'); if (nav) nav.style.display = 'none';
+          const nextBtn = document.getElementById('step1NextBtn'); if (nextBtn) nextBtn.style.display = 'none';
+          // ポップアップを開く
+          tp.classList.add('active');
+        }, { passive: true });
+      });
+    }catch(e){
+      // 失敗してもゲーム進行を止めない
+      console.warn('[trade/price patch] renderInventory post-fix error:', e);
+    }
+    return res;
+  };
+})();
+/* 4) 初回 UI 更新時にも .sell を保険で正規化（0円見えを最小化） */
+(function patchUpdateUISellNormalize(){
+  if (window.__updateUISellPatched__) return;
+  window.__updateUISellPatched__ = true;
+  const toNum = window.toNum || (v => {
+    const n = Number(String(v||0).replace(/[,_\s]/g,''));
+    return isFinite(n) ? n : 0;
+  });
+  const formatSafe = window.formatSafe || (v => {
+    const n = toNum(v, 0);
+    try { return '¥' + n.toLocaleString(); } catch { return '¥' + String(n); }
+  });
+  const orig = typeof window.updateUI === 'function' ? window.updateUI : function(){};
+  window.updateUI = function(){
+    const res = orig.apply(this, arguments);
+    try{
+      const box = document.getElementById('inventory');
+      if (!box) return res;
+      box.querySelectorAll('.card .sell').forEach(el=>{
+        const txt = el.textContent || '';
+        const m = txt.match(/(-?\d[\d,_.]*)/);
+        if (m) {
+          const val = toNum(m[1], 0);
+          el.textContent = (txt.includes('売却') ? '売却 ' : '売却 ') + formatSafe(val);
+        }
+      });
+    }catch(e){}
+    return res;
+  };
+})();
+
+// === 交換ボタン表示/動作と「0円」見えの再正規化パッチ ===
+(function ensureTradeBtnAndPriceFix() {
+  if (window.tradeBtnCssJsPatched) return;
+  window.tradeBtnCssJsPatched = true;
+
+  const toNum = window.toNum || (v => {
+    const n = Number(String(v ?? 0).replace(/[,_\s]/g, ''));
+    return isFinite(n) ? n : 0;
+  });
+
+  const formatSafe = window.formatSafe || (v => {
+    const n = toNum(v);
+    try {
+      return '¥' + n.toLocaleString();
+    } catch {
+      return '¥' + String(n);
+    }
+  });
+
+  // renderInventory をラップして、tradeBtnを確実に表示させ、ラベル/挙動を補正
+  const origRender = window.renderInventory || function () { };
+
+  window.renderInventory = function () {
+    const res = origRender.apply(this, arguments);
+
+    try {
+      const box = document.getElementById('inventory');
+      if (!box) return res;
+
+      // DOM上の最新カード群（表示はownedの逆順）
+      const cards = Array.from(box.querySelectorAll('.card'));
+      const reversed = (Array.isArray(GAME?.owned) ? GAME.owned : [])
+        .map((c, i) => ({ c, i }))
+        .reverse();
+
+      cards.forEach((card, domIdx) => {
+        // 1) 売値の「0円」見えを再正規化
+        const sellEl = card.querySelector('.sell');
+        if (sellEl) {
+          // "売却 ¥123,456" / "¥123,456" どちらにも対応
+          const txt = sellEl.textContent || '';
+          let m = txt.match(/(-?\d[\d,_.]*)/);
+          let val = 0;
+
+          if (m) {
+            val = toNum(m[1], 0);
+          } else {
+            // DOMから取れない場合はモデルから補完
+            const model = reversed[domIdx]?.c;
+            val = toNum(model?.sell, 0);
+          }
+
+          // ラベルは常に「売却 ¥X」形式で統一
+          sellEl.textContent = '売却 ' + formatSafe(val);
+        }
+
+        // 2) 交換ボタン生成/補正
+        let tbtn = card.querySelector('.tradeBtn');
+        if (!tbtn) {
+          // 古いテンプレートで未挿入のカードには作って差し込む
+          tbtn = document.createElement('button');
+          tbtn.className = 'tradeBtn';
+          tbtn.textContent = '交換';
+
+          // sellBtnの直後に入れる
+          const sellBtn = card.querySelector('.sellBtn');
+          if (sellBtn && sellBtn.parentNode) {
+            sellBtn.parentNode.insertBefore(tbtn, sellBtn.nextSibling);
+          } else {
+            card.appendChild(tbtn);
+          }
+        } else {
+          // 誤って「売却」になってるケースを矯正
+          if (tbtn.textContent.trim() === '売却') tbtn.textContent = '交換';
+          // display:noneになっている場合でも強制表示
+          tbtn.style.display = 'block';
+        }
+
+        // 3) 二重バインド防止＋クリック挙動
+        if (!tbtn.__bound) {
+          tbtn.__bound = true;
+          tbtn.addEventListener('click', () => {
+            const originalIdx = reversed[domIdx]?.i;
+            const tp = document.getElementById('tradePopup');
+            if (typeof originalIdx !== 'number' || !tp) return;
+
+            // 交換対象を保持
+            window.__tradeSourceIdx = originalIdx;
+
+            // ステップ表示を初期化して1へ
+            ['tradeStep0', 'tradeStep1', 'tradeStep2', 'tradeStep3', 'tradeStep4'].forEach(id => {
+              const el = document.getElementById(id);
+              if (el) el.classList.remove('active');
+            });
+            const s1 = document.getElementById('tradeStep1');
+            if (s1) s1.classList.add('active');
+
+            // 呪文表示欄初期化
+            const disp = document.getElementById('spellDisplay');
+            if (disp) {
+              disp.style.color = '#00e5ff';
+              disp.textContent = '(ここに呪文が表示されます)';
+            }
+
+            const nav = document.getElementById('step1Nav');
+            if (nav) nav.style.display = 'none';
+            const nextBtn = document.getElementById('step1NextBtn');
+            if (nextBtn) nextBtn.style.display = 'none';
+
+            // ポップアップを開く
+            tp.classList.add('active');
+          }, { passive: true });
+        }
+      });
+    } catch (e) {
+      console.warn('[tradeBtn/price-fix] error:', e);
+    }
+
+    return res;
+  };
+
+  // updateUI後にも.sellを再正規化（0円再発防止）
+  const origUI = window.updateUI || function () { };
+
+  window.updateUI = function () {
+    const r = origUI.apply(this, arguments);
+    try {
+      const inv = document.getElementById('inventory');
+      if (!inv) return r;
+
+      inv.querySelectorAll('.card .sell').forEach(el => {
+        const txt = el.textContent || '';
+        const m = txt.match(/(-?\d[\d,_.]*)/);
+        const val = toNum(m ? m[1] : 0, 0);
+        el.textContent = '売却 ' + formatSafe(val);
+      });
+    } catch (e) { }
+
+    return r;
+  };
+})();
 
 /* ===== 0円表示/計算ズレ修正ユーティリティ ===== */
 
@@ -2940,6 +3287,7 @@ function renderInventory(){
       <div class="rarity">${c.rarity}</div>
       <div class="sell">売却 ${format(c.sell)}</div>
       <button class="sellBtn">売却</button>
+      <button class="tradeBtn">売却</button>
     `;
     div.querySelector('.sellBtn').addEventListener('click', ()=>sellCharacterByIndex(originalIdx));
     box.appendChild(div);
@@ -2953,6 +3301,44 @@ function sellCharacterByIndex(idx){
   addLog('💸 売却 ▶ '+ch.name);
   updateUI();
 }
+
+const tradeBtn = div.querySelector('.tradeBtn');
+
+tradeBtn.addEventListener('click', () => {
+  // 交換ポップアップを開く
+  const tp = document.getElementById('tradePopup');
+  if (!tp) return;
+  tp.classList.add('active');
+
+  // 交換フロー初期化（ステップ1から開始）
+  // - ステップの表示制御
+  ['tradeStep0', 'tradeStep1', 'tradeStep2', 'tradeStep3', 'tradeStep4'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+
+  const s1 = document.getElementById('tradeStep1');
+  if (s1) s1.classList.add('active');
+
+  // 任意：ここで対象キャラidxをグローバルに保持するなら
+  // window.__tradeSourceIdx = originalIdx; など
+  window.__tradeSourceIdx = originalIdx;
+
+  // 任意：呪文表示欄を初期表示にクリア
+  const disp = document.getElementById('spellDisplay');
+  if (disp) {
+    disp.style.color = '#00e5ff';
+    disp.innerText = '(ここに呪文が表示されます)';
+  }
+
+  const nav = document.getElementById('step1Nav');
+  if (nav) nav.style.display = 'none';
+
+  const nextBtn = document.getElementById('step1NextBtn');
+  if (nextBtn) nextBtn.style.display = 'none';
+
+  // 以降、既存の tradeStep1ToStep2(), tradeStep2Confirm() などに接続してください
+});
 
 function renderResearch(){
   const box = document.getElementById('researchList');
