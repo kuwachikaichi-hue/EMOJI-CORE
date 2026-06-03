@@ -2582,221 +2582,192 @@ const FRONTIER_POOL = [
 /* =========================
    Frontier / EZ Convert Patch (Cleaned)
    ========================= */
+// ==== EZ交換: プレビュー → 確定の2段階フロー ====
+(function initEzExchange() {
+  // 既存の「変換不可タイプ」
+  window.NON_CONVERTIBLE_TYPES = window.NON_CONVERTIBLE_TYPES || ["frontier"];
 
-/* ---- 定数・ユーティリティ ---- */
-(function initGlobals() {
-  // 一度だけ定義
-  if (!window.__frontierGlobals__) {
-    window.__frontierGlobals__ = true;
-
-    // 変換不可タイプ一覧（拡張余地を残す）
-    window.NON_CONVERTIBLE_TYPES = ["frontier"];
-
-    // 安全な乱数インデックス
-    window.randIndex = function (arr) {
-      return (Array.isArray(arr) && arr.length > 0)
-        ? Math.floor(Math.random() * arr.length)
-        : -1;
-    };
-
-    // 所持キャラ配列の指定インデックスを降順で削除
-    window.spliceDescending = function (arr, indicesDesc) {
-      if (!Array.isArray(arr) || !Array.isArray(indicesDesc)) return;
-      for (let i = 0; i < indicesDesc.length; i++) {
-        const idx = indicesDesc[i];
-        if (Number.isInteger(idx) && idx >= 0 && idx < arr.length) {
-          arr.splice(idx, 1);
-        }
-      }
-    };
-
-    // ログがあれば使う。なければ console にフォールバック
-    window.safeLog = function (msg) {
-      if (typeof window.addLog === "function") {
-        addLog(msg);
-      } else {
-        console.log("[LOG]", msg);
-      }
-    };
+  function isConvertible(ch) {
+    if (!ch || typeof ch !== "object") return false;
+    if (ch._fromMoon === true) return false;
+    if (ch.type && Array.isArray(NON_CONVERTIBLE_TYPES) && NON_CONVERTIBLE_TYPES.includes(ch.type)) return false;
+    return true;
   }
-})();
 
-/* ---- 変換可否判定（単一実装） ---- */
-function isConvertible(ch) {
-  if (!ch || typeof ch !== "object") return false;
-  // ムーン出身フラグが立っているものは不可
-  if (ch._fromMoon === true) return false;
-  // タイプが変換不可リストに含まれていれば不可
-  if (ch.type && Array.isArray(NON_CONVERTIBLE_TYPES) && NON_CONVERTIBLE_TYPES.includes(ch.type)) {
-    return false;
+  // 候補3体の抽出（足りない場合は不足数を返す）
+  function pickThreeConvertible() {
+    const list = (GAME.owned || [])
+      .map((c, i) => ({ c, i }))
+      .filter(x => isConvertible(x.c));
+
+    if (list.length < 3) {
+      return { ok: false, need: 3, have: list.length, indices: [] };
+    }
+
+    // シャッフルして上位3件
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+
+    const chosen = list.slice(0, 3).map(x => x.i).sort((a, b) => b - a); // 降順
+    return { ok: true, need: 3, have: list.length, indices: chosen };
   }
-  return true;
-}
 
-/* ---- buyMoonCharacter にフラグを付けるパッチ ---- */
-(function patchMoonBuy() {
-  if (window.__moonBuyPatched__) return;
-  window.__moonBuyPatched__ = true;
+  // 激レア参照のサンプル（見本だけ。入手不要）
+  const EZ_REF_POOLS = (function () {
+    const names = [
+      "PUDDING_POOL",
+      "BIRD_FISH_ULTIMATE_POOL",
+      "TENGOKU_GACHA",
+      "RAINBOW_DRAGON",
+      "TSUYU_MATSURI",
+      "TRIPLE_FOOD",
+      "EARTH_STAR",
+      "ROBO_WARRIOR",
+      "CRYSTAL_GOLEM"
+    ];
+    const out = [];
+    for (const n of names) {
+      if (Array.isArray(window[n]) && window[n].length > 0) out.push(window[n]);
+    }
+    return out;
+  })();
 
-  const orig = window.buyMoonCharacter;
+  function pickReferenceSample() {
+    if (EZ_REF_POOLS.length === 0) return null;
+    const pool = EZ_REF_POOLS[Math.floor(Math.random() * EZ_REF_POOLS.length)];
+    const c = pool[Math.floor(Math.random() * pool.length)];
+    return c ? { emoji: c.emoji, name: c.name, rarity: c.rarity } : null;
+  }
 
-  // 元関数がなくても動く安全な代替を提供
-  window.buyMoonCharacter = function (index) {
-    // 基本的な前提チェック
-    if (!window.GAME || !Array.isArray(GAME.moonRoad) || typeof index !== "number") {
-      alert("内部エラー：ムーンデータが見つかりません。");
+  // プレビュー表示（既存results用ポップアップを流用）
+  function showEzPreview(view) {
+    const popup = document.getElementById("popup");
+    const grid = document.getElementById("results");
+    if (!popup || !grid) {
+      alert("内部エラー：ポップアップが見つかりません。");
       return;
     }
-    const c = GAME.moonRoad[index];
-    if (!c) return;
+    grid.innerHTML = "";
 
-    const price = (typeof c.sell === "number" ? c.sell * 10 : 0);
-    if (typeof GAME.money !== "number" || GAME.money < price) {
-      alert("お金不足");
-      return;
-    }
-    if (!Array.isArray(GAME.owned) || typeof GAME.baseCap !== "number") {
-      alert("内部エラー：所持情報が不正です。");
-      return;
-    }
-    if (GAME.owned.length >= GAME.baseCap) {
-      alert("基地容量不足");
-      return;
-    }
-    if (typeof window.obtain !== "function") {
-      alert("内部エラー：obtain 関数が見つかりません。");
-      return;
+    // タイトル差し替え
+    const titleEl = popup.querySelector(".title");
+    if (titleEl) titleEl.textContent = "🪙 エモズー交換プレビュー";
+
+    // 参照見本
+    if (view.sample) {
+      const refDiv = document.createElement("div");
+      refDiv.className = "card";
+      refDiv.innerHTML = `
+        <div class="emoji">${view.sample.emoji || "❔"}</div>
+        <div class="name">${view.sample.name || "不明"}</div>
+        <div class="rarity">${view.sample.rarity || ""}</div>
+        <div class="sell">参照見本（入手不要）</div>
+      `;
+      grid.appendChild(refDiv);
     }
 
-    GAME.money -= price;
+    // 区切り的に空ブロック
+    const sep = document.createElement("div");
+    sep.style.cssText = "grid-column:1/-1;height:4px;opacity:.2;";
+    grid.appendChild(sep);
 
-    const charCopy = JSON.parse(JSON.stringify(c));
-    charCopy._fromMoon = true; // ムーン出身フラグ
-    obtain(charCopy);
+    // 消費予定3体 or 不足メッセージ
+    if (view.ok) {
+      view.consume.forEach(ch => {
+        const d = document.createElement("div");
+        d.className = "card";
+        d.innerHTML = `
+          <div class="emoji">${ch.emoji}</div>
+          <div class="name">${ch.name}</div>
+          <div class="rarity">${ch.rarity || ""}</div>
+          <div class="sell">消費予定 ${format(ch.sell || 0)}</div>
+        `;
+        grid.appendChild(d);
+      });
 
-    // ムーンロードから削除
-    GAME.moonRoad.splice(index, 1);
+      // 実行ボタン
+      const run = document.createElement("button");
+      run.className = "closeBtn";
+      run.textContent = "OK（実行）";
+      run.onclick = convertToEmozooConfirm;
+      grid.appendChild(run);
+    } else {
+      const warn = document.createElement("div");
+      warn.className = "card";
+      warn.innerHTML = `
+        <div class="emoji">⚠️</div>
+        <div class="name">条件未達です</div>
+        <div class="rarity"></div>
+        <div class="sell">変換可能なキャラが ${view.have} / ${view.need} 体しかありません</div>
+      `;
+      grid.appendChild(warn);
+    }
 
-    // 表示更新（存在すれば）
-    if (typeof window.renderMoonRoad === "function") renderMoonRoad();
-    if (typeof window.updateUI === "function") updateUI();
+    // 閉じるボタンは既存の「閉じる」でOK
+    popup.classList.add("active");
+  }
+
+  // プレビューエントリ：ボタンから呼ぶ
+  window.convertToEmozoo = function convertToEmozooPreview() {
+    const chk = pickThreeConvertible();
+    const sample = pickReferenceSample();
+
+    if (chk.ok) {
+      // 選出した3体のスナップショットを保存（確定時に参照）
+      const consume = chk.indices.map(i => GAME.owned[i]);
+      window.__ezPending__ = { indices: chk.indices, consume };
+      showEzPreview({ ok: true, sample, consume });
+    } else {
+      window.__ezPending__ = null;
+      showEzPreview({ ok: false, sample, need: chk.need, have: chk.have });
+    }
   };
 
-  // 元関数がある場合は上書きの形だが、挙動は上記で包括
-  if (typeof orig === "function") {
-    // 何もしない（上記が新実装）
-  }
+  // 確定実行：OKボタンから呼ぶ
+  window.convertToEmozooConfirm = function () {
+    const pending = window.__ezPending__;
+    if (!pending || !Array.isArray(pending.indices) || pending.indices.length !== 3) {
+      alert("実行できません（条件未達または内部状態なし）");
+      return;
+    }
+
+    // セーフティ：いまも3体残っているか再チェック
+    const stillOk = pending.indices.every(i => GAME.owned[i] && isConvertible(GAME.owned[i]));
+    if (!stillOk) {
+      alert("直前に編成が変わったため、条件を満たせません。もう一度プレビューしてください。");
+      window.__ezPending__ = null;
+      return;
+    }
+
+    // 降順で削除
+    const toRemove = [...pending.indices].sort((a, b) => b - a);
+    const consumedNames = toRemove.map(i => GAME.owned[i].name).join("、");
+    toRemove.forEach(i => GAME.owned.splice(i, 1));
+
+    // 所持金を ¥10,000 にリセット
+    GAME.money = 10000;
+
+    // EZ +1
+    if (typeof GAME.emozoo !== "number") GAME.emozoo = 0;
+    GAME.emozoo += 1;
+
+    addLog("🪙 EZ変換 ▶ " + consumedNames + " を消費 → 1 EZ");
+    addLog("💰 所持金を ¥10,000 にリセット");
+
+    // 演出・UI
+    if (typeof frontierEffect === "function") frontierEffect();
+    if (typeof updateUI === "function") updateUI();
+
+    // 終了・状態クリア
+    window.__ezPending__ = null;
+    const popup = document.getElementById("popup");
+    if (popup) popup.classList.remove("active");
+  };
 })();
 
-/* ==== EZ 変換 修正版 ==== */
-
-// 旧仕様の鍵キャラは常に未使用
-var _ezKeyChar = null;
-
-// 参考用激レアプール（存在する配列のみ採用）
-var EZ_RARE_POOLS_REF = (function () {
-  const names = [
-    "PUDDING_POOL", "BIRD_FISH_ULTIMATE_POOL", "TENGOKU_GACHA",
-    "RAINBOW_DRAGON", "TSUYU_MATSURI", "TRIPLE_FOOD",
-    "EARTH_STAR", "ROBO_WARRIOR"
-  ];
-  const out = [];
-  for (const n of names) {
-    if (Array.isArray(window[n]) && window[n].length > 0) out.push(window[n]);
-  }
-  return out;
-})();
-
-function rollEzKeyChar() { _ezKeyChar = null; }
-function getEzKeyLabel() { return ""; }
-
-function pickRandomEzReference() {
-  if (!Array.isArray(EZ_RARE_POOLS_REF) || EZ_RARE_POOLS_REF.length === 0) return null;
-  const poolIdx = randIndex(EZ_RARE_POOLS_REF);
-  if (poolIdx < 0) return null;
-  const pool = EZ_RARE_POOLS_REF[poolIdx];
-  const cIdx = randIndex(pool);
-  if (cIdx < 0) return null;
-  const c = pool[cIdx];
-  return c ? { emoji: c.emoji, name: c.name, rarity: c.rarity } : null;
-}
-
-function pickThreeConvertibleIndices() {
-  if (!window.GAME || !Array.isArray(GAME.owned)) return null;
-  const list = GAME.owned
-    .map(function (c, i) { return { c: c, i: i }; })
-    .filter(function (x) { return isConvertible(x.c); });
-
-  if (!list || list.length < 3) return null;
-
-  // フィッシャー–イェーツでシャッフル
-  for (let i = list.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const tmp = list[i]; list[i] = list[j]; list[j] = tmp;
-  }
-  // 3つ選び、降順で返す（splice 安全のため）
-  return list.slice(0, 3)
-    .map(function (x) { return x.i; })
-    .sort(function (a, b) { return b - a; });
-}
-
-function convertToEmozoo() {
-  if (!window.GAME || !Array.isArray(GAME.owned)) {
-    alert("内部エラー：所持情報が見つかりません。");
-    return;
-  }
-  const delIdx = pickThreeConvertibleIndices();
-  if (!delIdx) {
-    alert("変換可能なキャラが3体未満です（新領域/ムーン出身は不可）。");
-    return;
-  }
-
-  const ref = pickRandomEzReference();
-  const consumeNames = delIdx.map(function (i) {
-    return (GAME.owned[i] && GAME.owned[i].name) ? GAME.owned[i].name : "？";
-  }).join("、");
-
-  const refLine = ref
-    ? (ref.emoji ? ref.emoji + " " : "") + (ref.name || "不明") + (ref.rarity ? "（" + ref.rarity + "）" : "")
-    : "不明";
-
-  const ok = confirm(
-    "【エモズー変換】\n\n" +
-    "激レアリファレンス：" + refLine + "\n" +
-    "※参考表示のみ。所持不要です。\n\n" +
-    "消費キャラ（3体）：\n" + consumeNames + "\n\n" +
-    "ペナルティ：所持金を ¥10,000 にリセットします。\n\n" +
-    "実行しますか？"
-  );
-  if (!ok) return;
-
-  // 3体削除（降順で安全に削除）
-  spliceDescending(GAME.owned, delIdx);
-
-  // 所持金を ¥10,000 にリセット
-  GAME.money = 10000;
-
-  // EZ +1
-  GAME.emozoo = (typeof GAME.emozoo === "number" ? GAME.emozoo : 0) + 1;
-
-  // ログ出力
-  safeLog("🪙 EZ変換 ▶ " + consumeNames + " を消費 → 1 EZ");
-  safeLog("💰 所持金を ¥10,000 にリセット");
-  if (ref) {
-    safeLog("🔎 激レア参照：" + refLine);
-  }
-
-  // 演出とUI更新
-  if (typeof window.frontierEffect === "function") frontierEffect();
-  if (typeof window.updateUI === "function") updateUI();
-}
-
-/* ---- 起動時の旧鍵ヒント抑止（ダミー） ---- */
-(function suppressOldKeyHints() {
-  if (window.__suppressOldKeyHints__) return;
-  window.__suppressOldKeyHints__ = true;
-  _ezKeyChar = null;
-})();
+// 既存の「キャラ3体 → 🪙1 EZ + ¥10,000」ボタンは convertToEmozoo() を呼ぶままでOK（上でプレビュー起動に差し替え）
 
 /* ---- 新領域ガチャ ---- */
 function frontierGacha() {
