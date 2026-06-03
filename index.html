@@ -987,79 +987,6 @@ onclick="buyDiamondMoney()">
     <button class="closeBtn" onclick="closePopup()">閉じる</button>
   </div>
 </div>
-
-<!-- 交換ポップアップ（修正版フロー対応） -->
-<div class="tradePopup" id="tradePopup">
-  <div class="tradeBox">
-    <div class="tradeTitle">🔀 キャラクター交換（復活の呪文）</div>
-
-    <!-- Step1: 送信側が呪文を発行 -->
-    <div class="tradeStep active" id="tradeStep1">
-      <div class="tradeMeta">
-        ▶ あなたのキャラを呪文にします。表示された呪文を相手へ渡してください。<br>
-        ※生成した時点で対象キャラはいったんロックされます。
-      </div>
-      <div id="spellDisplay" class="num-mono" style="margin-top:12px; min-height:60px;"></div>
-      <div class="tradeMeta" id="step1Nav" style="display:none; margin-top:10px; color:#ffd700;">
-        📲 相手の端末にこの呪文を入力してもらってください
-      </div>
-      <button class="tradeAction" id="step1NextBtn" style="display:none; background:linear-gradient(135deg,#ffd700,#ff8800); color:#000;"
-        onclick="tradeStep1ToStep2()">
-        相手の入力が終わったら進む →
-      </button>
-      <button class="tradeAction danger" style="margin-top:8px;" onclick="cancelTrade()">
-        キャンセル（キャラを戻す）
-      </button>
-    </div>
-
-    <!-- Step2: 送信側が相手の呪文を入力 -->
-    <div class="tradeStep" id="tradeStep2">
-      <div class="tradeMeta">
-        ▶ 相手の端末で表示された「呪文」を貼り付けてください。<br>
-        30秒以内に入力してください。
-      </div>
-      <textarea class="tradeInput" id="step2Input" placeholder="相手の呪文をここに入力…"></textarea>
-      <div class="tradeError" id="step2Error"></div>
-      <button class="tradeAction" onclick="tradeStep2Confirm()">呪文を読み込む ✨</button>
-      <button class="tradeAction danger" style="margin-top:8px;" onclick="cancelTrade()">
-        キャンセル（キャラを戻す）
-      </button>
-    </div>
-
-    <!-- Step3: 受信側表示（2人目の端末で受け取り後、自分の呪文を発行） -->
-    <div class="tradeStep" id="tradeStep3">
-      <div class="tradeMeta" style="color:#00ff9d; font-weight:900;">
-        ✅ キャラを受け取りました！
-      </div>
-      <div class="tradeMeta" style="margin-top:8px;">
-        ▶ 次は<b>あなたのキャラの呪文</b>が出ます。1人目の端末に入力してもらってください。<br>
-        <b style="color:#ffd700;">⏰ 30秒のタイムリミットがあります！</b>
-      </div>
-      <span id="tradeTimer" class="num-mono">30</span>
-      <div id="dangerFrame"></div>
-      <div id="spellDisplay2" class="num-mono" style="
-        background:#000d1a; border:1px solid rgba(0,229,255,.4);
-        border-radius:10px; padding:12px; color:#00e5ff; min-height:60px; line-height:1.6; margin-top:8px;
-      "></div>
-      <div class="tradeMeta" style="margin-top:8px; color:#ffd700;">
-        📲 1人目の端末にこの呪文を入力してもらってください
-      </div>
-    </div>
-
-    <!-- Step4: 完了 -->
-    <div class="tradeStep" id="tradeStep4">
-      <div style="text-align:center; padding:20px;">
-        <div style="font-size:48px;">🎉</div>
-        <div style="font-size:20px; font-weight:900; color:#00ff9d; margin-top:8px;">
-          交換完了！
-        </div>
-        <div id="tradeResultInfo" style="margin-top:10px; font-size:13px; opacity:.85;"></div>
-      </div>
-      <button class="tradeAction" onclick="closeTrade()">閉じる</button>
-    </div>
-  </div>
-</div>
-
 <!-- ★ここから下はあなたのコードそのまま + 修正追加 -->
 
 <script>
@@ -6381,5 +6308,76 @@ renderMoonRoad();
 );
 
 </script>
+  <!-- 交換ポップアップ（修正版フロー対応） -->
+<div class="tradePopup" id="tradePopup">
+  <div class="tradeBox">
+    <div class="tradeTitle">🔀 キャラクター交換（復活の呪文）</div>
+
+    <!-- Step1: 送信側が呪文を発行 -->
+    <div class="tradeStep active" id="tradeStep1">
+      <div class="tradeMeta">
+        ▶ あなたのキャラを呪文にします。表示された呪文を相手へ渡してください。<br>
+        ※生成した時点で対象キャラはいったんロックされます。
+      </div>
+      <div id="spellDisplay" class="num-mono" style="margin-top:12px; min-height:60px;"></div>
+      <div class="tradeMeta" id="step1Nav" style="display:none; margin-top:10px; color:#ffd700;">
+        📲 相手の端末にこの呪文を入力してもらってください
+      </div>
+      <button class="tradeAction" id="step1NextBtn" style="display:none; background:linear-gradient(135deg,#ffd700,#ff8800); color:#000;"
+        onclick="tradeStep1ToStep2()">
+        相手の入力が終わったら進む →
+      </button>
+      <button class="tradeAction danger" style="margin-top:8px;" onclick="cancelTrade()">
+        キャンセル（キャラを戻す）
+      </button>
+    </div>
+
+    <!-- Step2: 送信側が相手の呪文を入力 -->
+    <div class="tradeStep" id="tradeStep2">
+      <div class="tradeMeta">
+        ▶ 相手の端末で表示された「呪文」を貼り付けてください。<br>
+        30秒以内に入力してください。
+      </div>
+      <textarea class="tradeInput" id="step2Input" placeholder="相手の呪文をここに入力…"></textarea>
+      <div class="tradeError" id="step2Error"></div>
+      <button class="tradeAction" onclick="tradeStep2Confirm()">呪文を読み込む ✨</button>
+      <button class="tradeAction danger" style="margin-top:8px;" onclick="cancelTrade()">
+        キャンセル（キャラを戻す）
+      </button>
+    </div>
+
+    <!-- Step3: 受信側表示（2人目の端末で受け取り後、自分の呪文を発行） -->
+    <div class="tradeStep" id="tradeStep3">
+      <div class="tradeMeta" style="color:#00ff9d; font-weight:900;">
+        ✅ キャラを受け取りました！
+      </div>
+      <div class="tradeMeta" style="margin-top:8px;">
+        ▶ 次は<b>あなたのキャラの呪文</b>が出ます。1人目の端末に入力してもらってください。<br>
+        <b style="color:#ffd700;">⏰ 30秒のタイムリミットがあります！</b>
+      </div>
+      <span id="tradeTimer" class="num-mono">30</span>
+      <div id="dangerFrame"></div>
+      <div id="spellDisplay2" class="num-mono" style="
+        background:#000d1a; border:1px solid rgba(0,229,255,.4);
+        border-radius:10px; padding:12px; color:#00e5ff; min-height:60px; line-height:1.6; margin-top:8px;
+      "></div>
+      <div class="tradeMeta" style="margin-top:8px; color:#ffd700;">
+        📲 1人目の端末にこの呪文を入力してもらってください
+      </div>
+    </div>
+
+    <!-- Step4: 完了 -->
+    <div class="tradeStep" id="tradeStep4">
+      <div style="text-align:center; padding:20px;">
+        <div style="font-size:48px;">🎉</div>
+        <div style="font-size:20px; font-weight:900; color:#00ff9d; margin-top:8px;">
+          交換完了！
+        </div>
+        <div id="tradeResultInfo" style="margin-top:10px; font-size:13px; opacity:.85;"></div>
+      </div>
+      <button class="tradeAction" onclick="closeTrade()">閉じる</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
