@@ -2617,9 +2617,17 @@ function isConvertible(char) {
   };
 })();
 
-/* ---- EZ変換処理 ---- */
 function convertToEmozoo() {
-  // 変換可能なキャラを抽出（新領域・ムーン購入以外）
+  // 1) 特定キャラ（「エモズーの鍵」）の所持チェック
+  const KEY_NAME = 'エモズーの鍵'; // ←必要に応じて正式名称に変更
+  const keyIdx = GAME.owned.findIndex(ch => ch.name === KEY_NAME);
+
+  if (keyIdx === -1) {
+    alert(`必要条件未達：${KEY_NAME} を所持していません。`);
+    return;
+  }
+
+  // 2) 変換可能なキャラ（新領域/ムーン購入を除外）
   const convertibles = GAME.owned
     .map((c, i) => ({ c, i }))
     .filter(({ c }) => isConvertible(c));
@@ -2633,23 +2641,46 @@ function convertToEmozoo() {
     return;
   }
 
-  // 最後に追加された3体を変換（インデックスが大きい順）
+  // 3) 変換対象は最後に追加された3体（既存仕様を維持）
   const targets = convertibles.slice(-3);
   const names = targets.map(({ c }) => c.name).join('、');
 
-  if (!confirm(`以下の3体を変換しますか？\n\n${names}\n\n→ 🪙1 EZ + ¥10,000 獲得`)) return;
+  // 4) 実行確認
+  if (!confirm(
+    `以下の3体をエモズー変換します。\n` +
+    `さらに、特定キャラ「${KEY_NAME}」を消費し、\n` +
+    `全財産を ¥10,000 にリセットします。\n\n` +
+    `対象：${names}\n\n実行しますか？`
+  )) return;
 
-  // インデックス降順で削除（前から消すとインデックスがズレるため）
+  // 5) 対象3体を削除（インデックス降順で）
   const indices = targets.map(({ i }) => i).sort((a, b) => b - a);
   indices.forEach(i => GAME.owned.splice(i, 1));
 
-  GAME.emozoo += 1;
-  GAME.money += 10000;
+  // 6) 特定キャラ（鍵）を消費
+  //    既に targets と重複している可能性もあるので、最新のインデックスで探し直す
+  const keyIdx2 = GAME.owned.findIndex(ch => ch.name === KEY_NAME);
+  if (keyIdx2 === -1) {
+    // 直前で消えた等のレース防止：安全に中断
+    alert(`${KEY_NAME} が見つかりませんでした。操作を中断しました。`);
+    return;
+  }
+  const keyNameLog = GAME.owned[keyIdx2].name;
+  GAME.owned.splice(keyIdx2, 1);
 
-  addLog(`🪙 EZ変換 ▶ ${names} → 1 EZ + ¥10,000`);
+  // 7) 全財産を ¥10,000 に「固定」
+  GAME.money = 10000;
+
+  // 8) EZ+1（既存仕様）
+  GAME.emozoo = (GAME.emozoo || 0) + 1;
+
+  // 9) ログとUI更新
+  addLog(`🪙 EZ変換 ▶ ${names} ＋（鍵：${keyNameLog}）消費 → 1 EZ`);
+  addLog(`💰 所持金を ¥10,000 にリセット`);
   frontierEffect();
   updateUI();
 }
+
 
 /* ---- 新領域ガチャ ---- */
 function frontierGacha() {
