@@ -713,6 +713,82 @@ transform:scale(2);
       font-size: 12px; padding: 8px 10px; min-height: 36px;
     }
   }
+
+/* ===== ロード中インジケーター ===== */
+#loadingOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: none; /* 起動時にJSで表示→非表示 */
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+}
+#loadingOverlay .spinner {
+  width: 64px;
+  height: 64px;
+  border: 6px solid rgba(255,255,255,0.25);
+  border-top-color: var(--cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  box-shadow: 0 0 16px rgba(0,229,255,.4);
+}
+#loadingOverlay .label {
+  margin-top: 12px;
+  color: #fff;
+  font-weight: 900;
+  letter-spacing: 1px;
+  text-shadow: 0 0 6px rgba(0,229,255,.6);
+  text-align: center;
+  font-size: 14px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== スマホ広告バーの可視化強化 ===== */
+#adBarSticky {
+  position: sticky;
+  top: 64px;         /* タブ群の下に十分な余白を確保 */
+  z-index: 150;      /* header(100)より上に */
+  margin: 8px 0 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(0,229,255,0.25);
+  background: linear-gradient(135deg, #0a1a2e, #0d2040);
+  box-shadow: 0 0 14px rgba(0,229,255,0.12);
+}
+#adBarSticky .adRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  min-height: 40px;
+  color: #fff;
+  line-height: 1.4;
+  font-size: 13px;
+  font-weight: 700;
+  word-break: break-word;
+}
+#adBarSticky .adMark {
+  position: absolute;
+  right: 8px;
+  top: 4px;
+  font-size: 9px;
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 1px;
+}
+@media (max-width: 480px) {
+  header { position: sticky; top: 0; z-index: 200; }
+  .tabs { row-gap: 6px; }
+  #adBarSticky { top: 72px; } /* 端末により余白を少し増やす */
+}
+
+/* ===== 交換ボタンの安定表示（古いDOM互換） ===== */
+.card .tradeBtn {
+  display: block !important;
+  width: 100%;
+  margin-top: 6px;
+}
+
 </style>
 <div id="saveDock">
   <button id="btnSaveOpen">保存/読込</button>
@@ -792,6 +868,15 @@ transform:scale(2);
     font-size: 9px; color: rgba(255,255,255,0.3); letter-spacing: 1px;
   ">AD</div>
 </div>
+      <!-- ロード中オーバーレイ -->
+<div id="loadingOverlay" aria-live="polite" aria-busy="true">
+  <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;">
+    <div class="spinner"></div>
+    <div class="label">ロード中…</div>
+  </div>
+</div>
+
+
 <!-- ===== 広告バー ここまで ===== -->
 
   <div class="title">⚡ CYBER EMOJI CORE</div>
@@ -1356,7 +1441,26 @@ onclick="buyDiamondMoney()">
   setTimeout(alignTop, 0);
   setTimeout(alignTop, 500);
 })();
-  
+
+/* ===== スマホ広告バーの位置補正（衝突回避） ===== */
+(function stickyAlignFix(){
+  function align() {
+    try {
+      const hdr = document.querySelector('header');
+      const tabs = document.querySelector('.tabs');
+      const sticky = document.getElementById('adBarSticky');
+      if (!hdr || !tabs || !sticky) return;
+      const hdrRect = hdr.getBoundingClientRect();
+      const tabsRect = tabs.getBoundingClientRect();
+      // ヘッダ内の実際のタブ行の下端＋少し余白
+      const offsetTop = Math.max(56, Math.round((tabsRect.bottom - hdrRect.top) + 8));
+      sticky.style.top = offsetTop + 'px';
+    } catch(e){}
+  }
+  window.addEventListener('resize', align, {passive:true});
+  document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(align, 0); setTimeout(align, 400); }, {once:true});
+})();
+ 
 /* ===== 0円表示/計算ズレ修正ユーティリティ ===== */
 
 /* BigInt/未定義/文字列混在を安全に数値化 */
@@ -3635,6 +3739,7 @@ function renderInventory(){
     box.appendChild(div);
   });
 }
+
 function sellCharacterByIndex(idx){
   const ch = GAME.owned[idx];
   if(!ch) return;
@@ -3644,6 +3749,23 @@ function sellCharacterByIndex(idx){
   updateUI();
 }
 
+/* ===== 交換時の未初期化ガード（在庫描画の前提保証） ===== */
+(function inventorySafeGuard(){
+  if (window.__invSafe__) return; window.__invSafe__ = true;
+  const orig = window.renderInventory;
+  if (typeof orig !== 'function') return;
+  window.renderInventory = function(){
+    // 最低限のGAME前提復旧
+    if (!window.GAME || typeof GAME !== 'object') {
+      window.GAME = { money:0, lp:0, crystal:0, baseCap:5, owned:[], dex:[], achievements:[], research:{luck:0,legend:0,event:0,chimera:0,life:0,cap:0,auto:0,time:0}, logs:[], emozoo:0, buffs:{} };
+    }
+    GAME.owned = Array.isArray(GAME.owned) ? GAME.owned : [];
+    try { return orig.apply(this, arguments); } catch(e) {
+      console.warn('renderInventory failed, retrying with empty owned.', e);
+      try { GAME.owned = []; return orig.apply(this, arguments); } catch(e2){}
+    }
+  };
+})();
 
 function renderResearch(){
   const box = document.getElementById('researchList');
@@ -3843,7 +3965,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 }, false);
 
-
 /* ---- 新領域キャラクタープール ---- */
 const FRONTIER_POOL = [
   {
@@ -3955,314 +4076,6 @@ const FRONTIER_POOL = [
     skill: "隕石落下+60000%、スタン確定"
   },
 ];
-
-/* =========================
-   Frontier / EZ Convert Patch (Cleaned)
-   ========================= */
-(function initEzExchange() {
-  window.NON_CONVERTIBLE_TYPES = window.NON_CONVERTIBLE_TYPES || ["frontier"];
-
-  function isConvertible(ch) {
-    if (!ch || typeof ch !== "object") return false;
-    if (ch._fromMoon === true) return false;
-    if (ch.type && Array.isArray(NON_CONVERTIBLE_TYPES) && NON_CONVERTIBLE_TYPES.includes(ch.type)) return false;
-    return true;
-  }
-
-  // sell値が高い順（強い順）で上位3体を選ぶ
-  function pickThreeConvertible() {
-    const list = (GAME.owned || [])
-      .map((c, i) => ({ c, i }))
-      .filter(x => isConvertible(x.c));
-
-    if (list.length < 3) {
-      return { ok: false, need: 3, have: list.length, indices: [] };
-    }
-
-    // sell値の高い順でソート
-    list.sort((a, b) => {
-      const sa = Number(a.c.sell) || 0;
-      const sb = Number(b.c.sell) || 0;
-      return sb - sa;
-    });
-
-    const chosen = list.slice(0, 3).map(x => x.i).sort((a, b) => b - a); // 降順（削除時のズレ防止）
-    return { ok: true, need: 3, have: list.length, indices: chosen };
-  }
-
-  const EZ_REF_POOLS = (function () {
-    const names = [
-      "PUDDING_POOL", "BIRD_FISH_ULTIMATE_POOL", "TENGOKU_GACHA",
-      "RAINBOW_DRAGON", "TSUYU_MATSURI", "TRIPLE_FOOD",
-      "EARTH_STAR", "ROBO_WARRIOR", "CRYSTAL_GOLEM", "FRONTIER_POOL"
-    ];
-    const out = [];
-    for (const n of names) {
-      if (Array.isArray(window[n]) && window[n].length > 0) out.push(window[n]);
-    }
-    return out;
-  })();
-
-  function pickReferenceSample() {
-    if (EZ_REF_POOLS.length === 0) return null;
-    const pool = EZ_REF_POOLS[Math.floor(Math.random() * EZ_REF_POOLS.length)];
-    const c = pool[Math.floor(Math.random() * pool.length)];
-    return c ? { emoji: c.emoji, name: c.name, rarity: c.rarity } : null;
-  }
-
-  function showEzPreview(view) {
-    const popup = document.getElementById("popup");
-    const grid = document.getElementById("results");
-    if (!popup || !grid) { alert("内部エラー：ポップアップが見つかりません。"); return; }
-    grid.innerHTML = "";
-
-    const titleEl = popup.querySelector(".title");
-    if (titleEl) titleEl.textContent = "🪙 エモズー交換プレビュー";
-
-    if (view.sample) {
-      const refDiv = document.createElement("div");
-      refDiv.className = "card";
-      refDiv.innerHTML = `
-        <div class="emoji">${view.sample.emoji || "❔"}</div>
-        <div class="name">${view.sample.name || "不明"}</div>
-        <div class="rarity">${view.sample.rarity || ""}</div>
-        <div class="sell">参照見本（入手不要）</div>
-      `;
-      grid.appendChild(refDiv);
-    }
-
-    const sep = document.createElement("div");
-    sep.style.cssText = "grid-column:1/-1;height:4px;opacity:.2;";
-    grid.appendChild(sep);
-
-    if (view.ok) {
-      view.consume.forEach(ch => {
-        const d = document.createElement("div");
-        d.className = "card";
-        d.innerHTML = `
-          <div class="emoji">${ch.emoji}</div>
-          <div class="name">${ch.name}</div>
-          <div class="rarity">${ch.rarity || ""}</div>
-          <div class="sell">消費予定 ${typeof format === "function" ? format(ch.sell || 0) : ch.sell}</div>
-        `;
-        grid.appendChild(d);
-      });
-
-      const run = document.createElement("button");
-      run.className = "closeBtn";
-      run.style.marginTop = "8px";
-      run.textContent = "OK（実行）";
-      run.onclick = window.convertToEmozooConfirm;
-      grid.appendChild(run);
-    } else {
-      const warn = document.createElement("div");
-      warn.className = "card";
-      warn.innerHTML = `
-        <div class="emoji">⚠️</div>
-        <div class="name">条件未達です</div>
-        <div class="rarity"></div>
-        <div class="sell">変換可能なキャラが ${view.have} / ${view.need} 体しかありません</div>
-      `;
-      grid.appendChild(warn);
-    }
-
-    popup.classList.add("active");
-  }
-
-  window.convertToEmozoo = function convertToEmozooPreview() {
-    const chk = pickThreeConvertible();
-    const sample = pickReferenceSample();
-
-    if (chk.ok) {
-      const consume = chk.indices.map(i => GAME.owned[i]);
-      window.__ezPending__ = { indices: chk.indices, consume };
-      showEzPreview({ ok: true, sample, consume });
-    } else {
-      window.__ezPending__ = null;
-      showEzPreview({ ok: false, sample, need: chk.need, have: chk.have });
-    }
-  };
-
-  window.convertToEmozooConfirm = function () {
-    const pending = window.__ezPending__;
-    if (!pending || !Array.isArray(pending.indices) || pending.indices.length !== 3) {
-      alert("実行できません（条件未達または内部状態なし）");
-      return;
-    }
-
-    // セーフティチェック
-    const stillOk = pending.indices.every(i => GAME.owned[i] && isConvertible(GAME.owned[i]));
-    if (!stillOk) {
-      alert("直前に編成が変わったため条件を満たせません。もう一度プレビューしてください。");
-      window.__ezPending__ = null;
-      return;
-    }
-
-    // 降順インデックスで削除（配列ズレ防止）
-    const toRemove = [...pending.indices].sort((a, b) => b - a);
-    const consumedNames = toRemove.map(i => GAME.owned[i].name).join("、");
-    toRemove.forEach(i => GAME.owned.splice(i, 1));
-
-    // マネーのみ ¥10,000 にリセット
-    GAME.money = 10000;
-
-    // EZ +1（確実に加算）
-    if (typeof GAME.emozoo !== "number" || isNaN(GAME.emozoo)) GAME.emozoo = 0;
-    GAME.emozoo += 1;
-
-    // EZ表示を直接更新（updateUIより先に叩く）
-    const ezEl = document.getElementById("emozoo");
-    if (ezEl) ezEl.innerText = GAME.emozoo.toLocaleString() + " EZ";
-
-    if (typeof addLog === "function") {
-      addLog("🪙 EZ変換 ▶ " + consumedNames + " を消費 → 1 EZ 獲得");
-      addLog("💰 マネーを ¥10,000 にリセット");
-    }
-
-    if (typeof frontierEffect === "function") frontierEffect();
-
-    window.__ezPending__ = null;
-
-    const popup = document.getElementById("popup");
-    if (popup) popup.classList.remove("active");
-
-    // タイトルを元に戻す
-    const titleEl = popup ? popup.querySelector(".title") : null;
-    if (titleEl) titleEl.textContent = "🎰 ガチャ結果";
-
-    if (typeof save === "function") save();
-    if (typeof updateUI === "function") updateUI();
-  };
-})();
-
-/* ---- 新領域ガチャ ---- */
-function frontierGacha() {
-  if (!GAME) {
-    alert("内部エラー：ゲームデータが見つかりません。");
-    return;
-  }
-
-  const haveEz = typeof GAME.emozoo === "number" ? GAME.emozoo : 0;
-  if (haveEz < 100) {
-    alert("EZ不足（必要：100 EZ、所持：" + haveEz + " EZ）");
-    return;
-  }
-
-  if (!Array.isArray(GAME.owned) || typeof GAME.baseCap !== "number") {
-    alert("内部エラー：所持情報が不正です。");
-    return;
-  }
-
-  if (GAME.owned.length >= GAME.baseCap) {
-    alert("基地容量不足");
-    return;
-  }
-
-  if (!Array.isArray(FRONTIER_POOL) || FRONTIER_POOL.length === 0) {
-    alert("内部エラー：FRONTIER_POOL が空です。");
-    return;
-  }
-
-  if (typeof obtain !== "function") {
-    alert("内部エラー：obtain 関数が見つかりません。");
-    return;
-  }
-
-  GAME.emozoo = haveEz - 100;
-
-  const pickIdx = randIndex(FRONTIER_POOL);
-  const base = FRONTIER_POOL[pickIdx];
-  const char = JSON.parse(JSON.stringify(base));
-
-  obtain(char);
-
-  if (typeof frontierEffect === "function") frontierEffect();
-  if (typeof showResults === "function") showResults([char]);
-  if (typeof updateUI === "function") updateUI();
-}
-
-/* ---- UI更新パッチ（EZ表示） ---- */
-(function patchUpdateUI() {
-  if (window.__ezUIPatched__) return;
-  window.__ezUIPatched__ = true;
-
-  const orig = typeof window.updateUI === "function" ? window.updateUI : function () {};
-
-  window.updateUI = function () {
-    try {
-      orig();
-    } catch (e) {
-      console.error("updateUI(orig) error:", e);
-    }
-    const el = document.getElementById("emozoo");
-    if (el && window.GAME) {
-      const ez = (typeof GAME.emozoo === "number" ? GAME.emozoo : 0);
-      el.innerText = ez.toLocaleString() + " EZ";
-    }
-  };
-})();
-
-/* ---- インベントリ描画パッチ（frontier CSS付与） ---- */
-(function patchRenderInventory() {
-  if (window.__invPatched__) return;
-  window.__invPatched__ = true;
-
-  const orig = typeof window.renderInventory === "function" ? window.renderInventory : function () {};
-
-  window.renderInventory = function () {
-    try {
-      orig();
-    } catch (e) {
-      console.error("renderInventory(orig) error:", e);
-    }
-
-    if (!window.GAME || !Array.isArray(GAME.owned)) return;
-
-    const box = document.getElementById("inventory");
-    if (!box) return;
-
-    const cards = box.querySelectorAll(".card");
-    if (!cards || cards.length === 0) return;
-
-    const reversed = GAME.owned.map((c, i) => ({ c, i })).reverse();
-
-    cards.forEach((card, domIdx) => {
-      const charData = reversed[domIdx]?.c;
-      if (charData && charData.type === "frontier") {
-        card.classList.add("frontier-card", "frontier-glow");
-        card.style.overflow = "visible";
-      }
-    });
-  };
-})();
-
-/* ---- ガチャ結果ポップアップパッチ（frontier CSS付与） ---- */
-(function patchShowResults() {
-  if (window.__showResultsPatched__) return;
-  window.__showResultsPatched__ = true;
-
-  const orig = typeof window.showResults === "function" ? window.showResults : function () {};
-
-  window.showResults = function (results) {
-    try {
-      orig(results);
-    } catch (e) {
-      console.error("showResults(orig) error:", e);
-    }
-
-    const grid = document.getElementById("results");
-    if (!grid || !Array.isArray(results)) return;
-
-    const cards = grid.querySelectorAll(".card");
-    cards.forEach((card, i) => {
-      const r = results[i];
-      if (r && r.type === "frontier") {
-        card.classList.add("frontier-card", "frontier-glow");
-        card.style.overflow = "visible";
-      }
-    });
-  };
-})();
 
 /* ---- 新領域演出 ---- */
 function frontierEffect() {
@@ -5981,6 +5794,103 @@ document.addEventListener('DOMContentLoaded', ()=>{
   updateUI();
   spawnBossAuto();
 });
+
+/* ===== ロードセーフブート & ロード中表示 ===== */
+(function bootLoadGuard(){
+  // ローディング開始
+  function showLoading(msg){
+    const ov = document.getElementById('loadingOverlay');
+    if (!ov) return;
+    ov.style.display = 'flex';
+    const label = ov.querySelector('.label');
+    if (label && msg) label.textContent = msg;
+  }
+  function hideLoading(){
+    const ov = document.getElementById('loadingOverlay');
+    if (!ov) return;
+    ov.style.display = 'none';
+  }
+  window.__showLoading = showLoading;
+  window.__hideLoading = hideLoading;
+
+  // GAMEの早期初期化（交換や描画より先に）
+  if (typeof window.GAME !== 'object' || !window.GAME) {
+    window.GAME = {
+      money: 100000,
+      lp: 0,
+      crystal: 0,
+      baseCap: 5,
+      owned: [],
+      dex: [],
+      achievements: [],
+      legendPity: 0,
+      research: { luck:0, legend:0, event:0, chimera:0, life:0, cap:0, auto:0, time:0 },
+      logs: [],
+      moonRoad: [],
+      diamondStored: 0,
+      lastMoonRefresh: 0,
+      lastDiamondGain: Date.now(),
+      emozoo: 0,
+      buffs: {},
+      rank: 0,
+      rankCooldown: 0,
+      rankLastDecay: Date.now()
+    };
+  } else {
+    // 欠損の埋め（後方互換）
+    GAME.owned = Array.isArray(GAME.owned) ? GAME.owned : [];
+    GAME.dex = Array.isArray(GAME.dex) ? GAME.dex : [];
+    GAME.achievements = Array.isArray(GAME.achievements) ? GAME.achievements : [];
+    GAME.research = GAME.research || { luck:0, legend:0, event:0, chimera:0, life:0, cap:0, auto:0, time:0 };
+    GAME.emozoo = Number.isFinite(GAME.emozoo) ? GAME.emozoo : 0;
+    GAME.buffs = (typeof GAME.buffs === 'object' && GAME.buffs) ? GAME.buffs : {};
+    GAME.rank = Number.isFinite(GAME.rank) ? GAME.rank : 0;
+    GAME.rankCooldown = Number.isFinite(GAME.rankCooldown) ? GAME.rankCooldown : 0;
+    GAME.rankLastDecay = GAME.rankLastDecay || Date.now();
+  }
+
+  // 既存load()の上書き安全版：ロード中表示＋未初期でも復旧
+  const origLoad = window.load;
+  window.load = function(){
+    try { showLoading('ロード中…'); } catch(e){}
+    try {
+      const data = localStorage.getItem('CYBER_EMOJI_CORE_SAVE_V2');
+      if (!data) { try{ hideLoading(); }catch{}; return; }
+      const obj = JSON.parse(data);
+      if (obj && typeof obj === 'object') {
+        Object.assign(GAME, obj);
+        // 欠損復旧
+        if (!Array.isArray(GAME.owned)) GAME.owned = [];
+        if (!GAME.research) GAME.research = { luck:0, legend:0, event:0, chimera:0, life:0, cap:0, auto:0, time:0 };
+        if (!GAME.buffs) GAME.buffs = {};
+        if (typeof GAME.emozoo !== 'number' || isNaN(GAME.emozoo)) GAME.emozoo = 0;
+      }
+    } catch(e){
+      console.warn('load failed:', e);
+    } finally {
+      try { hideLoading(); } catch(e){}
+    }
+  };
+
+  // 既存save()が未定義の環境での保険
+  if (typeof window.save !== 'function') {
+    window.save = function(){
+      try {
+        localStorage.setItem('CYBER_EMOJI_CORE_SAVE_V2', JSON.stringify(GAME));
+      } catch(e) { console.warn('save failed:', e); }
+    };
+  }
+
+  // 手動セーブUIの「JSONを読み込む」時もロード中を表示
+  document.addEventListener('click', (e)=>{
+    const t = e.target;
+    if (!t) return;
+    if (t.id === 'btnImport') {
+      showLoading('読み込み中…');
+      setTimeout(()=>hideLoading(), 250); // 同期処理だが視覚的フィードバック
+    }
+  }, {passive:true});
+})();
 
 /* ===== ランクシステム ===== */
 
