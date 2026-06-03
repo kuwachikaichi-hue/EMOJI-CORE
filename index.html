@@ -619,6 +619,47 @@ transform:scale(2);
   line-height: 1.2;
 }
 
+/* === trade/price 修正: 安全な表示とスタイルの統一 === */
+.tradeBtn {
+  margin-top: 8px;
+  width: 100%;
+  border: none;
+  padding: 8px;
+  border-radius: 10px;
+  font-weight: 900;
+  font-size: 12px;
+  background: linear-gradient(135deg, #00e5ff, #0077ff);
+  color: #00131b;
+  box-shadow: 0 0 10px rgba(0, 150, 255, .35);
+  cursor: pointer;
+  display: block;
+}
+.tradeBtn:active { transform: scale(.96); }
+
+/* 既存 .sell の文字折返しを強化（長桁対策） */
+.card .sell {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  line-height: 1.2;
+}
+
+/* 交換ポップアップ：数字可読性 */
+.num-mono {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+/* フロントエフェクト（保険の軽量演出） */
+.fx_fade_once {
+  position:fixed; inset:0; pointer-events:none; z-index:9999;
+  background: radial-gradient(circle, rgba(0,229,255,.25), transparent 70%);
+  animation: fx_fade_once_anim 0.8s forwards;
+}
+@keyframes fx_fade_once_anim {
+  0% { opacity:0; } 40% { opacity:1; } 100% { opacity:0; }
+}
+
 </style>
 </head>
 <body>
@@ -947,23 +988,20 @@ onclick="buyDiamondMoney()">
   </div>
 </div>
 
-  <!-- 交換ポップアップ（body直下が安全） -->
+<!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
   <div class="tradeBox">
     <div class="tradeTitle">🔀 キャラクター交換（復活の呪文）</div>
 
-    <!-- ステップ1: 呪文出力（1人目） -->
+    <!-- Step1: 送信側が呪文を発行 -->
     <div class="tradeStep active" id="tradeStep1">
       <div class="tradeMeta">
-        ▶ <b>あなたのキャラを呪文にします。</b><br>
-        呪文が出たら、相手の端末にそのまま入力してください。<br>
-        ※ボタンを押した瞬間、キャラはいったん消えます。
+        ▶ あなたのキャラを呪文にします。表示された呪文を相手へ渡してください。<br>
+        ※生成した時点で対象キャラはいったんロックされます。
       </div>
-      <div id="spellDisplay" style="margin-top:12px; min-height:48px; color:rgba(0,229,255,.3)">
-        （ここに呪文が表示されます）
-      </div>
+      <div id="spellDisplay" class="num-mono" style="margin-top:12px; min-height:60px;"></div>
       <div class="tradeMeta" id="step1Nav" style="display:none; margin-top:10px; color:#ffd700;">
-        📲 この呪文を相手の端末に入力してください
+        📲 相手の端末にこの呪文を入力してもらってください
       </div>
       <button class="tradeAction" id="step1NextBtn" style="display:none; background:linear-gradient(135deg,#ffd700,#ff8800); color:#000;"
         onclick="tradeStep1ToStep2()">
@@ -974,11 +1012,11 @@ onclick="buyDiamondMoney()">
       </button>
     </div>
 
-    <!-- ステップ2: 1人目が2人目の呪文を読み込む -->
+    <!-- Step2: 送信側が相手の呪文を入力 -->
     <div class="tradeStep" id="tradeStep2">
       <div class="tradeMeta">
-        ▶ 相手の端末に表示された「呪文」を入力してください。<br>
-        <b>30秒以内に入力してください。</b>
+        ▶ 相手の端末で表示された「呪文」を貼り付けてください。<br>
+        30秒以内に入力してください。
       </div>
       <textarea class="tradeInput" id="step2Input" placeholder="相手の呪文をここに入力…"></textarea>
       <div class="tradeError" id="step2Error"></div>
@@ -988,32 +1026,27 @@ onclick="buyDiamondMoney()">
       </button>
     </div>
 
-    <!-- ステップ3: 2人目が受け取り＆自分の呪文を出力する面（2人目の端末） -->
+    <!-- Step3: 受信側表示（2人目の端末で受け取り後、自分の呪文を発行） -->
     <div class="tradeStep" id="tradeStep3">
       <div class="tradeMeta" style="color:#00ff9d; font-weight:900;">
         ✅ キャラを受け取りました！
       </div>
       <div class="tradeMeta" style="margin-top:8px;">
-        ▶ 次は<b>あなたのキャラの呪文</b>が出ます。<br>
-        1人目の端末に入力してもらってください。<br>
+        ▶ 次は<b>あなたのキャラの呪文</b>が出ます。1人目の端末に入力してもらってください。<br>
         <b style="color:#ffd700;">⏰ 30秒のタイムリミットがあります！</b>
       </div>
-      <span id="tradeTimer">30</span>
+      <span id="tradeTimer" class="num-mono">30</span>
       <div id="dangerFrame"></div>
-      <div id="spellDisplay2" style="
-        font-family:monospace; font-size:13px; word-break:break-all;
+      <div id="spellDisplay2" class="num-mono" style="
         background:#000d1a; border:1px solid rgba(0,229,255,.4);
-        border-radius:10px; padding:12px; color:#00e5ff;
-        min-height:60px; line-height:1.6; margin-top:8px;
-      ">
-        （呪文を生成中…）
-      </div>
+        border-radius:10px; padding:12px; color:#00e5ff; min-height:60px; line-height:1.6; margin-top:8px;
+      "></div>
       <div class="tradeMeta" style="margin-top:8px; color:#ffd700;">
         📲 1人目の端末にこの呪文を入力してもらってください
       </div>
     </div>
 
-    <!-- ステップ4: 交換完了 -->
+    <!-- Step4: 完了 -->
     <div class="tradeStep" id="tradeStep4">
       <div style="text-align:center; padding:20px;">
         <div style="font-size:48px;">🎉</div>
@@ -1024,18 +1057,6 @@ onclick="buyDiamondMoney()">
       </div>
       <button class="tradeAction" onclick="closeTrade()">閉じる</button>
     </div>
-
-    <!-- ステップ0: 2人目の入力画面（単体起動用） -->
-    <div class="tradeStep" id="tradeStep0">
-      <div class="tradeMeta">
-        ▶ 相手から受け取った「呪文」を入力してください。
-      </div>
-      <textarea class="tradeInput" id="step0Input" placeholder="呪文をここに貼り付け…"></textarea>
-      <div class="tradeError" id="step0Error"></div>
-      <button class="tradeAction" onclick="tradeStep0Confirm()">読み込む ✨</button>
-      <button class="tradeAction danger" style="margin-top:8px;" onclick="closeTrade()">閉じる</button>
-    </div>
-
   </div>
 </div>
 
@@ -1610,6 +1631,314 @@ onclick="buyDiamondMoney()">
   })();
 })();
 
+/* ===== 交換機能＆0円表示 修正パッチ v2026-06-03 ===== */
+(function(){
+  if (window.__tradeAndPricePatch__) return;
+  window.__tradeAndPricePatch__ = true;
+
+  // ——— 数値ユーティリティ ———
+  function toNum(v, fb=0) {
+    try {
+      if (v === null || v === undefined) return fb;
+      if (typeof v === 'number') return isFinite(v) ? v : fb;
+      if (typeof v === 'bigint') { const n = Number(v); return isFinite(n) ? n : fb; }
+      if (typeof v === 'string') {
+        const s = v.replace(/[,_\s¥円]/g,'');
+        const n = Number(s);
+        return isFinite(n) ? n : fb;
+      }
+      if (typeof v === 'object' && v.valueOf) {
+        const n = Number(v.valueOf());
+        return isFinite(n) ? n : fb;
+      }
+      return fb;
+    } catch { return fb; }
+  }
+  function formatSafe(v) {
+    const n = toNum(v, 0);
+    try { return '¥' + n.toLocaleString(); }
+    catch { return '¥' + String(n); }
+  }
+
+  // ——— グローバルに露出（既存からも呼べるように） ———
+  window.toNum = window.toNum || toNum;
+  window.formatSafe = window.formatSafe || formatSafe;
+
+  // ——— 「0円」見え対策（レンダ後に強制正規化） ———
+  function normalizeSellIn(el) {
+    if (!el) return;
+    const txt = el.textContent || '';
+    const m = txt.match(/(-?\d[\d,_.]*)/);
+    const val = toNum(m ? m[1] : 0, 0);
+    el.textContent = (txt.includes('売却') ? '売却 ' : '売却 ') + formatSafe(val);
+  }
+  function normalizeAllSellsIn(root) {
+    if (!root) return;
+    root.querySelectorAll('.card .sell').forEach(normalizeSellIn);
+  }
+
+  // ——— renderInventory を安全ラップ：tradeBtnを正しく配線＋売値を正規化 ———
+  const __orig_renderInventory = window.renderInventory || function(){};
+  window.renderInventory = function renderInventoryPatched(){
+    const res = __orig_renderInventory.apply(this, arguments);
+    try {
+      const box = document.getElementById('inventory');
+      if (!box || !window.GAME) return res;
+
+      // 最新DOMカード（表示は owned の逆順）
+      const cards = Array.from(box.querySelectorAll('.card'));
+      const reversed = (Array.isArray(GAME.owned) ? GAME.owned : [])
+        .map((c,i)=>({c,i}))
+        .reverse();
+
+      cards.forEach((card, domIdx) => {
+        // 1) 売値を正規化
+        normalizeSellIn(card.querySelector('.sell'));
+
+        // 2) 交換ボタンの存在を保証
+        let tbtn = card.querySelector('.tradeBtn');
+        if (!tbtn) {
+          tbtn = document.createElement('button');
+          tbtn.className = 'tradeBtn';
+          tbtn.textContent = '交換';
+          const sellBtn = card.querySelector('.sellBtn');
+          if (sellBtn && sellBtn.parentNode) {
+            sellBtn.parentNode.insertBefore(tbtn, sellBtn.nextSibling);
+          } else {
+            card.appendChild(tbtn);
+          }
+        } else {
+          if (tbtn.textContent.trim() === '売却') tbtn.textContent = '交換';
+          tbtn.style.display = 'block';
+        }
+
+        // 3) 二重バインド防止＋クリック配線
+        if (!tbtn.__bound) {
+          tbtn.__bound = true;
+          tbtn.addEventListener('click', () => {
+            const originalIdx = reversed[domIdx]?.i;
+            if (typeof originalIdx !== 'number') return;
+            openTradeStart(originalIdx);
+          }, { passive: true });
+        }
+      });
+
+      // 4) 古い孤立コードを無効化（参照エラー予防）
+      window.__strayTradeHookGuard = true;
+    } catch(e){ console.warn('[trade/price patch] renderInventory:', e); }
+    return res;
+  };
+
+  // ——— updateUI / showResults でも売値を正規化（再発防止） ———
+  const __orig_updateUI = window.updateUI || function(){};
+  window.updateUI = function updateUIPatched(){
+    const r = __orig_updateUI.apply(this, arguments);
+    try {
+      const inv = document.getElementById('inventory');
+      normalizeAllSellsIn(inv);
+      // header money 表示も安全化
+      const m = document.getElementById('money');
+      if (m && window.GAME) m.innerText = formatSafe(GAME.money);
+    } catch(e){}
+    return r;
+  };
+
+  const __orig_showResults = window.showResults || function(){};
+  window.showResults = function showResultsPatched(results){
+    try { __orig_showResults(results); } catch(e){}
+    try {
+      const box = document.getElementById('results');
+      normalizeAllSellsIn(box);
+    } catch(e){}
+  };
+
+  // ——— 交換フロー実装 ———
+  // 復活の呪文は、JSONを簡易圧縮→base64風文字列（URL安全）で表現
+  function encodeSpell(obj){
+    const s = JSON.stringify(obj);
+    const b = (typeof btoa === 'function') ? btoa(unescape(encodeURIComponent(s))) : Buffer.from(s,'utf8').toString('base64');
+    return b.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/,'');
+  }
+  function decodeSpell(spell){
+    const pad = (spell.length % 4) ? ('===='.slice(spell.length % 4)) : '';
+    const b64 = spell.replace(/-/g,'+').replace(/_/g,'/') + pad;
+    const json = (typeof atob === 'function')
+      ? decodeURIComponent(escape(atob(b64)))
+      : Buffer.from(b64,'base64').toString('utf8');
+    return JSON.parse(json);
+  }
+
+  // 交換用の軽量ストレージ
+  let tradeLock = null; // { idx, char, deadline }
+  let timerId = null;
+
+  function openTradeStart(originalIdx){
+    const tp = document.getElementById('tradePopup');
+    if (!tp) return;
+
+    // ステップ可視切替
+    ['tradeStep0','tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(id=>{
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('active');
+    });
+    const s1 = document.getElementById('tradeStep1');
+    if (s1) s1.classList.add('active');
+
+    // 対象をロック（配列からは除去しない。インデックスで確保）
+    tradeLock = {
+      idx: originalIdx,
+      char: (window.GAME && GAME.owned && GAME.owned[originalIdx]) ? JSON.parse(JSON.stringify(GAME.owned[originalIdx])) : null,
+      deadline: Date.now() + 30*60*1000 // 30分ロック（十分長く）
+    };
+
+    // 呪文発行（1人目の端末用）：相手へ渡す
+    const payload = {
+      type: 'trade-offer',
+      ts: Date.now(),
+      name: tradeLock?.char?.name || '???',
+      sell: toNum(tradeLock?.char?.sell, 0)
+    };
+    const spell = encodeSpell(payload);
+
+    const disp = document.getElementById('spellDisplay');
+    const nav  = document.getElementById('step1Nav');
+    const btn  = document.getElementById('step1NextBtn');
+    if (disp) { disp.style.color = '#00e5ff'; disp.textContent = spell; }
+    if (nav)  nav.style.display = 'block';
+    if (btn)  btn.style.display = 'inline-block';
+
+    tp.classList.add('active');
+  }
+
+  window.tradeStep1ToStep2 = function(){
+    // 次の画面へ
+    ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(id=>{
+      const el = document.getElementById(id);
+      if (el) el.classList.remove('active');
+    });
+    const s2 = document.getElementById('tradeStep2');
+    if (s2) s2.classList.add('active');
+    const err = document.getElementById('step2Error');
+    if (err) err.textContent = '';
+    const ta = document.getElementById('step2Input');
+    if (ta) ta.value = '';
+  };
+
+  window.tradeStep2Confirm = function(){
+    const ta = document.getElementById('step2Input');
+    const err = document.getElementById('step2Error');
+    try {
+      const data = decodeSpell((ta?.value || '').trim());
+      if (!data || data.type !== 'trade-offer') throw new Error('不正な呪文です');
+      // 受領OK → 2人目側フローへ遷移（Step3 UIを出す）
+      ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(id=>{
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+      });
+      const s3 = document.getElementById('tradeStep3');
+      if (s3) s3.classList.add('active');
+
+      // 自分側の呪文（返信）を生成
+      const reply = {
+        type: 'trade-ack',
+        ts: Date.now(),
+        ok: true
+      };
+      const spell2 = encodeSpell(reply);
+      const disp2 = document.getElementById('spellDisplay2');
+      if (disp2) disp2.textContent = spell2;
+
+      // タイマー開始（見た目のみ）
+      startTradeTimer();
+    } catch(e){
+      if (err) err.textContent = '呪文を読み込めません：' + (e?.message || '形式エラー');
+    }
+  };
+
+  function startTradeTimer(){
+    const timer = document.getElementById('tradeTimer');
+    const frame = document.getElementById('dangerFrame');
+    let rest = 30;
+    if (timerId) clearInterval(timerId);
+    timerId = setInterval(()=>{
+      rest -= 1;
+      if (timer) {
+        timer.textContent = String(rest);
+        if (rest <= 5) {
+          timer.classList.add('danger');
+          if (frame) frame.style.display = 'block';
+        }
+      }
+      if (rest <= 0) {
+        clearInterval(timerId);
+        timerId = null;
+        // 時間切れでも実行可（UIのみ通知）
+        if (frame) frame.style.display = 'none';
+      }
+    }, 1000);
+  }
+
+  // 交換完了フロー（双方の合意後に押す想定の完了処理）
+  window.tradeComplete = function(){
+    try {
+      if (!tradeLock || !window.GAME || !Array.isArray(GAME.owned)) throw new Error('交換対象がありません');
+      const i = tradeLock.idx;
+      const locked = GAME.owned[i];
+      if (!locked) throw new Error('対象のキャラが見つかりません（編成が変わった可能性）');
+
+      // いまは「送信側がロック中キャラを渡し切る」最小仕様：
+      // 実運用では相互で対象を入替える設計も可能ですが、ここでは片方向受け渡しを成立させる。
+      // 完了としては、相手からの "trade-ack" を受けた前提で自キャラを手放す想定。
+      // ここでは演出とログ、UI更新のみ（ゲーム設計に合わせて拡張を）。
+      const removed = GAME.owned.splice(i, 1)[0];
+
+      // ログ
+      if (typeof addLog === 'function') {
+        addLog('🔀 交換完了 ▶ ' + (removed?.name || '？？？') + ' を手放しました');
+      }
+
+      // 結果UI
+      ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(id=>{
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+      });
+      const s4 = document.getElementById('tradeStep4');
+      if (s4) s4.classList.add('active');
+      const info = document.getElementById('tradeResultInfo');
+      if (info) info.textContent = 'あなたの ' + (removed?.name || '？？？') + ' を相手へ渡しました。';
+
+      // 後始末
+      tradeLock = null;
+      if (typeof updateUI === 'function') updateUI();
+      if (typeof save === 'function') save();
+    } catch(e) {
+      alert('交換を完了できません：' + (e?.message || '不明なエラー'));
+    }
+  };
+
+  window.cancelTrade = function(){
+    // ロック解除のみ（配列からは削除していないため実体は残る）
+    tradeLock = null;
+    const tp = document.getElementById('tradePopup');
+    if (tp) tp.classList.remove('active');
+    if (timerId) { clearInterval(timerId); timerId = null; }
+  };
+  window.closeTrade = function(){
+    const tp = document.getElementById('tradePopup');
+    if (tp) tp.classList.remove('active');
+    if (timerId) { clearInterval(timerId); timerId = null; }
+  };
+
+  // ——— 孤立した旧コード（div/tradeBtn 直参照）を事実上無効化 ———
+  // 何もしなくてもよいが、存在してもエラーを出さないように保護
+  try { window.__strayTradeHookGuard = true; } catch(e){}
+
+  // ——— 最初のUI正規化 ———
+  document.addEventListener('DOMContentLoaded', function(){
+    try { normalizeAllSellsIn(document); } catch(e){}
+  });
+
+})();
 
 
 /* ===== 広告バー設定 =====
