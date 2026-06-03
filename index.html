@@ -2303,336 +2303,1485 @@ function tabsInit(){
   activateTab(defaultTab);
 }
 
-// ===== QR交換システム追加分（修正版）=====
 
-// ライブラリ読み込み
-// <script src="[cdnjs.cloudflare.com](https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js)"></script>
-// <script src="[unpkg.com](https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js)"></script>
+/* ====== 既存コードそのまま下に続く ====== */
 
-/* ---------- スタイル ---------- */
-const _tradeStyle = document.createElement('style');
-_tradeStyle.textContent = `
-#tradeModal {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.85);
-  z-index: 10000;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-#tradeModal.active { display: flex; }
-#tradeModalBox {
-  background: #08111f;
-  border-radius: 20px;
-  padding: 18px;
-  width: 100%;
-  max-width: 480px;
-  max-height: 90vh;
-  overflow-y: auto;
-  border: 1px solid rgba(0,229,255,.2);
-  text-align: center;
-  color: #fff;
-}
-#tradeModalBox h2 { font-size: 18px; color: var(--cyan); margin-bottom: 12px; }
-#tradeModalBox p  { font-size: 13px; line-height: 1.7; }
-.tradeView { display: none; }
-.tradeView.active { display: block; }
-#tradeQRBox, #tradeQRBoxP2 {
-  display: flex;
-  justify-content: center;
-  margin: 14px 0;
-  padding: 10px;
-  background: #fff;
-  border-radius: 10px;
-}
-#tradeReader { width: 100%; margin: 12px 0; border-radius: 8px; overflow: hidden; }
-.tradeTimer { font-size: 28px; font-weight: 900; color: #ff355b; margin: 8px 0; }
-.tradeBtn {
-  width: 100%; padding: 12px; margin: 6px 0;
-  font-size: 15px; font-weight: 900;
-  border: none; border-radius: 10px; cursor: pointer; color: #fff;
-}
-.tradeBtn.primary   { background: #007bff; }
-.tradeBtn.success   { background: #28a745; }
-.tradeBtn.danger    { background: #dc3545; }
-.tradeBtn.secondary { background: #555; }
-.sellRow { display: flex; gap: 4px; margin-top: 8px; }
-.sellRow .sellBtn { margin-top: 0; flex: 1; }
-.tradeCardBtn {
-  flex: 1;
-  border: none; padding: 8px; border-radius: 10px;
-  font-weight: 900; font-size: 12px;
-  background: linear-gradient(135deg, #00e5ff, #0055ff);
-  color: #fff;
-  box-shadow: 0 0 10px rgba(0,200,255,.4);
-  cursor: pointer;
-}
-.tradeCardBtn:active { transform: scale(.96); }
-`;
-document.head.appendChild(_tradeStyle);
+const RESEARCHES = [
+  {key:'luck',   name:'ガチャ運強化',   cost:5,  effect:'全体排出率 +2%（内部補正）'},
+  {key:'legend', name:'レジェ率UP',     cost:10, effect:'LEGEND排出率上昇（内部補正）'},
+  {key:'event',  name:'イベント率UP',   cost:15, effect:'イベントキャラ出現率上昇（内部補正）'},
+  {key:'chimera',name:'キメラ解析',     cost:20, effect:'CHIMERA排出率上昇（内部補正）'},
+  {key:'life',   name:'ライフ効率化',   cost:25, effect:'LP+1（即時）'},
+  {key:'cap',    name:'超圧縮倉庫',     cost:30, effect:'基地容量+5（即時）'},
+  {key:'auto',   name:'自動研究AI',     cost:40, effect:'放置で研究進行（内部抽選）'},
+  {key:'time',   name:'時空観測装置',   cost:50, effect:'イベント提前（内部補正）'}
+];
 
-/* ---------- モーダル HTML ---------- */
-const _tradeModalHTML = `
-<div id="tradeModal">
-  <div id="tradeModalBox">
-    <h2>🔄 キャラクター交換</h2>
-    <div class="tradeView active" id="tv-menu">
-      <p id="tv-menu-status" style="font-weight:bold;color:#ffd700;margin-bottom:10px;"></p>
-      <button class="tradeBtn primary"   onclick="trade_startP1()">1人目：QRを出す</button>
-      <button class="tradeBtn success"   onclick="trade_startP2Scan()">2人目：QRを読み取る</button>
-      <button class="tradeBtn secondary" onclick="trade_close()">閉じる</button>
-    </div>
-    <div class="tradeView" id="tv-p1-send">
-      <p style="color:#ff6b6b;font-weight:bold;">※あなたのキャラは交換に出されました</p>
-      <p>2人目にこのQRコードを読ませてください</p>
-      <div id="tradeQRBox"></div>
-      <button class="tradeBtn primary" onclick="trade_p1Next()">読み取られたので次へ</button>
-    </div>
-    <div class="tradeView" id="tv-p2-reply">
-      <p style="color:#6effd5;font-weight:bold;">✅ 相手のキャラを獲得！</p>
-      <p style="color:#ff6b6b;">※あなたのキャラは交換に出されました<br>1人目にこのQRを読ませてください</p>
-      <div class="tradeTimer" id="tv-countdown">30</div>
-      <div id="tradeQRBoxP2"></div>
-    </div>
-    <div class="tradeView" id="tv-scan">
-      <p id="tv-scan-label">相手のQRコードをカメラに合わせてください</p>
-      <div id="tradeReader"></div>
-      <button class="tradeBtn danger" onclick="trade_abortScan()">キャンセル</button>
-    </div>
-  </div>
-</div>
-`;
-document.body.insertAdjacentHTML('beforeend', _tradeModalHTML);
+const ACHIEVEMENTS = [
+  {key:'money1',  name:'💰 所持金100万',                    check:()=>GAME.money>=1_000_000},
+  {key:'legend5', name:'👑 LEGENDを5体獲得',                check:()=>countRarity('LEGEND')>=5},
+  {key:'chimera1',name:'☣️ CHIMERA獲得',                    check:()=>countRarity('CHIMERA')>=1},
+  {key:'box29',   name:'🗑️ ごみ箱29体',                     check:()=>countName('ただのごみ箱')>=29},
+  {key:'boss5',   name:'⚔️ ボス5体撃破',                     check:()=>bossKill>=5},
+  {key:'season',  name:'📅 季節イベントコンプ',               check:()=>seasonCount>=8}
+];
 
-/* ---------- TRADE オブジェクト ---------- */
-const TRADE = {
-  targetChar: null,
-  targetIdx:  null,
-  myPlayerId: 'PLAYER_' + Math.floor(Math.random() * 1e9),
-  scanner:    null,
-  countdown:  null,
+/* ベースのキャラプール（通常） */
+const CHARACTERS = [
+  {emoji:'🗑️', name:'ただのごみ箱', rarity:'LOW', sell:5},
+  {emoji:'📦', name:'古びた段ボール兵器', rarity:'LOW', sell:8},
+  {emoji:'🔋', name:'空っぽバッテリー', rarity:'LOW', sell:10},
+  {emoji:'🪫', name:'崩壊エネルギーセル', rarity:'LOW', sell:12},
+  {emoji:'🧹', name:'掃除用ドローンβ', rarity:'LOW', sell:15},
+  {emoji:'📡', name:'壊れた通信アンテナ', rarity:'LOW', sell:18},
+  {emoji:'🪨', name:'無価値な鉱石コア', rarity:'LOW', sell:20},
+  {emoji:'⚙️', name:'旧式スチールギア', rarity:'LOW', sell:25},
+
+  {emoji:'🤖', name:'プロトタイプ・ロボット', rarity:'MID', sell:60},
+  {emoji:'🛵', name:'ネオン・デリバリー', rarity:'MID', sell:75},
+  {emoji:'🔧', name:'修復用ナノマシン', rarity:'MID', sell:90},
+  {emoji:'🧪', name:'ケミカル研究端末', rarity:'MID', sell:120},
+  {emoji:'🛰️', name:'低軌道サテライト', rarity:'MID', sell:150},
+  {emoji:'🚨', name:'セキュリティ・アイ', rarity:'MID', sell:180},
+  {emoji:'⚔️', name:'サイバー傭兵隊員', rarity:'MID', sell:220},
+  {emoji:'🐺', name:'孤高のシャドウ・ウルフ', rarity:'MID', sell:260},
+  {emoji:'🦾', name:'強化義手ファイター', rarity:'MID', sell:300},
+  {emoji:'🛸', name:'小型探索UFO', rarity:'MID', sell:350},
+
+  {emoji:'⚡', name:'雷撃コア・Type-X', rarity:'ELITE', sell:900},
+  {emoji:'❄️', name:'絶零フリーズユニット', rarity:'ELITE', sell:1100},
+  {emoji:'☣️', name:'ポイズン・リアクター', rarity:'ELITE', sell:1300},
+  {emoji:'🌪️', name:'ストーム・ジェネレーター', rarity:'ELITE', sell:1500},
+  {emoji:'🦅', name:'スカイハント・イーグル', rarity:'ELITE', sell:1800},
+  {emoji:'🔥', name:'灼熱プラズマ炉', rarity:'ELITE', sell:2200},
+  {emoji:'🧿', name:'深層監視AI', rarity:'ELITE', sell:2600},
+  {emoji:'🌊', name:'アクア・エネルギー炉', rarity:'ELITE', sell:3000},
+
+  {emoji:'🌟', name:'超新星スーパーノヴァ', rarity:'SUPER', sell:10000},
+  {emoji:'🔱', name:'海皇ポセイドン・トライデント', rarity:'SUPER', sell:12000},
+  {emoji:'🦁', name:'獅子王ゴールド・レオン', rarity:'SUPER', sell:15000},
+  {emoji:'⚡', name:'雷帝ライトニング・コア', rarity:'SUPER', sell:18000},
+  {emoji:'🛰️', name:'軌道兵器ラグランジュ', rarity:'SUPER', sell:22000},
+  {emoji:'🦊', name:'九尾のファントム・フォックス', rarity:'SUPER', sell:26000},
+  {emoji:'🧬', name:'ジェノム・ブレイカー', rarity:'SUPER', sell:32000},
+  {emoji:'🌌', name:'銀河制御アルカディア', rarity:'SUPER', sell:40000},
+
+  {emoji:'👑', name:'皇帝のインペリアルクラウン', rarity:'LEGEND', sell:150000},
+  {emoji:'🔮', name:'天魔オーブ・インフィニティ',  rarity:'LEGEND', sell:180000},
+  {emoji:'🔥', name:'絶対不滅プロメテウス',        rarity:'LEGEND', sell:220000},
+  {emoji:'💎', name:'金剛石インペリアル・ダイヤ',  rarity:'LEGEND', sell:280000},
+  {emoji:'🐉', name:'極天竜サイバー・ドラゴン',    rarity:'LEGEND', sell:350000},
+  {emoji:'🛸', name:'未知の生命体マザーシップ',    rarity:'LEGEND', sell:500000},
+
+  /* CHIMERA（最上位） - 既存Tier-1 */
+  {emoji:'🐉🔥', name:'煉獄竜ヘル・ドラグニクス', rarity:'CHIMERA', sell:1500000},
+  {emoji:'👁️🪐', name:'銀河監視者オメガ・アイ', rarity:'CHIMERA', sell:1800000},
+  {emoji:'🤖💀', name:'機械死神ネクロ・コア',   rarity:'CHIMERA', sell:2200000},
+  {emoji:'🦊⚡', name:'雷鳴九尾ライジン・フォックス', rarity:'CHIMERA', sell:2600000},
+  {emoji:'👑🌌', name:'宇宙皇帝アストラル・ゼロ', rarity:'CHIMERA', sell:3000000},
+
+  /* 追加CHIMERA Tier-2 */
+  {emoji:'☣️🧬', name:'終焉融合バイオ・ハザード', rarity:'CHIMERA', sell:4000000},
+  {emoji:'🌋⚔️', name:'災厄剣ラグナ・ブレイカー', rarity:'CHIMERA', sell:5000000},
+  {emoji:'🛰️👁️', name:'軌道監視AIセラフィム', rarity:'CHIMERA', sell:6000000},
+  {emoji:'💎🔥', name:'灼熱結晶イグナイト', rarity:'CHIMERA', sell:7500000},
+  {emoji:'🛸🌪️', name:'虚空嵐ヴォイド・ストーム', rarity:'CHIMERA', sell:9000000},
+
+  /* 追加CHIMERA Tier-3 */
+  {emoji:'🐺🌑', name:'月蝕獣フェンリル・ゼロ', rarity:'CHIMERA', sell:12000000},
+  {emoji:'⚡🧿', name:'雷神機関アポロギア', rarity:'CHIMERA', sell:15000000},
+  {emoji:'🧪👿', name:'禁断実験体デモニウム', rarity:'CHIMERA', sell:18000000},
+  {emoji:'🌊☣️', name:'深海汚染神アビスロード', rarity:'CHIMERA', sell:22000000},
+  {emoji:'🔮🦅', name:'千里眼ファルコン・ネオ', rarity:'CHIMERA', sell:26000000},
+
+  /* 追加CHIMERA Tier-4 */
+  {emoji:'🌌💀', name:'銀河死皇ネクロシア', rarity:'CHIMERA', sell:35000000},
+  {emoji:'👑🐉', name:'星界龍帝アストラギア', rarity:'CHIMERA', sell:45000000},
+  {emoji:'⚔️🔥', name:'神滅剣インフェルノ', rarity:'CHIMERA', sell:60000000},
+  {emoji:'☀️🪐', name:'恒星神ヘリオス・コア', rarity:'CHIMERA', sell:80000000},
+  {emoji:'🧬🌑', name:'原初融合ノクス・エデン', rarity:'CHIMERA', sell:100000000}
+];
+
+/* 月別イベントプール（各月3種） */
+const MONTH_EVENT_POOLS = {
+  1: [
+    {emoji:'🌅', name:'ネオ・ニューイヤー・ガイア', rarity:'EVENT', sell:240000},
+    {emoji:'🎁', name:'暗号化プレゼントBOX', rarity:'EVENT', sell:500000},
+    {emoji:'🎄', name:'聖夜インフィニティツリー', rarity:'EVENT', sell:350000}
+  ],
+  2: [
+    {emoji:'🍫', name:'ショコラ・マトリクスハート', rarity:'EVENT', sell:260000},
+    {emoji:'👹', name:'仮想オニ・プロトコル', rarity:'EVENT', sell:300000},
+    {emoji:'🎁', name:'暗号化プレゼントBOX', rarity:'EVENT', sell:500000} // 冬テーマ継続例
+  ],
+  3: [
+    {emoji:'🌸', name:'サクラ・ブレード・ナノテック', rarity:'EVENT', sell:45000},
+    {emoji:'🎎', name:'電脳ひな祭りパペトリー', rarity:'EVENT', sell:50000},
+    {emoji:'🍡', name:'三色ナノダンゴユニット', rarity:'EVENT', sell:55000}
+  ],
+  4: [
+    {emoji:'🌱', name:'ネオ・スプリング・スプラウト', rarity:'EVENT', sell:60000},
+    {emoji:'🎒', name:'インテリジェンス・ランドセル', rarity:'EVENT', sell:65000},
+    {emoji:'👔', name:'新人アンドロイド・エージェント', rarity:'EVENT', sell:70000}
+  ],
+  5: [
+    {emoji:'☔', name:'レイニー・ドローン微雨', rarity:'EVENT', sell:75000},
+    {emoji:'🐸', name:'ケロケロ・ソニックウェーブ', rarity:'EVENT', sell:80000},
+    {emoji:'🌌', name:'七夕クォンタム・オリヒメ', rarity:'EVENT', sell:90000}
+  ],
+  6: [
+    {emoji:'🎆', name:'サマーバースト・フェスティバル', rarity:'EVENT', sell:100000},
+    {emoji:'🏄', name:'サイバーサーフ・ランナー', rarity:'EVENT', sell:110000},
+    {emoji:'🍉', name:'電磁ウォーターメロン', rarity:'EVENT', sell:120000}
+  ],
+  7: [
+    {emoji:'🎑', name:'月詠サイバーラビット', rarity:'EVENT', sell:130000},
+    {emoji:'🌕', name:'フルムーン・サテライト', rarity:'EVENT', sell:145000},
+    {emoji:'🎃', name:'ジャック・オー・サイバーランタン', rarity:'EVENT', sell:160000}
+  ],
+  8: [
+    {emoji:'👻', name:'ゴースト・イン・ザ・ネット', rarity:'EVENT', sell:175000},
+    {emoji:'🍁', name:'紅葉メランコリアブレード', rarity:'EVENT', sell:190000},
+    {emoji:'🍄', name:'マッシュルーム・ノード', rarity:'EVENT', sell:210000}
+  ],
+  9: [
+    {emoji:'🌅', name:'ネオ・ニューイヤー・ガイア', rarity:'EVENT', sell:240000},
+    {emoji:'🍫', name:'ショコラ・マトリクスハート', rarity:'EVENT', sell:260000},
+    {emoji:'👹', name:'仮想オニ・プロトコル', rarity:'EVENT', sell:300000}
+  ],
+  10: [
+    {emoji:'🎄', name:'聖夜インフィニティツリー', rarity:'EVENT', sell:350000},
+    {emoji:'🎅', name:'サイバーサンタAI', rarity:'EVENT', sell:420000},
+    {emoji:'🎁', name:'暗号化プレゼントBOX', rarity:'EVENT', sell:500000}
+  ],
+  11: [
+    {emoji:'🎑', name:'月詠サイバーラビット', rarity:'EVENT', sell:130000},
+    {emoji:'🌕', name:'フルムーン・サテライト', rarity:'EVENT', sell:145000},
+    {emoji:'🌌', name:'七夕クォンタム・オリヒメ', rarity:'EVENT', sell:200000}
+  ],
+  12: [
+    {emoji:'🎄', name:'聖夜インフィニティツリー', rarity:'EVENT', sell:350000},
+    {emoji:'🎅', name:'サイバーサンタAI', rarity:'EVENT', sell:420000},
+    {emoji:'🎁', name:'暗号化プレゼントBOX', rarity:'EVENT', sell:500000}
+  ]
 };
 
-/* ---------- 表示制御 ---------- */
-function trade_showView(id) {
-  document.querySelectorAll('.tradeView').forEach(v => v.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
+/* 既存の月イベント（互換保持・未使用化） */
+// イベント（月限定3種）
+const MONTH_EVENT_POOL = [
+  {emoji:'🎑', name:'月詠サイバーラビット', rarity:'EVENT', sell:120000},
+  {emoji:'🌕', name:'フルムーン・サテライト', rarity:'EVENT', sell:160000},
+  {emoji:'🌌', name:'七夕クォンタム・オリヒメ', rarity:'EVENT', sell:200000}
+];
+
+const DIMENSION_CHARACTERS=[
+{emoji:'🧊',name:'異界冷却コア・NOVA',rarity:'異世界RARE',sell:122000000,power:'小ボス防御+10%'},
+{emoji:'🌑',name:'虚無観測ドローン',rarity:'異世界RARE',sell:333000000,power:'LP獲得+3%'},
+{emoji:'⚙️',name:'崩壊歯車メルター',rarity:'異世界RARE',sell:340000000,power:'売却額+5%'},
+
+{emoji:'⚡',name:'次元雷獣ヴォルト・ハウル',rarity:'異世界ELITE',sell:50000000,power:'小ボス速度+20%'},
+{emoji:'☣️',name:'汚染神経バイラスAI',rarity:'異世界ELITE',sell:60000000,power:'毒ダメージ付与'},
+{emoji:'🌌',name:'星間迷子アーク・ノア',rarity:'異世界ELITE',sell:80000000,power:'LP追加獲得率+8%'},
+
+{emoji:'🛰️',name:'次元兵器ネメシス・ゼロ',rarity:'異世界SUPER',sell:555555555,power:'全体攻撃'},
+{emoji:'👁️',name:'観測者アザト・コード',rarity:'異世界SUPER',sell:777777777,power:'小ボス妨害無効'},
+
+{emoji:'☀️',name:'恒星融合ヘリオス・リヴァイア',rarity:'異世界LEGEND',sell:9999999999,power:'小ボス報酬2倍'},
+{emoji:'🧬',name:'原初生命イデア・シグマ',rarity:'異世界LEGEND',sell:2000000000,power:'LP獲得+25%'},
+
+{emoji:'🌌👑',name:'異界王クロノス・エンド',rarity:'異世界GOD',sell:11111111111,power:'全倍率+15%'}
+];
+
+const MINI_BOSSES=[
+{name:'🤖 スクラップ・タイタン',hp:12000,lp:1},
+{name:'☣️ 汚染融合コア',hp:15000,lp:1},
+{name:'⚡ ライトニング捕食機',hp:10000,lp:1},
+{name:'🌌 ミニ・アークディア',hp:18000,lp:1},
+{name:'🛰️ 軌道破壊兵器β',hp:22000,lp:1},
+{name:'👁️ 深層監視AI端末',hp:25000,lp:1},
+{name:'🦾 重装サイバーゴーレム',hp:35000,lp:1},
+{name:'🔥 プラズマ暴走炉',hp:40000,lp:1}
+];
+
+const ANIMAL_ARMY = [
+{emoji:"🦊",name:"偵察狐レンジャー",rarity:"BEAST RARE",sell:350000000,type:"animal",skill:"視界+20%、奇襲率+5%"},
+{emoji:"🦌",name:"角槍エルク・ランサー",rarity:"BEAST RARE",sell:42000000,type:"animal",skill:"小ボス防御-10%付与"},
+{emoji:"🦅",name:"高空ホーク・スカウト",rarity:"BEAST RARE",sell:48000000,type:"animal",skill:"クリ率+6%（後列）"},
+{emoji:"🦝",name:"罠師ラクーン",rarity:"BEAST RARE",sell:5000000,type:"animal",skill:"罠設置数+1、設置速度+15%"},
+{emoji:"🦫",name:"堅壁ビーバー・エンジニア",rarity:"BEAST RARE",sell:52000000,type:"animal",skill:"バリケード耐久+25%"},
+{emoji:"🐍",name:"砂走りサーペント",rarity:"BEAST RARE",sell:54000000,type:"animal",skill:"移動速度+12%、毒微量"},
+{emoji:"🦨",name:"スカンク煙幕隊",rarity:"BEAST RARE",sell:56000000,type:"animal",skill:"回避+8%、敵命中-5%"},
+{emoji:"🦙",name:"ラマ補給兵",rarity:"BEAST RARE",sell:58000000,type:"animal",skill:"LPドロップ+2%"},
+
+{emoji:"🐺",name:"群狼リーダー・フェンリルJr.",rarity:"BEAST ELITE",sell:120000000,type:"animal",skill:"同陣営攻撃+12%"},
+{emoji:"🦬",name:"鉄壁バイソン・ガード",rarity:"BEAST ELITE",sell:135000000,type:"animal",skill:"被ダメ-15%、挑発付与"},
+{emoji:"🦏",name:"突進ライノ・ブレイカー",rarity:"BEAST ELITE",sell:150000000,type:"animal",skill:"初手突進ダメ+200%"},
+{emoji:"🐯",name:"強襲タイガー・ストライク",rarity:"BEAST ELITE",sell:165000000,type:"animal",skill:"背面攻撃時クリダメ+35%"},
+{emoji:"🦍",name:"号令ゴリラ・ドラム",rarity:"BEAST ELITE",sell:180000000,type:"animal",skill:"攻速+10%、鼓舞でリセット短縮"},
+{emoji:"🦜",name:"彩翼パロット・シグナル",rarity:"BEAST ELITE",sell:195000000,type:"animal",skill:"敵弱点露出"},
+{emoji:"🐙",name:"深海オクト・サポート",rarity:"BEAST ELITE",sell:2100000000,type:"animal",skill:"範囲スロウ+20%"},
+
+{emoji:"🐻",name:"山王ベア・ウォーデン",rarity:"BEAST SUPER",sell:142000000,type:"animal",skill:"最大HP+25%、吸収5%"},
+{emoji:"🦅🔥",name:"太陽ハヤブサ・ソル",rarity:"BEAST SUPER",sell:152000000,type:"animal",skill:"飛行特効+50%、燃焼"},
+{emoji:"🦈",name:"潜航シャーク・アサルト",rarity:"BEAST SUPER",sell:260000000,type:"animal",skill:"水場攻撃+30%、奇襲確定クリ"},
+{emoji:"🦩",name:"陣形フラミンゴ・マスター",rarity:"BEAST SUPER",sell:668000000,type:"animal",skill:"陣形ボーナス+50%"},
+
+{emoji:"🐘",name:"古強者エレファント・パレード",rarity:"BEAST LEGEND",sell:9180000000,type:"animal",skill:"ノックバック耐性100%"},
+{emoji:"🐉",name:"霊獣キマイラ・レギオン",rarity:"BEAST LEGEND",sell:6240000000,type:"animal",skill:"属性相性無視+10%"},
+{emoji:"🦚",name:"聖冠ピーコック・ロイヤル",rarity:"BEAST LEGEND",sell:7300000000,type:"animal",skill:"小ボス報酬+80%"},
+
+{emoji:"🦁👑",name:"百獣帝レオナイト",rarity:"BEAST KING",sell:81000000000,type:"animal",skill:"全物理倍率+12%、部隊シナジー+20%"}
+
+];
+
+/* ===== マジックフェアリーズ ===== */
+const FAIRY_POOL = [
+{emoji:"🌿",name:"クローバー・ヒーラー",rarity:"FAIRY RARE",sell:4440000,type:"fairy",skill:"戦闘中回復+8%"},
+{emoji:"💧",name:"ミスト・ドリップ",rarity:"FAIRY RARE",sell:4240000,type:"fairy",skill:"敵命中-7%"},
+{emoji:"🔥",name:"スパーク・ピクシー",rarity:"FAIRY RARE",sell:45000005,type:"fairy",skill:"連鎖発火"},
+{emoji:"🍃",name:"ウィスプ・グライド",rarity:"FAIRY RARE",sell:47400000,type:"fairy",skill:"回避+10%"},
+{emoji:"🌸",name:"ブロッサム・チャーム",rarity:"FAIRY RARE",sell:49090000,type:"fairy",skill:"魅了付与"},
+{emoji:"🪞",name:"ミラージュ・トリック",rarity:"FAIRY RARE",sell:52800000,type:"fairy",skill:"分身生成"},
+{emoji:"🧊",name:"クリスタ・フロスト",rarity:"FAIRY RARE",sell:54500000,type:"fairy",skill:"被魔法ダメ-10%"},
+{emoji:"🕯️",name:"ルーメン・キャンドル",rarity:"FAIRY RARE",sell:56500000,type:"fairy",skill:"範囲視界+25%"},
+
+{emoji:"⏳",name:"タイディ・テンポ",rarity:"FAIRY ELITE",sell:390000000,type:"fairy",skill:"CT-12%"},
+{emoji:"🦋",name:"シルフ・フラッター",rarity:"FAIRY ELITE",sell:145000000,type:"fairy",skill:"連鎖数+1"},
+{emoji:"🌙",name:"ルナ・ドロップ",rarity:"FAIRY ELITE",sell:160000006,type:"fairy",skill:"夜間攻撃+25%"},
+{emoji:"🌈",name:"プリズム・アーチ",rarity:"FAIRY ELITE",sell:175500000,type:"fairy",skill:"多属性攻撃"},
+{emoji:"🍯",name:"メル・ハニーディップ",rarity:"FAIRY ELITE",sell:199000000,type:"fairy",skill:"持続回復+15%"},
+{emoji:"🧵",name:"ステッチ・フェア",rarity:"FAIRY ELITE",sell:2050000000,type:"fairy",skill:"シールド再縫合"},
+{emoji:"🪄",name:"グリモ・フェイヴァー",rarity:"FAIRY ELITE",sell:220000000,type:"fairy",skill:"初動バフ+30%"},
+
+{emoji:"🌪️",name:"テンペスト・ノーム",rarity:"FAIRY SUPER",sell:4800000000,type:"fairy",skill:"広域ノックアップ"},
+{emoji:"🪶",name:"ペナンス・フェザー",rarity:"FAIRY SUPER",sell:5600000000,type:"fairy",skill:"精霊盾化"},
+{emoji:"🪨",name:"ガイア・ティンカー",rarity:"FAIRY SUPER",sell:6100000000,type:"fairy",skill:"地形改変"},
+{emoji:"🔮",name:"オラクル・サイト",rarity:"FAIRY SUPER",sell:6900000000,type:"fairy",skill:"行動予知"},
+
+{emoji:"🌟",name:"スターブライト・セレス",rarity:"FAIRY LEGEND",sell:220000000,type:"fairy",skill:"小ボス報酬+100%"},
+{emoji:"🕊️",name:"セラフィム・ミューズ",rarity:"FAIRY LEGEND",sell:3100000000,type:"fairy",skill:"全体魔攻+15%"},
+{emoji:"🕰️",name:"クロノ・フェアリーナ",rarity:"FAIRY LEGEND",sell:3600000000,type:"fairy",skill:"時間停止"},
+
+{emoji:"👑",name:"フェアリークイーン・オーロラ",rarity:"FAIRY QUEEN",sell:9000000000,type:"fairy",skill:"全魔法倍率+15%"}
+];
+
+/* ===== ロボペット ===== */
+const ROBOT_PET_POOL = [
+{emoji:"🔋",name:"バッテリーネコ・V1",rarity:"ROBO RARE",sell:300000000,type:"robo",skill:"初期エネルギー+20%"},
+{emoji:"📡",name:"センサーイヌ・Mk-I",rarity:"ROBO RARE",sell:320000000,type:"robo",skill:"ステルス検知+25%"},
+{emoji:"🛞",name:"ローラーウサギ",rarity:"ROBO RARE",sell:340000000,type:"robo",skill:"移動中攻撃可能"},
+{emoji:"🧲",name:"マグネパンダ",rarity:"ROBO RARE",sell:360000000,type:"robo",skill:"金属敵特効+30%"},
+{emoji:"🧼",name:"クリーナーフェレット",rarity:"ROBO RARE",sell:38000000,type:"robo",skill:"デバフ除去"},
+{emoji:"🧵",name:"ケーブルハム・スプール",rarity:"ROBO RARE",sell:400000000,type:"robo",skill:"被ダメ-5%"},
+{emoji:"🎯",name:"エイムバード・S",rarity:"ROBO RARE",sell:420000000,type:"robo",skill:"命中+10%"},
+{emoji:"🪛",name:"ドライバーキツネ",rarity:"ROBO RARE",sell:44000000,type:"robo",skill:"修理速度+20%"},
+
+{emoji:"🧠",name:"ニューロコリー・β",rarity:"ROBO ELITE",sell:1100000000,type:"robo",skill:"与ダメ+8%"},
+{emoji:"🛡️",name:"シールドタートル・Aegis",rarity:"ROBO ELITE",sell:125000000,type:"robo",skill:"展開盾"},
+{emoji:"🧯",name:"サプレッサーラット",rarity:"ROBO ELITE",sell:14000000,type:"robo",skill:"敵攻速-12%"},
+{emoji:"🌡️",name:"クーラーペンギン",rarity:"ROBO ELITE",sell:15500000,type:"robo",skill:"過熱無効"},
+{emoji:"🗜️",name:"クランプベア",rarity:"ROBO ELITE",sell:17000000,type:"robo",skill:"小ボス拘束"},
+{emoji:"🛰️",name:"ドローンミツバチ群",rarity:"ROBO ELITE",sell:18500000,type:"robo",skill:"子機3体召喚"},
+{emoji:"🔄",name:"オートリサイカモ",rarity:"ROBO ELITE",sell:20000000,type:"robo",skill:"素材返還+5%"},
+
+{emoji:"⚡",name:"タキオンリンク・リンクス",rarity:"ROBO SUPER",sell:4500000000,type:"robo",skill:"スキル初動即時"},
+{emoji:"🧪",name:"ナノメディック・オッター",rarity:"ROBO SUPER",sell:5200000000,type:"robo",skill:"自動蘇生"},
+{emoji:"🛰️",name:"オービタルフクロウ",rarity:"ROBO SUPER",sell:5900000000,type:"robo",skill:"衛星照準"},
+{emoji:"🛠️",name:"モジュラードッグ・Σ",rarity:"ROBO SUPER",sell:6600000000,type:"robo",skill:"スロット+1"},
+
+{emoji:"🔰",name:"プロトドラゴン・R0",rarity:"ROBO LEGEND",sell:19000000000,type:"robo",skill:"貫通ビーム"},
+{emoji:"🧩",name:"アセンブリーフォックス・Ω",rarity:"ROBO LEGEND",sell:27000000000,type:"robo",skill:"モジュール組替"},
+{emoji:"🛰️👑",name:"管制AIキャット・Overseer",rarity:"ROBO LEGEND",sell:32000000000,type:"robo",skill:"ロボ与ダメ+18%"},
+
+{emoji:"💠",name:"コアペット・ハイペリオン",rarity:"ROBO CORE",sell:8500000000000,type:"robo",skill:"全テク倍率+14%"}
+];
+
+const TENGOKU_GACHA = [
+
+/* 天獄レア */
+
+{
+emoji:"🪓🪽",
+name:"断罪の翼兵アーク",
+rarity:"HEAVEN RARE",
+sell:20000000000000,
+type:"tengoku",
+skill:"攻撃力+150%、飛行特効+80%"
+},
+
+{
+emoji:"⚔️🪽",
+name:"蒼空の執行騎士",
+rarity:"HEAVEN RARE",
+sell:24000000000000,
+type:"tengoku",
+skill:"クリ率+20%、攻速+15%"
+},
+
+{
+emoji:"🦅💙",
+name:"天翔ブルーファルコン",
+rarity:"HEAVEN RARE",
+sell:28000000000000,
+type:"tengoku",
+skill:"飛行ユニット全強化+25%"
+},
+
+{
+emoji:"💎🪽",
+name:"蒼輝のジェムセラフ",
+rarity:"HEAVEN RARE",
+sell:35000000000000,
+type:"tengoku",
+skill:"LP獲得量+200%"
+},
+
+{
+emoji:"🌌🪓",
+name:"星砕きヘルアクス",
+rarity:"HEAVEN RARE",
+sell:42000000000000,
+type:"tengoku",
+skill:"ボス与ダメ+250%"
+},
+
+/* 天獄エリート */
+
+{
+emoji:"👑🪽",
+name:"天空王ヴァルディア",
+rarity:"HEAVEN ELITE",
+sell:65000000000000,
+type:"tengoku",
+skill:"全ユニット攻撃+50%"
+},
+
+{
+emoji:"⚡🪓",
+name:"雷獄ブレイクロード",
+rarity:"HEAVEN ELITE",
+sell:90000000000000,
+type:"tengoku",
+skill:"クリダメ+120%"
+},
+
+{
+emoji:"❄️🪽",
+name:"氷翼セレスティア",
+rarity:"HEAVEN ELITE",
+sell:120000000000000,
+type:"tengoku",
+skill:"敵全体速度-40%"
+},
+
+{
+emoji:"🔥🪓",
+name:"炎獄バルガン",
+rarity:"HEAVEN ELITE",
+sell:150000000000000,
+type:"tengoku",
+skill:"燃焼ダメージ+400%"
+},
+
+{
+emoji:"🌠👼",
+name:"流星天使ルミナ",
+rarity:"HEAVEN ELITE",
+sell:200000000000000,
+type:"tengoku",
+skill:"全ステータス+80%"
+},
+
+/* 天獄スーパー */
+
+{
+emoji:"🐉🪽",
+name:"蒼天龍ゼルフィア",
+rarity:"HEAVEN SUPER",
+sell:350000000000000,
+type:"tengoku",
+skill:"ドラゴン系倍率+500%"
+},
+
+{
+emoji:"🦁💙",
+name:"蒼獅王レオヴァルト",
+rarity:"HEAVEN SUPER",
+sell:550000000000000,
+type:"tengoku",
+skill:"物理ダメージ+300%"
+},
+
+{
+emoji:"🪓👑",
+name:"断界皇オブリオン",
+rarity:"HEAVEN SUPER",
+sell:800000000000000,
+type:"tengoku",
+skill:"ボス特効+600%"
+},
+
+{
+emoji:"🌌🪽👼",
+name:"銀河天使アルテミア",
+rarity:"HEAVEN SUPER",
+sell:1200000000000000,
+type:"tengoku",
+skill:"全属性倍率+250%"
+},
+
+/* 天獄レジェンド */
+
+{
+emoji:"☄️🪽",
+name:"終焉彗星セラフィム",
+rarity:"HEAVEN LEGEND",
+sell:2500000000000000,
+type:"tengoku",
+skill:"全ダメージ+1000%"
+},
+
+{
+emoji:"🐲💙👑",
+name:"蒼神龍ヴェルカイザー",
+rarity:"HEAVEN LEGEND",
+sell:4500000000000000,
+type:"tengoku",
+skill:"攻撃速度+300%、クリ率100%"
+},
+
+{
+emoji:"🌠⚔️👼",
+name:"天獄戦神ミカエルΩ",
+rarity:"HEAVEN LEGEND",
+sell:7000000000000000,
+type:"tengoku",
+skill:"全ユニット倍率+800%"
+},
+
+/* 天獄キング */
+
+{
+emoji:"🪓👑🪽",
+name:"天獄王グランドアーク",
+rarity:"HEAVEN KING",
+sell:12000000000000000,
+type:"tengoku",
+skill:"全倍率+2000%、全ボス特効+1000%"
+},
+
+{
+emoji:"💎🌌👼",
+name:"蒼天創神エターナ",
+rarity:"HEAVEN KING",
+sell:18000000000000000,
+type:"tengoku",
+skill:"全報酬+3000%"
+},
+
+/* 天獄ゴッド */
+
+{
+emoji:"🪓💙👑🪽",
+name:"天獄神アストラ・ゼロ",
+rarity:"HEAVEN GOD",
+sell:50000000000000000,
+type:"tengoku",
+skill:"全ダメージ+10000%、全ステータス+5000%"
+}
+];
+
+const ROBO_WARRIOR = [
+  // ── MECHA RARE ──
+  { emoji:"🤖⛓️", name:"鎖拳メカ・チェインフィスト", rarity:"MECHA RARE", sell: 1200000, type:"robo", skill:"拘束+30%、近接ダメ+100%" },
+  { emoji:"🛡️🤖", name:"警備機兵セントリーMk-II", rarity:"MECHA RARE", sell: 1400000, type:"robo", skill:"防御+150%、タウント付与" },
+  { emoji:"⚙️🤖", name:"歯車剣士ギアブレード", rarity:"MECHA RARE", sell: 1500000, type:"robo", skill:"出血付与+25%、攻撃速度+20%" },
+  { emoji:"🔩🤖", name:"リベット・スピア", rarity:"MECHA RARE", sell: 1600000, type:"robo", skill:"貫通+15%、装甲破壊+30%" },
+  { emoji:"🧲🤖", name:"マグネット・グラップラー", rarity:"MECHA RARE", sell: 1800000, type:"robo", skill:"引き寄せ+2体、金属特効+50%" },
+  // ── MECHA ELITE ──
+  { emoji:"🗡️🤖⛓️", name:"チェインデュエリスト・Ω", rarity:"MECHA ELITE", sell: 4800000, type:"robo", skill:"連撃+2、拘束敵へ+200%" },
+  { emoji:"🛰️🤖", name:"ドローン司令アービター", rarity:"MECHA ELITE", sell: 5200000, type:"robo", skill:"随伴ドローン×2、索敵+100%" },
+  { emoji:"🔫🤖", name:"レールガン・ランページ", rarity:"MECHA ELITE", sell: 5600000, type:"robo", skill:"貫通+150%、チャージ射撃" },
+  { emoji:"🧪🤖", name:"ナノ修理兵リペアラーX", rarity:"MECHA ELITE", sell: 6000000, type:"robo", skill:"毎秒回復+3%、臨時装甲+20%" },
+  { emoji:"🧠🤖", name:"AI戦術士ストラテジスト", rarity:"MECHA ELITE", sell: 6500000, type:"robo", skill:"味方クリ+10%、行動速度+15%" },
+  // ── MECHA SUPER ──
+  { emoji:"🦾⛓️", name:"拘束砕機ブレイカー・ギロチン", rarity:"MECHA SUPER", sell: 18000000, type:"robo", skill:"固定ダメージ+800%、防御無視" },
+  { emoji:"🚀🤖", name:"跳躍強襲メテオ・ランサー", rarity:"MECHA SUPER", sell: 22000000, type:"robo", skill:"落下ダメ+600%、眩暈確率+40%" },
+  { emoji:"🧯🤖", name:"熱制御兵サーマル・バルブ", rarity:"MECHA SUPER", sell: 24000000, type:"robo", skill:"過熱無効、炎上場で攻撃+300%" },
+  { emoji:"🪫⚡🤖", name:"EMP執行ユニット・ブラックアウト", rarity:"MECHA SUPER", sell: 26000000, type:"robo", skill:"全敵感電+2秒、シールド破壊" },
+  { emoji:"🛞🤖", name:"突進装甲バイソン・ローラー", rarity:"MECHA SUPER", sell: 30000000, type:"robo", skill:"体当たり+900%、ノックバック特大" },
+  // ── MECHA LEGEND ──
+  { emoji:"🕹️👑🤖", name:"機皇指令ゼロ・ディレクター", rarity:"MECHA LEGEND", sell: 90000000, type:"robo", skill:"全機体+25%、指令で即行動" },
+  { emoji:"🛰️🛡️🤖", name:"衛星盾将コロナ・バスチオン", rarity:"MECHA LEGEND", sell: 120000000, type:"robo", skill:"衛星バリア、範囲被ダメ-40%" },
+  { emoji:"🧲⛓️👹", name:"鎖魔王アイアン・オーバーロード", rarity:"MECHA LEGEND", sell: 150000000, type:"robo", skill:"拘束上限+3体、拘束中被ダメ+300%" },
+  { emoji:"🩻🤖", name:"解析皇アナトミア", rarity:"MECHA LEGEND", sell: 180000000, type:"robo", skill:"弱点露出100%、クリダメ+200%" },
+  // ── MECHA GOD ──
+  { emoji:"🧠🌐🤖", name:"集積意識ゴッドネット", rarity:"MECHA GOD", sell: 450000000, type:"robo", skill:"全倍率+4000%、ネットワーク同調" },
+  { emoji:"⚙️⛓️👑", name:"機鎖創造神チェイン・アーキテクト", rarity:"MECHA GOD", sell: 700000000, type:"robo", skill:"鎖領域展開、近接敵停止" },
+  { emoji:"🛡️⚡🌌", name:"超越城塞オムニ・フォート", rarity:"MECHA GOD", sell: 900000000, type:"robo", skill:"無敵3秒周期、反射+300%" },
+  { emoji:"🕹️🔥⚡", name:"最終制御者オーバードライブ・ゼロ", rarity:"MECHA ORIGIN", sell: 1500000000, type:"robo", skill:"全ステ+9999%、時間加速x2" },
+];
+
+const CRYSTAL_GOLEM = [
+  // ── CRYSTAL RARE ──
+  { emoji:"💎🪬", name:"祈晶ゴーレム・タリスマ", rarity:"CRYSTAL RARE", sellCrystal: 800,  incomeCrystal: 1.2, type:"crystal", skill:"浄化+20%、被ダメ-10%" },
+  { emoji:"🔷🪨", name:"蒼晶岩ブルーサイト", rarity:"CRYSTAL RARE", sellCrystal: 900,  incomeCrystal: 1.4, type:"crystal", skill:"氷耐性+40%、鈍足付与" },
+  { emoji:"🔶🗿", name:"琥珀核アンバー・コア", rarity:"CRYSTAL RARE", sellCrystal: 950,  incomeCrystal: 1.5, type:"crystal", skill:"出血無効、拘束耐性+30%" },
+  { emoji:"🔺🪨", name:"紅晶刃クリムゾン・エッジ", rarity:"CRYSTAL RARE", sellCrystal: 1000, incomeCrystal: 1.6, type:"crystal", skill:"会心+10%、斬撃+50%" },
+  { emoji:"🔹🧊", name:"氷晶衛シバリン", rarity:"CRYSTAL RARE", sellCrystal: 1100, incomeCrystal: 1.8, type:"crystal", skill:"凍結付与+15%、被クリ-20%" },
+
+  // ── CRYSTAL ELITE ──
+  { emoji:"💠🗿", name:"菱紋守リゾマティック", rarity:"CRYSTAL ELITE", sellCrystal: 2400, incomeCrystal: 3.6, type:"crystal", skill:"ダメ軽減+25%、挑発" },
+  { emoji:"🔷✨", name:"蒼光導パスファサイト", rarity:"CRYSTAL ELITE", sellCrystal: 2600, incomeCrystal: 3.8, type:"crystal", skill:"光属性+120%、盲目付与" },
+  { emoji:"🔰💎", name:"護符核タリス・ノード", rarity:"CRYSTAL ELITE", sellCrystal: 2800, incomeCrystal: 4.2, type:"crystal", skill:"味方シールド+8%" },
+  { emoji:"🪬🔮", name:"祈導晶プリズム・セプター", rarity:"CRYSTAL ELITE", sellCrystal: 3000, incomeCrystal: 4.6, type:"crystal", skill:"支援効果延長+30%" },
+  { emoji:"💎🧲", name:"宝磁ゴーレム・ジェムポーラー", rarity:"CRYSTAL ELITE", sellCrystal: 3400, incomeCrystal: 5.0, type:"crystal", skill:"💎吸引+15%、ドロップ+5%" },
+
+  // ── CRYSTAL SUPER ──
+  { emoji:"💎🪓", name:"結晶戦斧カーヴドサイト", rarity:"CRYSTAL SUPER", sellCrystal: 9000, incomeCrystal: 12, type:"crystal", skill:"破砕+300%、装甲粉砕" },
+  { emoji:"💎🛡️", name:"晶壁城ガーディアン・バスト", rarity:"CRYSTAL SUPER", sellCrystal: 11000, incomeCrystal: 14, type:"crystal", skill:"防御+500%、範囲ガード" },
+  { emoji:"💎🌈", name:"虹晶柱スペクトラル・トーテム", rarity:"CRYSTAL SUPER", sellCrystal: 13000, incomeCrystal: 16, type:"crystal", skill:"全属性+200%、分光バフ" },
+  { emoji:"💎🌀", name:"渦晶核ボルテクサイト", rarity:"CRYSTAL SUPER", sellCrystal: 15000, incomeCrystal: 18, type:"crystal", skill:"範囲吸引、回転斬+400%" },
+  { emoji:"💎🧬", name:"生体晶バイオクリスト", rarity:"CRYSTAL SUPER", sellCrystal: 17000, incomeCrystal: 20, type:"crystal", skill:"再生+3%/秒、状態異常耐性+50%" },
+
+  // ── CRYSTAL LEGEND ──
+  { emoji:"💎👑", name:"王晶体ロイヤル・モノリス", rarity:"CRYSTAL LEGEND", sellCrystal: 40000, incomeCrystal: 45, type:"crystal", skill:"全体防御+20%、王命：即時シールド" },
+  { emoji:"💎🧘", name:"静謐核サイレント・ゼン", rarity:"CRYSTAL LEGEND", sellCrystal: 52000, incomeCrystal: 60, type:"crystal", skill:"ヘイト-50%、被ダメ時回復" },
+  { emoji:"💎🕯️", name:"聖灯晶ルーメン・ピラー", rarity:"CRYSTAL LEGEND", sellCrystal: 65000, incomeCrystal: 70, type:"crystal", skill:"祝福+300%、闇無効" },
+  { emoji:"💎🧿", name:"護法眼アミュレト・ゴーレム", rarity:"CRYSTAL LEGEND", sellCrystal: 80000, incomeCrystal: 85, type:"crystal", skill:"呪詛反射+100%、封印" },
+
+  // ── CRYSTAL ORIGIN ──
+  { emoji:"💎🌌👑", name:"創晶神プリマ・クリスタリア", rarity:"CRYSTAL ORIGIN", sellCrystal: 250000, incomeCrystal: 220, type:"crystal", skill:"全倍率+9999%、💎獲得×3" },
+  { emoji:"💎🪬🌈", name:"祈虹核アーク・タリスマティカ", rarity:"CRYSTAL GOD", sellCrystal: 180000, incomeCrystal: 180, type:"crystal", skill:"支援2倍延長、💎雨（確率）" },
+];
+
+const EARTH_STAR = [
+  // ── GEO RARE ──
+  { emoji:"🪨🌟", name:"原岩星グラニット・スター", rarity:"GEO RARE", sell: 1500000, type:"earth", skill:"岩場特効+80%、被ノックバック無効" },
+  { emoji:"🧭🌍", name:"地脈案内ジオガイド", rarity:"GEO RARE", sell: 1600000, type:"earth", skill:"地形視界+100%、索敵+30%" },
+  { emoji:"⛰️✨", name:"輝山の衛士ルミナ・ピーク", rarity:"GEO RARE", sell: 1700000, type:"earth", skill:"高所攻撃+120%、落下無効" },
+  { emoji:"🪨🌀", name:"礫渦ランブル・コーン", rarity:"GEO RARE", sell: 1800000, type:"earth", skill:"範囲吸引、岩弾+60%" },
+  { emoji:"🧱🌟", name:"星壁メイソン・バリア", rarity:"GEO RARE", sell: 1900000, type:"earth", skill:"壁生成、被ダメ-10%" },
+  // ── GEO ELITE ──
+  { emoji:"🪐🪨", name:"環土将サテライト・テラ", rarity:"GEO ELITE", sell: 5200000, type:"earth", skill:"衛星岩周回ダメ、ガード+25%" },
+  { emoji:"🧲🌏", name:"磁界王マグネタイト", rarity:"GEO ELITE", sell: 5600000, type:"earth", skill:"金属特効+120%、投射逸れ" },
+  { emoji:"🌋🌟", name:"火山星ヴォルカ・ノヴァ", rarity:"GEO ELITE", sell: 6000000, type:"earth", skill:"溶岩場展開、炎ダメ+300%" },
+  { emoji:"🌪️🪨", name:"砂塵将デューン・テンペスト", rarity:"GEO ELITE", sell: 6400000, type:"earth", skill:"視界減衰、出血+30%" },
+  { emoji:"🌊🪨", name:"海岸星タイド・ストーン", rarity:"GEO ELITE", sell: 6800000, type:"earth", skill:"潮汐強化、波打ち際で+200%" },
+  // ── GEO SUPER ──
+  { emoji:"🌑💫", name:"新月核ルナ・ベッドロック", rarity:"GEO SUPER", sell: 18000000, type:"earth", skill:"闇場強化、潮汐支配、眠り付与" },
+  { emoji:"🪐💥", name:"衝突星インパクター", rarity:"GEO SUPER", sell: 21000000, type:"earth", skill:"隕石落下+700%、スタン" },
+  { emoji:"🛰️🌍", name:"軌道守衛オービタル・ガード", rarity:"GEO SUPER", sell: 23000000, type:"earth", skill:"全体被遠隔-25%、反射+50%" },
+  { emoji:"🕳️🌟", name:"重力井戸グラビトン・コア", rarity:"GEO SUPER", sell: 26000000, type:"earth", skill:"移動-30%（敵）、与ダメ+250%" },
+  { emoji:"🧱🔥", name:"熔壁城バスチオン・マグマ", rarity:"GEO SUPER", sell: 30000000, type:"earth", skill:"防御+700%、接触炎上" },
+  // ── GEO LEGEND ──
+  { emoji:"🌍👑", name:"地球王ガイア・レックス", rarity:"GEO LEGEND", sell: 90000000, type:"earth", skill:"地形適応100%、全体守護+15%" },
+  { emoji:"🌟👼", name:"星護天使アストラ・セラフ", rarity:"GEO LEGEND", sell: 120000000, type:"earth", skill:"聖域化、回復+800%" },
+  { emoji:"🌏🧭", name:"極点支配ノースサウス", rarity:"GEO LEGEND", sell: 150000000, type:"earth", skill:"極域で全ステ+3000%" },
+  { emoji:"🌋👹", name:"灼王マグマ・デモロス", rarity:"GEO LEGEND", sell: 180000000, type:"earth", skill:"炎上領域、耐性無視+200%" },
+  // ── GEO GOD ──
+  { emoji:"🌏💫👑", name:"恒星創地神テラ・スター", rarity:"GEO GOD", sell: 420000000, type:"earth", skill:"全倍率+5000%、恒星輝きで恐慌" },
+  { emoji:"🪐🌌", name:"環宙皇サテュルヌス", rarity:"GEO GOD", sell: 650000000, type:"earth", skill:"周回バフ×3、宇宙場で+7000%" },
+  { emoji:"🕳️👑", name:"深重力王ブラック・モナーク", rarity:"GEO GOD", sell: 900000000, type:"earth", skill:"全敵引力、時間遅延x0.7" },
+  { emoji:"🌟🌏👑", name:"創星地母ガイア・オリジン", rarity:"GEO ORIGIN", sell: 1500000000, type:"earth", skill:"全ステ+9999%、地表改変" },
+];
+
+const TSUYU_MATSURI = [
+  // ── RAINY RARE ──
+  {
+    emoji:"🌧️👻", name:"小雨のユウレイ・ドリズル",
+    rarity:"RAINY RARE", sell:10000000000000000,
+    type:"tsuyu", skill:"回避+30%、雨天時HP回復+15%"
+  },
+  {
+    emoji:"☔🕷️", name:"蜘蛛傘オバケ・レインスパイダー",
+    rarity:"RAINY RARE", sell:12000000000000000,
+    type:"tsuyu", skill:"毒付与+40%、雨天特効+20%"
+  },
+  {
+    emoji:"🌂👁️", name:"透明雨傘の一つ目小僧",
+    rarity:"RAINY RARE", sell:14000000000000000,
+    type:"tsuyu", skill:"視界妨害+50%、ステルス付与"
+  },
+  {
+    emoji:"💧🐸", name:"雨呼びカエル・レインコーラー",
+    rarity:"RAINY RARE", sell:16000000000000000,
+    type:"tsuyu", skill:"LP獲得+30%、雨天収益+25%"
+  },
+  {
+    emoji:"⛈️🦎", name:"嵐蜥蜴ストームゲッコー",
+    rarity:"RAINY RARE", sell:18000000000000000,
+    type:"tsuyu", skill:"移動速度+45%、雷耐性100%"
+  },
+  // ── RAINY ELITE ──
+  {
+    emoji:"🌩️🧙", name:"雷雨魔導士サンダークレリック",
+    rarity:"RAINY ELITE", sell:40000000000000000,
+    type:"tsuyu", skill:"雷魔法ダメ+200%、全体感電"
+  },
+  {
+    emoji:"☔⚔️", name:"豪雨剣士ダウンポア・ブレード",
+    rarity:"RAINY ELITE", sell:55000000000000000,
+    type:"tsuyu", skill:"雨天時攻撃+300%、クリ率+25%"
+  },
+  {
+    emoji:"🌧️🤺", name:"梅雨の剣闘士レインファイター",
+    rarity:"RAINY ELITE", sell:70000000000000000,
+    type:"tsuyu", skill:"連続攻撃+3回、雨天特効+50%"
+  },
+  {
+    emoji:"💦👺", name:"水鬼ウォーター・オニ",
+    rarity:"RAINY ELITE", sell:90000000000000000,
+    type:"tsuyu", skill:"水属性全倍率+150%、溺れ付与"
+  },
+  {
+    emoji:"⛈️🥷", name:"嵐忍者ストーム・シノビ",
+    rarity:"RAINY ELITE", sell:120000000000000000,
+    type:"tsuyu", skill:"暗殺+500%、雨中完全ステルス"
+  },
+  // ── RAINY SUPER ──
+  {
+    emoji:"🌊🏯", name:"洪水城砦アクア・フォートレス",
+    rarity:"RAINY SUPER", sell:300000000000000000,
+    type:"tsuyu", skill:"防御+1000%、水属性バリア生成"
+  },
+  {
+    emoji:"🌩️👑", name:"雷帝ストームキング・ジオウ",
+    rarity:"RAINY SUPER", sell:500000000000000000,
+    type:"tsuyu", skill:"全体雷撃+800%、王者の雨"
+  },
+  {
+    emoji:"☔🤖", name:"防水サイバー戦士レインガード",
+    rarity:"RAINY SUPER", sell:700000000000000000,
+    type:"tsuyu", skill:"水・雷耐性無効化、反射+200%"
+  },
+  {
+    emoji:"💧🐲", name:"深雨龍ディープレイン・ワーム",
+    rarity:"RAINY SUPER", sell:900000000000000000,
+    type:"tsuyu", skill:"地中潜行+貫通攻撃+1200%"
+  },
+  // ── RAINY LEGEND ──
+  {
+    emoji:"🌧️👼", name:"梅雨天使ティアドロップ・セラフ",
+    rarity:"RAINY LEGEND", sell:2000000000000000000,
+    type:"tsuyu", skill:"味方全体回復+500%、聖雨祝福"
+  },
+  {
+    emoji:"⛈️🦹", name:"暴嵐魔将ハリケーン・ダークロード",
+    rarity:"RAINY LEGEND", sell:3500000000000000000,
+    type:"tsuyu", skill:"全属性+2000%、嵐の支配"
+  },
+  {
+    emoji:"🌊⚡👑", name:"天嵐皇ネプチューン・オーバーロード",
+    rarity:"RAINY LEGEND", sell:5000000000000000000,
+    type:"tsuyu", skill:"水・雷全倍率+5000%、全体ノックダウン"
+  },
+  {
+    emoji:"☔🌌🤴", name:"梅雨星界王プルヴィウス・レックス",
+    rarity:"RAINY LEGEND", sell:8000000000000000000,
+    type:"tsuyu", skill:"雨天中全ステータス+8000%"
+  },
+  // ── RAINY GOD ──
+  {
+    emoji:"🌧️💀👑", name:"大梅雨死神ポセイドン・カタストロフ",
+    rarity:"RAINY GOD", sell:15000000000000000000,
+    type:"tsuyu", skill:"全ダメージ+15000%、永続大雨フィールド"
+  },
+  {
+    emoji:"⛈️🧿🌌", name:"嵐眼神インフィニティ・サイクロン",
+    rarity:"RAINY GOD", sell:25000000000000000000,
+    type:"tsuyu", skill:"全倍率+20000%、嵐の眼で全敵無力化"
+  },
+  {
+    emoji:"💧☀️🌈", name:"梅雨晴れ神アマテラス・レイン",
+    rarity:"RAINY GOD", sell:40000000000000000000,
+    type:"tsuyu", skill:"全報酬+30000%、雨晴れ奇跡発動"
+  },
+  {
+    emoji:"🌊⛈️👼🌌", name:"超梅雨創造神ストーム・オリジン",
+    rarity:"TSUYU ORIGIN", sell:99999999999999999999,
+    type:"tsuyu", skill:"全ステータス+99999%、梅雨世界の支配者"
+  },
+];
+
+const RAINBOW_DRAGON = [
+  // ── 色ドラゴン（CHROMATIC RARE）──
+  {
+    emoji:"🔴🐉", name:"紅炎龍スカーレット・ブレイズ",
+    rarity:"CHROMATIC RARE", sell:10000000000000000,
+    type:"rainbow", skill:"炎ダメ+200%、燃焼永続付与"
+  },
+  {
+    emoji:"🟠🐉", name:"橙雷龍オーラ・サンダーラッシュ",
+    rarity:"CHROMATIC RARE", sell:12000000000000000,
+    type:"rainbow", skill:"雷速+250%、オレンジ閃光突進"
+  },
+  {
+    emoji:"🟡🐉", name:"黄金龍ゴールデン・ハーモニア",
+    rarity:"CHROMATIC RARE", sell:14000000000000000,
+    type:"rainbow", skill:"収益+200%、金属溶解攻撃"
+  },
+  {
+    emoji:"🟢🐉", name:"翠風龍エメラルド・ゲイル",
+    rarity:"CHROMATIC RARE", sell:16000000000000000,
+    type:"rainbow", skill:"回復+300%、毒無効・植物特効"
+  },
+  {
+    emoji:"🔵🐉", name:"蒼氷龍サファイア・グレイシャー",
+    rarity:"CHROMATIC RARE", sell:18000000000000000,
+    type:"rainbow", skill:"氷結+350%、水属性全吸収"
+  },
+  {
+    emoji:"🟣🐉", name:"紫魔龍アメジスト・ダークウィング",
+    rarity:"CHROMATIC RARE", sell:20000000000000000,
+    type:"rainbow", skill:"魔法反射+40%、呪縛付与"
+  },
+  {
+    emoji:"🩷🐉", name:"桃幻龍チェリーブロッサム・ミスト",
+    rarity:"CHROMATIC RARE", sell:22000000000000000,
+    type:"rainbow", skill:"幻惑+60%、魅了・混乱同時付与"
+  },
+  // ── スペシャルドラゴン（SPECIAL RARE / ELITE）──
+  {
+    emoji:"🌈🐉", name:"虹彩龍レインボー・クロマ",
+    rarity:"SPECTRUM ELITE", sell:80000000000000000,
+    type:"rainbow", skill:"全属性+300%、虹色オーラ展開"
+  },
+  {
+    emoji:"🌑🐉", name:"虚無龍ヴォイド・ブラック",
+    rarity:"SPECTRUM ELITE", sell:100000000000000000,
+    type:"rainbow", skill:"全デバフ無効、暗黒吸収+500%"
+  },
+  {
+    emoji:"⚪🐉", name:"聖白龍ホーリー・ブランク",
+    rarity:"SPECTRUM ELITE", sell:120000000000000000,
+    type:"rainbow", skill:"全バフ2倍延長、神聖ダメ+400%"
+  },
+  {
+    emoji:"✨🐉", name:"星屑龍スターダスト・クリスタリス",
+    rarity:"SPECTRUM ELITE", sell:150000000000000000,
+    type:"rainbow", skill:"クリ率100%、星光貫通+800%"
+  },
+  {
+    emoji:"🌀🐉", name:"渦巻龍サイクロン・スパイラリス",
+    rarity:"SPECTRUM ELITE", sell:180000000000000000,
+    type:"rainbow", skill:"広域竜巻+600%、全敵スタン"
+  },
+  // ── 役職ドラゴン（SUPER / LEGEND）──
+  {
+    emoji:"👑🐉📜", name:"竜王龍ドラゴニック・ロード",
+    rarity:"DRAGON KING", sell:350000000000000000,
+    type:"rainbow", skill:"竜系全倍率+500%、王令で全体バフ"
+  },
+  {
+    emoji:"⚔️🐉🛡️", name:"騎士龍ドラグナイト・フォルティス",
+    rarity:"DRAGON KNIGHT", sell:450000000000000000,
+    type:"rainbow", skill:"防御+800%・攻撃+800%同時発動"
+  },
+  {
+    emoji:"🧪🐉⚗️", name:"錬金龍アルケミ・ドレイク",
+    rarity:"DRAGON SAGE", sell:400000000000000000,
+    type:"rainbow", skill:"素材変換+999%、💎ドロップ+50%"
+  },
+  {
+    emoji:"🎭🐉🎪", name:"道化龍ジェスター・ドラグーン",
+    rarity:"DRAGON SAGE", sell:420000000000000000,
+    type:"rainbow", skill:"ランダム超バフ×5種同時"
+  },
+  {
+    emoji:"🏛️🐉⚖️", name:"審判龍ジャッジメント・ワーム",
+    rarity:"DRAGON SAGE", sell:480000000000000000,
+    type:"rainbow", skill:"全敵デバフ確定付与+敵防御0に"
+  },
+  {
+    emoji:"🔮🐉🌙", name:"予言龍プロフェシー・ムーンドレイク",
+    rarity:"DRAGON SAGE", sell:550000000000000000,
+    type:"rainbow", skill:"次攻撃クリ確定+先手必勝+200%"
+  },
+  {
+    emoji:"🏆🐉💎", name:"覇者龍チャンピオン・ダイヤドレイク",
+    rarity:"DRAGON LEGEND", sell:1200000000000000000,
+    type:"rainbow", skill:"全ボス特効+1500%、💎追加+5/戦"
+  },
+  {
+    emoji:"🌋🐉🔥", name:"噴火龍ヴォルカノ・インフェルナス",
+    rarity:"DRAGON LEGEND", sell:2000000000000000000,
+    type:"rainbow", skill:"フィールド全炎上+2000%、全地形特効"
+  },
+  {
+    emoji:"❄️🐉👑", name:"極寒龍エタニティ・フロスト・カイザー",
+    rarity:"DRAGON LEGEND", sell:3000000000000000000,
+    type:"rainbow", skill:"全属性吸収+2500%、永続凍結フィールド"
+  },
+  {
+    emoji:"🌈🐉👼✨", name:"聖虹龍オーロラ・セレスティアル",
+    rarity:"DRAGON LEGEND", sell:5000000000000000000,
+    type:"rainbow", skill:"全属性倍率+5000%、神聖虹ビーム"
+  },
+  // ── 頂点スペシャル ──
+  {
+    emoji:"🌈🐉🌌💎", name:"星虹龍コズミック・クロマドレイク",
+    rarity:"DRAGON SUPER LEGEND", sell:9000000000000000000,
+    type:"rainbow", skill:"全倍率+9999%、銀河虹砲即死級"
+  },
+  {
+    emoji:"👑🐉⚡🔥❄️", name:"属性皇龍オムニ・ドラゴニア",
+    rarity:"DRAGON EMPEROR", sell:15000000000000000000,
+    type:"rainbow", skill:"全属性+12000%、皇帝覇令全体支配"
+  },
+  {
+    emoji:"🌈💀🐉🌌👑", name:"終焉虹龍アポカリプス・クロマ",
+    rarity:"DRAGON GOD", sell:30000000000000000000,
+    type:"rainbow", skill:"全ダメ+25000%、虹の終末砲"
+  },
+  {
+    emoji:"✨🌈🐉🌠💫", name:"創世虹神ドラゴン・ビギニング",
+    rarity:"DRAGON ORIGIN", sell:50000000000000000000,
+    type:"rainbow", skill:"全ステータス+50000%、世界創生ビーム"
+  },
+  {
+    emoji:"🌈🌈🐉👑🌌", name:"超神虹皇ウルティマ・レインボー・ゼロ",
+    rarity:"RAINBOW GOD", sell:99000000000000000000,
+    type:"rainbow",
+    skill:"全倍率+99999%・全竜系+50000%・虹の意思で世界を塗り替える"
+  },
+  {
+    emoji:"🔴🟠🟡🟢🔵🟣🐉", name:"七色完全体 プリズマ・インフィニドラゴン",
+    rarity:"PRISM ABSOLUTE", sell:999000000000000000000,
+    type:"rainbow",
+    skill:"全色属性解放+100000%、存在するだけで世界が虹に染まる"
+  },
+];
+
+const TRIPLE_FOOD = [
+  // ── FOOD RARE ──
+  {
+    emoji:"🍕🍔🌮", name:"脂質帝ジャンクフード・トライアングル",
+    rarity:"FOOD RARE", sell:10000000000000000,
+    type:"food", skill:"攻撃+150%、敵を油まみれで鈍化+60%"
+  },
+  {
+    emoji:"🍣🦐🍱", name:"海鮮三重奏オーシャン・ベントウ",
+    rarity:"FOOD RARE", sell:12000000000000000,
+    type:"food", skill:"水属性+200%、HP回復+30%/ターン"
+  },
+  {
+    emoji:"🍩🎂🍫", name:"甘神スウィート・トリニティ",
+    rarity:"FOOD RARE", sell:14000000000000000,
+    type:"food", skill:"魅了確率+70%、全体バフ+100%"
+  },
+  {
+    emoji:"🌽🥦🥕", name:"野菜精霊ベジタブル・トリプレット",
+    rarity:"FOOD RARE", sell:16000000000000000,
+    type:"food", skill:"回復+250%、毒・状態異常全治癒"
+  },
+  {
+    emoji:"🍗🥩🌭", name:"肉食王ミートマスター・バーベキュー",
+    rarity:"FOOD RARE", sell:18000000000000000,
+    type:"food", skill:"物理ダメ+300%、肉ごと粉砕クリ+20%"
+  },
+  // ── FOOD ELITE ──
+  {
+    emoji:"🍜🍛🍝", name:"麺カレーパスタ三神ヌードル・カオス",
+    rarity:"FOOD ELITE", sell:60000000000000000,
+    type:"food", skill:"全体スロウ+50%、毎秒持続ダメ+400%"
+  },
+  {
+    emoji:"🍰🍦🧁", name:"洋菓子三冠パティシエ・エクセレント",
+    rarity:"FOOD ELITE", sell:80000000000000000,
+    type:"food", skill:"クリダメ+400%、甘言で敵全体混乱"
+  },
+  {
+    emoji:"🍺🥂🍸", name:"宴会三杯神パーティ・リカー・マスター",
+    rarity:"FOOD ELITE", sell:100000000000000000,
+    type:"food", skill:"全体狂乱付与、味方攻撃+500%同時"
+  },
+  {
+    emoji:"🌶️🧄🫚", name:"激辛三魔将スパイシー・デビル・ソース",
+    rarity:"FOOD ELITE", sell:120000000000000000,
+    type:"food", skill:"炎ダメ+600%、敵HP30%即時削減"
+  },
+  {
+    emoji:"🍓🫐🍇", name:"果実三霊ベリー・オーバーロード",
+    rarity:"FOOD ELITE", sell:150000000000000000,
+    type:"food", skill:"LP獲得+100%、回復量+800%"
+  },
+  // ── FOOD SUPER ──
+  {
+    emoji:"🍕🍣🍛", name:"世界三大料理神グルメ・トライアンフ",
+    rarity:"FOOD SUPER", sell:400000000000000000,
+    type:"food", skill:"全ダメ+1000%、食属性支配宣言"
+  },
+  {
+    emoji:"🎂🍕🥩", name:"宴神バンクウェット・グランドマスター",
+    rarity:"FOOD SUPER", sell:600000000000000000,
+    type:"food", skill:"報酬+1200%、全体祝宴バフ付与"
+  },
+  {
+    emoji:"🍜🍣🍕", name:"食文化帝国エンペラー・ガストロノーム",
+    rarity:"FOOD SUPER", sell:800000000000000000,
+    type:"food", skill:"全属性+1500%、食文化の覇者"
+  },
+  {
+    emoji:"🍫🌶️🧀", name:"禁断の三重奏フォービドゥン・フォンデュ",
+    rarity:"FOOD SUPER", sell:1000000000000000000,
+    type:"food", skill:"全敵溶解+2000%、デバフ確定3種"
+  },
+  // ── FOOD LEGEND ──
+  {
+    emoji:"🍕🌮🥩", name:"肉と穀の覇神カーニボア・サクリファイス",
+    rarity:"FOOD LEGEND", sell:2500000000000000000,
+    type:"food", skill:"物理全倍率+4000%、肉食特攻"
+  },
+  {
+    emoji:"🍣🍜🍱", name:"和食三聖ウマミ・サンクタム",
+    rarity:"FOOD LEGEND", sell:4000000000000000000,
+    type:"food", skill:"全体回復+3000%、うまみ波動+5000%"
+  },
+  {
+    emoji:"🎂🍰🍩", name:"甘界女王スウィート・クイーン・セレスタ",
+    rarity:"FOOD LEGEND", sell:6000000000000000000,
+    type:"food", skill:"全敵魅了確定+全体攻撃+6000%"
+  },
+  {
+    emoji:"🌶️🍕🍫", name:"背徳三魔食グルト・アビスダイン",
+    rarity:"FOOD LEGEND", sell:8000000000000000000,
+    type:"food", skill:"全ダメ+8000%、背徳バフで自傷反射"
+  },
+  // ── FOOD GOD ──
+  {
+    emoji:"🍕🍣🌮🍛🍜", name:"五大食文化神ペンタ・ガストロ・ロード",
+    rarity:"FOOD GOD", sell:18000000000000000000,
+    type:"food", skill:"全倍率+18000%、5属性食連携超必殺"
+  },
+  {
+    emoji:"🎂🍕🥩🌶️🍣", name:"美食世界皇フルコース・オーバーゴッド",
+    rarity:"FOOD GOD", sell:30000000000000000000,
+    type:"food", skill:"全ステータス+25000%、フルコース審判"
+  },
+  {
+    emoji:"🍕🍕🍕", name:"ピザ三位一体神 ウルティマ・ピッツァ・トリニタス",
+    rarity:"FOOD GOD", sell:50000000000000000000,
+    type:"food", skill:"全倍率+40000%、ピザ宇宙を具現化"
+  },
+  {
+    emoji:"🍕🍿🍔🌮🥩🍣", name:"六食具現神アブソリュート・フードゼロ",
+    rarity:"FOOD ORIGIN", sell:999000000000000000000,
+    type:"food",
+    skill:"全ステータス+999999%、食の概念で存在を塗り替える究極の一口"
+  },
+];
+
+/* ====== 鳥魚アルティメット ガチャプール ====== */
+const BIRD_FISH_ULTIMATE_POOL = [
+  // ── AQUA-AVIAN RARE ──
+  { emoji:"🐟🦆", name:"水面ハンター・フィッシュダック", rarity:"BF RARE", sell: 1200000000000000000000, type:"birdfish", skill:"水場攻撃+120%、飛行特効+20%" },
+  { emoji:"🦆💧", name:"滴翔アヒル・ドロップ", rarity:"BF RARE", sell: 1400000000000000000000, type:"birdfish", skill:"回避+12%、被弾時回復1%" },
+  { emoji:"🐠🌬️", name:"風切りフィン・ジェット", rarity:"BF RARE", sell: 1600000000000000000000, type:"birdfish", skill:"移動+30%、ノックバック小" },
+  { emoji:"🪿🌊", name:"浪渡りガチョウ・サーフ", rarity:"BF RARE", sell: 1800000000000000000000, type:"birdfish", skill:"波打際ダメ+80%" },
+  { emoji:"🐡☁️", name:"雲間フグ・パフ", rarity:"BF RARE", sell: 2000000000000000000000, type:"birdfish", skill:"膨張ガード、鈍足付与" },
+
+  // ── AQUA-AVIAN ELITE ──
+  { emoji:"🦈🦅", name:"猛撃サメイーグル", rarity:"BF ELITE", sell: 9000000000000000000000, type:"birdfish", skill:"突進+400%、クリ率+20%" },
+  { emoji:"🐟⚡", name:"雷鱗スパーク・フィッシュ", rarity:"BF ELITE", sell: 12000000000000000000000, type:"birdfish", skill:"感電付与、与ダメ+150%" },
+  { emoji:"🦢❄️", name:"氷羽スワン・グレイス", rarity:"BF ELITE", sell: 15000000000000000000000, type:"birdfish", skill:"凍結耐性100%、氷場強化" },
+  { emoji:"🐬🎯", name:"照準ドルフィン・アーチャー", rarity:"BF ELITE", sell: 18000000000000000000000, type:"birdfish", skill:"命中+25%、弱点露出" },
+  { emoji:"🦜🌈", name:"虹翼パロット・タイド", rarity:"BF ELITE", sell: 20000000000000000000000, type:"birdfish", skill:"多属性+120%、祝福延長" },
+
+  // ── AQUA-AVIAN SUPER ──
+  { emoji:"🐳🛡️", name:"潮壁クジラ・バスチオン", rarity:"BF SUPER", sell: 70000000000000000000000, type:"birdfish", skill:"防御+900%、範囲ガード" },
+  { emoji:"🦅🔥", name:"焔翼ホーク・インフェルノ", rarity:"BF SUPER", sell: 100000000000000000000000, type:"birdfish", skill:"燃焼+500%、火場強化" },
+  { emoji:"🐟🌀", name:"渦心マグロ・サイクロン", rarity:"BF SUPER", sell: 130000000000000000000000, type:"birdfish", skill:"範囲吸引、回転斬+600%" },
+  { emoji:"🦆🌪️", name:"白嵐ダック・テンペスト", rarity:"BF SUPER", sell: 160000000000000000000000, type:"birdfish", skill:"全体スロウ+50%、空中制圧" },
+
+  // ── AQUA-AVIAN LEGEND ──
+  { emoji:"🐉🦢", name:"聖鱗竜スワンドレイク", rarity:"BF LEGEND", sell: 500000000000000000000000, type:"birdfish", skill:"全倍率+2500%、浄化" },
+  { emoji:"🐟👑", name:"海皇魚レガリア", rarity:"BF LEGEND", sell: 800000000000000000000000, type:"birdfish", skill:"報酬+4000%、王令強化" },
+  { emoji:"🦅👑", name:"天空王アクア・ファルクス", rarity:"BF LEGEND", sell: 1200000000000000000000000, type:"birdfish", skill:"ボス特効+1200%、先制" },
+
+  // ── AQUA-AVIAN GOD ──
+  { emoji:"🌊👑🐦", name:"潮天帝オケアノス・アヴィウス", rarity:"BF GOD", sell: 4000000000000000000000000, type:"birdfish", skill:"全ダメ+15000%、天候-潮流支配" },
+  { emoji:"🌫️💀🐠", name:"霧骸神ネビュラ・アングラー", rarity:"BF GOD", sell: 7000000000000000000000000, type:"birdfish", skill:"全属性+20000%、視界喪失" },
+
+  // ── AQUA-AVIAN ORIGIN ──
+  { emoji:"🌌🌈🐟🦆", name:"創潮白翼神 バシレウス・マリンセレス", rarity:"BF ORIGIN", sell: 99999999999999999999999999, type:"birdfish", skill:"全ステ+99999%、海空の概念を書き換える" }
+];
+
+/* ====== プリン無双ガチャプール ====== */
+const PUDDING_POOL = [
+  // ── PUDDING RARE ──
+  {
+    emoji:"🍮✨", name:"黄金プリンの守護者・カスタード",
+    rarity:"PUDDING RARE", sell:1000000000000000000000000000,
+    type:"pudding", skill:"甘味オーラ+100%、カラメル爆撃+200%"
+  },
+  {
+    emoji:"🍮🌀", name:"渦巻きプリン・スパイラロン",
+    rarity:"PUDDING RARE", sell:1500000000000000000000000000,
+    type:"pudding", skill:"回転斬+300%、甘味フィールド展開"
+  },
+  {
+    emoji:"🍮⚡", name:"雷鳴カスタード・サンダープリン",
+    rarity:"PUDDING RARE", sell:2000000000000000000000000000,
+    type:"pudding", skill:"雷甘味+400%、感電付与確率+50%"
+  },
+  {
+    emoji:"🍮❄️", name:"氷結プリン・フロストカスタード",
+    rarity:"PUDDING RARE", sell:2500000000000000000000000000,
+    type:"pudding", skill:"凍結付与+500%、氷属性全吸収"
+  },
+  {
+    emoji:"🍮🔥", name:"炎上プリン・インフェルノカスタード",
+    rarity:"PUDDING RARE", sell:3000000000000000000000000000,
+    type:"pudding", skill:"燃焼+600%、灼熱カラメル爆発"
+  },
+  {
+    emoji:"🍮🌊", name:"海流プリン・オーシャンカスタード",
+    rarity:"PUDDING RARE", sell:3500000000000000000000000000,
+    type:"pudding", skill:"水属性+700%、津波カラメル"
+  },
+  {
+    emoji:"🍮🌿", name:"森精プリン・ナチュラルカスタード",
+    rarity:"PUDDING RARE", sell:4000000000000000000000000000,
+    type:"pudding", skill:"自然属性+800%、毒無効・回復+200%"
+  },
+
+  // ── PUDDING ELITE ──
+  {
+    emoji:"🍮👑", name:"王冠プリン・ロイヤルカスタード",
+    rarity:"PUDDING ELITE", sell:12000000000000000000000000000,
+    type:"pudding", skill:"全体バフ+500%、王令即時発動"
+  },
+  {
+    emoji:"🍮🌌", name:"星間プリン・コズミックカスタード",
+    rarity:"PUDDING ELITE", sell:16000000000000000000000000000,
+    type:"pudding", skill:"宇宙属性+1000%、銀河甘味砲"
+  },
+  {
+    emoji:"🍮🐉", name:"竜牙プリン・ドラゴンカスタード",
+    rarity:"PUDDING ELITE", sell:20000000000000000000000000000,
+    type:"pudding", skill:"竜系倍率+1200%、竜炎カラメル"
+  },
+  {
+    emoji:"🍮⚔️", name:"戦士プリン・バトルカスタード",
+    rarity:"PUDDING ELITE", sell:24000000000000000000000000000,
+    type:"pudding", skill:"物理全倍率+1500%、連続斬+5回"
+  },
+  {
+    emoji:"🍮🔮", name:"予言プリン・オラクルカスタード",
+    rarity:"PUDDING ELITE", sell:28000000000000000000000000000,
+    type:"pudding", skill:"次攻撃クリ確定、行動予知+300%"
+  },
+
+  // ── PUDDING SUPER ──
+  {
+    emoji:"🍮🌠", name:"流星プリン・メテオカスタード",
+    rarity:"PUDDING SUPER", sell:80000000000000000000000000000,
+    type:"pudding", skill:"隕石落下+3000%、スタン確定付与"
+  },
+  {
+    emoji:"🍮💎", name:"結晶プリン・ダイヤカスタード",
+    rarity:"PUDDING SUPER", sell:120000000000000000000000000000,
+    type:"pudding", skill:"💎獲得×10、全属性+2000%"
+  },
+  {
+    emoji:"🍮🌋", name:"噴火プリン・ヴォルカノカスタード",
+    rarity:"PUDDING SUPER", sell:160000000000000000000000000000,
+    type:"pudding", skill:"溶岩フィールド展開、炎上+5000%"
+  },
+  {
+    emoji:"🍮🦁", name:"獅王プリン・レオカスタード",
+    rarity:"PUDDING SUPER", sell:200000000000000000000000000000,
+    type:"pudding", skill:"物理覇者+4000%、吠え声全体スタン"
+  },
+
+  // ── PUDDING LEGEND ──
+  {
+    emoji:"🍮👼", name:"天使プリン・セラフカスタード",
+    rarity:"PUDDING LEGEND", sell:600000000000000000000000000000,
+    type:"pudding", skill:"全体回復+8000%、聖甘域展開"
+  },
+  {
+    emoji:"🍮💀", name:"死神プリン・ネクロカスタード",
+    rarity:"PUDDING LEGEND", sell:900000000000000000000000000000,
+    type:"pudding", skill:"即死確率+30%、黄泉カラメル永続"
+  },
+  {
+    emoji:"🍮🌈", name:"虹色プリン・プリズムカスタード",
+    rarity:"PUDDING LEGEND", sell:1200000000000000000000000000000,
+    type:"pudding", skill:"全属性倍率+10000%、虹甘味砲"
+  },
+  {
+    emoji:"🍮⚡👑", name:"雷帝プリン・サンダーカイザー",
+    rarity:"PUDDING LEGEND", sell:1800000000000000000000000000000,
+    type:"pudding", skill:"全体感電確定+全倍率+12000%"
+  },
+
+  // ── PUDDING GOD ──
+  {
+    emoji:"🍮🌌💀", name:"滅星プリン・アポカリプスカスタード",
+    rarity:"PUDDING GOD", sell:6000000000000000000000000000000,
+    type:"pudding", skill:"全ダメ+30000%、星滅甘味砲"
+  },
+  {
+    emoji:"🍮🔱👑", name:"覇神プリン・トライデントカスタード",
+    rarity:"PUDDING GOD", sell:10000000000000000000000000000000,
+    type:"pudding", skill:"全倍率+50000%、三叉甘味覇道"
+  },
+
+  // ── PUDDING ORIGIN ──
+  {
+    emoji:"🍮🔱🌌👑✨", name:"創世無双神プリン・アブソリュートカスタード・ゼロ",
+    rarity:"PUDDING ORIGIN", sell:999999999999999999999999999999,
+    type:"pudding", skill:"全ステータス+99999%・プリンの概念で宇宙を塗り替える究極の甘味"
+  },
+];
+
+/* ====== プリン無双ガチャ関数 ====== */
+// 1穣円 = 1e28
+const PUDDING_PRICE = 1e28;
+
+function puddingGacha() {
+  return gacha(PUDDING_POOL, {
+    priceMoney: PUDDING_PRICE,
+    effects: [puddingEffect]
+  });
 }
 
-function trade_open(charIdx) {
-  const char = GAME.owned[charIdx];
-  if (!char) return;
-  TRADE.targetChar = JSON.parse(JSON.stringify(char));
-  TRADE.targetIdx  = charIdx;
-  document.getElementById('tv-menu-status').innerText =
-    `交換するキャラ：${char.emoji} ${char.name}（${char.rarity}）`;
-  trade_showView('tv-menu');
-  document.getElementById('tradeModal').classList.add('active');
-}
+function puddingEffect() {
+  // カラメル色フラッシュ
+  const flash = document.createElement('div');
+  flash.style.cssText = `
+    position:fixed; inset:0; pointer-events:none; z-index:99995;
+    background: radial-gradient(circle, rgba(255,180,0,0.9) 0%, rgba(180,80,0,0.5) 40%, transparent 80%);
+    animation: puddingFlashAnim 1.5s forwards;
+  `;
+  document.body.appendChild(flash);
 
-function trade_close() {
-  trade_abortScan();
-  clearInterval(TRADE.countdown);
-  document.getElementById('tradeModal').classList.remove('active');
-  TRADE.targetChar = null;
-  TRADE.targetIdx  = null;
-}
-
-/* ---------- 1人目：QR生成 ---------- */
-function trade_startP1() {
-  if (!TRADE.targetChar) return;
-
-  // インベントリから除去
-  const idx = TRADE.targetIdx;
-  if (idx !== null && GAME.owned[idx]) {
-    GAME.owned.splice(idx, 1);
-    addLog(`🔄 交換に出した ▶ ${TRADE.targetChar.name}`);
-    updateUI();
+  // アニメーション定義（一度だけ追加）
+  if (!document.getElementById('puddingStyle')) {
+    const style = document.createElement('style');
+    style.id = 'puddingStyle';
+    style.textContent = `
+      @keyframes puddingFlashAnim {
+        0%   { opacity:0; transform:scale(0.5); }
+        40%  { opacity:1; transform:scale(1.1); }
+        100% { opacity:0; transform:scale(2); }
+      }
+      @keyframes puddingFall {
+        0%   { opacity:0; transform:translateY(-80px) scale(0.5) rotate(0deg); }
+        15%  { opacity:1; }
+        100% { opacity:0; transform:translateY(120vh) translateX(var(--pdrift)) scale(1.8) rotate(360deg); }
+      }
+    `;
+    document.head.appendChild(style);
   }
 
-  const payload = {
-    sender:   TRADE.myPlayerId,
-    charId:   TRADE.targetChar.id ?? TRADE.targetChar.name,
-    charName: TRADE.targetChar.name,
-    emoji:    TRADE.targetChar.emoji,
-    rarity:   TRADE.targetChar.rarity,
-    sell:     TRADE.targetChar.sell,
-    skill:    TRADE.targetChar.skill ?? '',
-    type:     TRADE.targetChar.type  ?? '',
-    ts:       Date.now(),
-  };
+  setTimeout(() => flash.remove(), 1500);
 
-  document.getElementById('tradeQRBox').innerHTML = '';
-  new QRCode(document.getElementById('tradeQRBox'), {
-    text:   JSON.stringify(payload),
-    width:  220,
-    height: 220,
-  });
-  trade_showView('tv-p1-send');
+  // プリン🍮を80個ばらまく
+  for (let i = 0; i < 80; i++) {
+    const p = document.createElement('div');
+    p.textContent = '🍮';
+    p.style.cssText = `
+      position:fixed; pointer-events:none; z-index:99996;
+      font-size:${18 + Math.random() * 22}px;
+      left:${Math.random() * 100}vw;
+      top:-60px;
+      filter: drop-shadow(0 0 6px rgba(255,180,0,0.9)) drop-shadow(0 0 18px rgba(220,100,0,0.7));
+      animation: puddingFall ${1.5 + Math.random() * 2.5}s linear forwards;
+    `;
+    p.style.setProperty('--pdrift', (Math.random() * 300 - 150) + 'px');
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 4200);
+  }
+
+  // カラメル色でボディを一瞬染める
+  document.body.style.filter = 'sepia(0.8) saturate(2) brightness(1.2)';
+  setTimeout(() => { document.body.style.filter = ''; }, 800);
 }
 
-/* ---------- 1人目：相手のQRを読む ---------- */
-function trade_p1Next() {
-  document.getElementById('tv-scan-label').innerText =
-    '2人目の画面のQRコードを読み取ってください';
-  trade_showView('tv-scan');
+// 鳥魚アルティメット（100穣円 = 1e28）
+const BIRD_FISH_ULTIMATE_PRICE = 1e28;
 
-  trade_initScan(text => {
-    let data;
-    try { data = JSON.parse(text); } catch { alert('QRの読み取りに失敗しました'); return false; }
-    if (data.sender === TRADE.myPlayerId) { alert('エラー：自分のQRは読み込めません'); return false; }
-
-    const received = {
-      id:     data.charId,
-      name:   data.charName,
-      emoji:  data.emoji,
-      rarity: data.rarity,
-      sell:   Number(data.sell),
-      skill:  data.skill  ?? '',
-      type:   data.type   ?? '',
-    };
-    obtain(received);
-    addLog(`🔄 交換完了 ▶ ${received.name} を入手`);
-    trade_close();
-    alert(`交換成功！\n${received.emoji} ${received.name} を入手しました！`);
-    return true;
+function birdFishUltimateGacha() {
+  return gacha(BIRD_FISH_ULTIMATE_POOL, {
+    priceMoney: BIRD_FISH_ULTIMATE_PRICE,
+    effects: [birdFishSplashEffect]
   });
 }
 
-/* ---------- 2人目：相手QRを読んで自分のを表示 ---------- */
-function trade_startP2Scan() {
-  document.getElementById('tv-scan-label').innerText =
-    '1人目の画面のQRコードを読み取ってください';
-  trade_showView('tv-scan');
+// 演出：水しぶき＋白羽が舞う
+function birdFishSplashEffect() {
+  // 水しぶき
+  const splash = document.createElement('div');
+  splash.style.cssText = `
+    position:fixed; inset:0; pointer-events:none; z-index:99992;
+    background: radial-gradient(circle at 50% 70%, rgba(150,200,255,0.45) 0%, rgba(150,200,255,0.15) 35%, transparent 60%);
+    animation: bf_splash 0.8s ease-out forwards;
+  `;
+  document.body.appendChild(splash);
 
-  trade_initScan(text => {
-    let partnerData;
-    try { partnerData = JSON.parse(text); } catch { alert('QRの読み取りに失敗'); return false; }
+  // 羽と水滴
+  for (let i = 0; i < 60; i++) {
+    const d = document.createElement('div');
+    d.textContent = Math.random() < 0.5 ? '🪽' : '💧';
+    d.style.cssText = `
+      position:fixed; left:${Math.random()*100}vw; top:-40px;
+      font-size:${12 + Math.random()*20}px; z-index:99993; pointer-events:none;
+      filter: drop-shadow(0 0 6px rgba(120,180,255,0.8));
+      animation: bf_fall ${1.2 + Math.random()*1.4}s linear forwards;
+    `;
+    d.style.setProperty('--dx', (Math.random()*240 - 120) + 'px');
+    document.body.appendChild(d);
+    setTimeout(()=>d.remove(), 2600);
+  }
 
-    const received = {
-      id:     partnerData.charId,
-      name:   partnerData.charName,
-      emoji:  partnerData.emoji,
-      rarity: partnerData.rarity,
-      sell:   Number(partnerData.sell),
-      skill:  partnerData.skill ?? '',
-      type:   partnerData.type  ?? '',
-    };
-    obtain(received);
-    addLog(`🔄 交換：相手キャラ入手 ▶ ${received.name}`);
-
-    // 自分のキャラを除去（name で再検索してインデックスずれに対応）
-    if (TRADE.targetChar) {
-      const rmIdx = GAME.owned.findIndex(c => c.name === TRADE.targetChar.name);
-      if (rmIdx !== -1) {
-        GAME.owned.splice(rmIdx, 1);
+  if (!document.getElementById('bf_fx_style')) {
+    const st = document.createElement('style');
+    st.id = 'bf_fx_style';
+    st.textContent = `
+      @keyframes bf_splash {
+        0% { opacity:0; transform:scale(0.9); }
+        40% { opacity:1; transform:scale(1.02); }
+        100% { opacity:0; transform:scale(1.4); }
       }
-      addLog(`🔄 交換に出した ▶ ${TRADE.targetChar.name}`);
-      updateUI();
-    }
-
-    const myPayload = {
-      sender:   TRADE.myPlayerId,
-      charId:   TRADE.targetChar ? (TRADE.targetChar.id ?? TRADE.targetChar.name) : '',
-      charName: TRADE.targetChar ? TRADE.targetChar.name  : '',
-      emoji:    TRADE.targetChar ? TRADE.targetChar.emoji  : '',
-      rarity:   TRADE.targetChar ? TRADE.targetChar.rarity : '',
-      sell:     TRADE.targetChar ? TRADE.targetChar.sell   : 0,
-      skill:    TRADE.targetChar ? (TRADE.targetChar.skill ?? '') : '',
-      type:     TRADE.targetChar ? (TRADE.targetChar.type  ?? '') : '',
-      ts:       Date.now(),
-    };
-
-    document.getElementById('tradeQRBoxP2').innerHTML = '';
-    new QRCode(document.getElementById('tradeQRBoxP2'), {
-      text:   JSON.stringify(myPayload),
-      width:  220,
-      height: 220,
-    });
-    trade_showView('tv-p2-reply');
-
-    // 30秒カウントダウン
-    let left = 30;
-    document.getElementById('tv-countdown').innerText = left;
-    clearInterval(TRADE.countdown);
-    TRADE.countdown = setInterval(() => {
-      left--;
-      document.getElementById('tv-countdown').innerText = left;
-      if (left <= 0) { clearInterval(TRADE.countdown); trade_close(); }
-    }, 1000);
-
-    return true;
-  });
-}
-
-/* ---------- カメラスキャン共通 ---------- */
-function trade_initScan(onSuccess) {
-  if (TRADE.scanner) { TRADE.scanner.clear().catch(() => {}); TRADE.scanner = null; }
-
-  TRADE.scanner = new Html5Qrcode('tradeReader');
-  TRADE.scanner.start(
-    { facingMode: 'environment' },
-    { fps: 10, qrbox: { width: 240, height: 240 } },
-    decodedText => {
-      TRADE.scanner.stop().then(() => {
-        TRADE.scanner = null;
-        onSuccess(decodedText);
-      }).catch(e => console.error(e));
-    },
-    () => {}
-  ).catch(() => {
-    alert('カメラの起動に失敗しました。ブラウザのカメラ権限を確認してください。');
-    trade_showView('tv-menu');
-  });
-}
-
-function trade_abortScan() {
-  if (TRADE.scanner) { TRADE.scanner.stop().catch(() => {}); TRADE.scanner = null; }
-}
-
-/* ---------- renderInventory 上書き
-   ※ DOMContentLoaded 後に実行されるので元関数は確実に存在する ---------- */
-document.addEventListener('DOMContentLoaded', () => {
-  // 元の renderInventory を保持
-  const _origRenderInventory = window.renderInventory;
-
-  window.renderInventory = function () {
-    // 元の描画をまず呼ぶ
-    _origRenderInventory();
-
-    // 交換ボタンを追加
-    const box = document.getElementById('inventory');
-    Array.from(box.children).forEach((div, revIdx) => {
-      // reversed 配列と同じ順序で originalIdx を復元
-      const totalLen = GAME.owned.length;
-      const originalIdx = totalLen - 1 - revIdx;
-
-      // すでに sellRow があれば再利用、なければ作成
-      let sellRow = div.querySelector('.sellRow');
-      if (!sellRow) {
-        const sellBtn = div.querySelector('.sellBtn');
-        if (!sellBtn) return;
-        sellRow = document.createElement('div');
-        sellRow.className = 'sellRow';
-        sellBtn.parentNode.insertBefore(sellRow, sellBtn);
-        sellRow.appendChild(sellBtn);
-        sellBtn.classList.add('sellBtn'); // クラス維持
+      @keyframes bf_fall {
+        0% { opacity:0; transform:translate(0,-60px) }
+        10% { opacity:1; }
+        100% { opacity:0; transform:translate(var(--dx), 110vh) rotate(360deg) }
       }
+    `;
+    document.head.appendChild(st);
+  }
 
-      // 既存の交換ボタンを除去してから再生成（二重追加防止）
-      const oldTrade = sellRow.querySelector('.tradeCardBtn');
-      if (oldTrade) oldTrade.remove();
+  setTimeout(()=>splash.remove(), 900);
+}
+  
+function earthStarGacha(){
+  return gacha(EARTH_STAR, {
+    priceCrystal: 4000,
+    effects: [quakeRumble, orbitSweep, gravityWell, starlightBloom]
+  });
+}
 
-      const tradeBtn = document.createElement('button');
-      tradeBtn.className = 'tradeCardBtn';
-      tradeBtn.textContent = '🔄 交換';
-      tradeBtn.addEventListener('click', () => trade_open(originalIdx));
-      sellRow.appendChild(tradeBtn);
+function crystalGolemGacha(){
+  return gacha(CRYSTAL_GOLEM, {
+    priceCrystal: 4000,
+    effects: [crystalSpawn, prismShine, shatterPulse, gemRain]
+  });
+}
+
+function roboWarriorGacha(){
+  return gacha(ROBO_WARRIOR, {
+    priceCrystal: 4000,
+    effects: [roboBootUp, chainClash, overdriveFlash, empBurst]
+  });
+}
+
+
+let miniBoss=null;
+let miniBossHP=0;
+let miniBossMax=0;
+let miniCombo=0;
+
+let ALL_MOON_CHARACTERS=[];
+
+function buildMoonPool(){
+  ALL_MOON_CHARACTERS = [
+    ...CHARACTERS,
+    ...DIMENSION_CHARACTERS,
+    ...ANIMAL_ARMY,
+    ...FAIRY_POOL,
+    ...ROBOT_PET_POOL,
+    ...TENGOKU_GACHA,
+    ...TRIPLE_FOOD,
+    ...RAINBOW_DRAGON,
+    ...TSUYU_MATSURI,
+    ...EARTH_STAR,
+    ...ROBO_WARRIOR,
+  ];
+
+  Object.values(MONTH_EVENT_POOLS)
+    .flat()
+    .forEach(c=>{
+      ALL_MOON_CHARACTERS.push(c);
     });
-  };
+}
+
+function refreshMoonRoad(){
+
+GAME.moonRoad=[];
+
+for(let i=0;i<5;i++){
+
+const char=
+JSON.parse(JSON.stringify(
+ALL_MOON_CHARACTERS[
+Math.floor(
+Math.random()*ALL_MOON_CHARACTERS.length
+)
+]
+));
+
+GAME.moonRoad.push(char);
+
+}
+
+GAME.lastMoonRefresh=Date.now();
+
+renderMoonRoad();
+
+save();
+
+}
+
+function renderMoonRoad(){
+
+const box=
+document.getElementById("moonRoadShop");
+
+if(!box)return;
+
+box.innerHTML="";
+
+GAME.moonRoad.forEach((c,index)=>{
+
+const price=c.sell*10;
+
+const div=document.createElement("div");
+
+div.className="card";
+
+div.innerHTML=`
+<div class="emoji">${c.emoji}</div>
+<div class="name">${c.name}</div>
+<div class="rarity">${c.rarity}</div>
+<div class="sell">${format(price)}</div>
+<button class="sellBtn">
+購入
+</button>
+`;
+
+div
+.querySelector("button")
+.onclick=()=>buyMoonCharacter(index);
+
+box.appendChild(div);
+
 });
+
+}
+
+function buyMoonCharacter(index){
+
+const c=GAME.moonRoad[index];
+
+if(!c)return;
+
+const price=c.sell*10;
+
+if(GAME.money<price){
+alert("お金不足");
+return;
+}
+
+if(GAME.owned.length>=GAME.baseCap){
+alert("基地容量不足");
+return;
+}
+
+GAME.money-=price;
+
+obtain(
+JSON.parse(JSON.stringify(c))
+);
+
+GAME.moonRoad.splice(index,1);
+
+renderMoonRoad();
+
+updateUI();
+
+}
+
+function updateMoonRoad(){
+
+const remain=
+900000-
+(Date.now()-GAME.lastMoonRefresh);
+
+if(remain<=0){
+
+refreshMoonRoad();
+
+}
+
+const t=
+document.getElementById(
+"moonRoadTimer"
+);
+
+if(t){
+
+t.innerText=
+"次回更新 "+
+Math.max(
+0,
+Math.ceil(remain/1000)
+)+"秒";
+
+}
+
+}
+  
+let bossHP = 0;
+let bossMax = 0;
+let bossKill = 0;
+let seasonCount = 0;
+let boost = false;
+let currentBoss = null;  // スポーン中のボス情報
+let lastSpawnSlotKey = ''; // 直近スポーンスロット識別（1時間に1体制御用）
+let bossNoEscape = 0;
+
+/* ====== 永続化 ====== */
+function save(){ localStorage.setItem('CYBER_EMOJI_CORE_SAVE_V2', JSON.stringify(GAME)); }
+function load(){
+  const data = localStorage.getItem('CYBER_EMOJI_CORE_SAVE_V2');
+  if(!data) return;
+  try{
+    const obj = JSON.parse(data);
+    Object.assign(GAME, obj);
+  }catch(e){ console.warn('save broken'); }
+}
+
+/* ====== ユーティリティ ====== */
+function format(n){ return '¥'+Number(n).toLocaleString(); }
+function addLog(t){ GAME.logs.push('['+new Date().toLocaleTimeString()+'] '+t); renderLogs(); save(); }
+
+/* ====== タブ ====== */
+function activateTab(tabId){
+  document.querySelectorAll('.tabBtn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.tab === tabId);
+  });
+  document.querySelectorAll('.panel').forEach(p=>{
+    p.classList.toggle('active', p.id === tabId);
+  });
+}
+function tabsInit(){
+  document.querySelectorAll('.tabBtn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const id = btn.dataset.tab;
+      activateTab(id);
+      history.replaceState(null,'','#'+id);
+    }, {passive:true});
+  });
+  const hash = (location.hash || '').replace('#','');
+  const defaultTab = (hash && document.getElementById(hash) ? hash :
+                      (document.querySelector('.tabBtn.active')?.dataset.tab) || 'home');
+  activateTab(defaultTab);
+}
+
 
 /* ====== UI更新 ====== */
 function updateUI(){
