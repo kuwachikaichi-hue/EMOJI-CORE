@@ -502,6 +502,35 @@ transform:scale(2);
 <main>
   <section class="panel active" id="home">
     <div class="section">
+  <!-- ===== 広告バー ここから ===== -->
+<div id="adBar" style="
+  margin-bottom: 12px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(0,229,255,0.25);
+  background: linear-gradient(135deg, #0a1a2e, #0d2040);
+  box-shadow: 0 0 14px rgba(0,229,255,0.12);
+  position: relative;
+">
+  <div id="adContent" style="
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: opacity 0.35s ease;
+    line-height: 1.5;
+  "></div>
+  <div style="
+    position: absolute; right: 8px; top: 5px;
+    font-size: 9px; color: rgba(255,255,255,0.3); letter-spacing: 1px;
+  ">AD</div>
+</div>
+<!-- ===== 広告バー ここまで ===== -->
+
   <div class="title">⚡ CYBER EMOJI CORE</div>
   <div class="small">ネオン放置型インフレガチャゲーム</div>
 
@@ -771,6 +800,47 @@ onclick="buyDiamondMoney()">
 
 <script>
 
+/* ===== 広告バー設定 =====
+   ↓ここの AD_LIST を編集して広告を追加・変更できます↓ */
+const AD_LIST = [
+  { icon: "🎉", text: "新ガチャ「新領域ガチャ」登場！EZ100個で引けるぞ！" },
+  { icon: "🪙", text: "エモズー硬貨で新領域ガチャを解放せよ！キャラ3体→EZ1枚" },
+  { icon: "💎", text: "ダイヤルームで30分ごとに💎5がもらえるよ！こまめに回収しよう" },
+  { icon: "⚔️", text: "ボスレイドで強制出現コマンド使えば、いつでもボスが現れる！" },
+  { icon: "📰", text: "公式ブログを毎日チェック！最新アップデート情報をお届け中！" },
+  { icon: "🌌", text: "天獄ガチャは💎1000！天獄神アストラ・ゼロを目指せ！" },
+  { icon: "🍮", text: "プリン無双ガチャ爆誕！創世無双神プリンが宇宙を塗り替える！" },
+  { icon: "🌈", text: "レインボードラゴンガチャで虹神ウルティマを狙え！" },
+  { icon: "🏆", text: "ランクタブで実力を証明！♾️ランクを目指して挑戦しよう！" },
+  { icon: "🌕", text: "ムーンロードで限定キャラを購入できる！15分ごとに更新！" },
+];
+/* ↑ここまでが広告リスト。追記・削除・編集OK↑ */
+
+(function startAdRotation() {
+  let adIndex = 0;
+
+  function showAd() {
+    const bar = document.getElementById("adContent");
+    if (!bar) return;
+
+    // フェードアウト
+    bar.style.opacity = "0";
+
+    setTimeout(() => {
+      const ad = AD_LIST[adIndex % AD_LIST.length];
+      bar.innerHTML = `<span style="font-size:18px">${ad.icon}</span><span style="color:rgba(0,229,255,0.95)">${ad.text}</span>`;
+      bar.style.opacity = "1";
+      adIndex++;
+    }, 350);
+  }
+
+  // DOM準備後に開始
+  document.addEventListener("DOMContentLoaded", () => {
+    showAd();
+    setInterval(showAd, 3000);
+  });
+})();
+  
 /* ====== データ構造 ====== */
 
 const GAME = {
