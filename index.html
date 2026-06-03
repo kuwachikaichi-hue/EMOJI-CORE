@@ -2617,91 +2617,74 @@ function isConvertible(char) {
   };
 })();
 
-// ====== convertToEmozoo 置き換え（ランダム必要キャラ方式） ======
-
-// 「今回必要な鍵キャラ」を管理するグローバル変数
-// ゲーム起動・変換成功のたびに再抽選される
-let _ezKeyChar = null; // { name, emoji, rarity } or null
-
-/** 鍵キャラをランダムに抽選（変換対象外・ムーン出身以外） */
-function rollEzKeyChar() {
-  // 変換可能なキャラ一覧から所持中のものだけ対象にする
-  const candidates = GAME.owned.filter(ch => isConvertible(ch));
-  if (candidates.length === 0) {
-    _ezKeyChar = null;
-    return;
-  }
-  // ランダム1体を「今回の鍵」に指定
-  const pick = candidates[Math.floor(Math.random() * candidates.length)];
-  _ezKeyChar = { name: pick.name, emoji: pick.emoji, rarity: pick.rarity };
-}
-
-/** 鍵キャラを表示する（所持していない場合は未確定表示） */
-function getEzKeyLabel() {
-  if (!_ezKeyChar) return '（未確定：まず変換可能なキャラを獲得してください）';
-  return `${_ezKeyChar.emoji} ${_ezKeyChar.name}（${_ezKeyChar.rarity}）`;
-}
-
 /* ==== EZ変換 — 鍵キャラ撤廃＋激レア限定ルール ==== */
+
 /* 既存の鍵キャラ関連を無効化するための無害ダミー */
 let _ezKeyChar = null;
-function rollEzKeyChar(){ _ezKeyChar = null; }
-function getEzKeyLabel(){ return ''; }
+function rollEzKeyChar() { _ezKeyChar = null; }
+function getEzKeyLabel() { return ''; }
 
 /* 激レア候補プールを定義（ムーンロードに出ないカテゴリのみ） */
 const EZ_RARE_POOLS = [
   // 超高額・イベント系（いずれもムーンロードに並ばない想定）
-  PUDDING_POOL,               // プリン無双
-  BIRD_FISH_ULTIMATE_POOL,    // 鳥魚アルティメット
-  TENGOKU_GACHA,              // 天獄
-  RAINBOW_DRAGON,             // レインボードラゴン
-  TSUYU_MATSURI,              // 超梅雨
-  TRIPLE_FOOD,                // トリプルフード
-  EARTH_STAR,                 // アーススター（💎）
-  ROBO_WARRIOR,               // ロボット戦士（💎）
-  CRYSTAL_GOLEM               // クリスタルゴーレム（💎）
+  PUDDING_POOL,             // プリン無双
+  BIRD_FISH_ULTIMATE_POOL,  // 鳥魚アルティメット
+  TENGOKU_GACHA,            // 天獄
+  RAINBOW_DRAGON,           // レインボードラゴン
+  TSUYU_MATSURI,            // 超梅雨
+  TRIPLE_FOOD,              // トリプルフード
+  EARTH_STAR,               // アーススター（💎）
+  ROBO_WARRIOR,             // ロボット戦士（💎）
+  CRYSTAL_GOLEM             // クリスタルゴーレム（💎）
 ];
 
 /* 変換不可タイプは既存方針を継続 */
 const NON_CONVERTIBLE_TYPES = ["frontier"]; // 新領域は不可
 
 /* ムーンロード出身フラグの考慮は既存を流用 */
-function isConvertible(ch){
-  if(!ch) return false;
+function isConvertible(ch) {
+  if (!ch) return false;
   if (ch.type && NON_CONVERTIBLE_TYPES.includes(ch.type)) return false;
   if (ch._fromMoon === true) return false;
   return true;
 }
 
 /* 激レア候補からランダム1体の「参考名」を抽出（所持は不要） */
-function pickRandomEzReference(){
-  const pool = EZ_RARE_POOLS[Math.floor(Math.random()*EZ_RARE_POOLS.length)];
-  const c = pool[Math.floor(Math.random()*pool.length)];
+function pickRandomEzReference() {
+  const pool = EZ_RARE_POOLS[Math.floor(Math.random() * EZ_RARE_POOLS.length)];
+  const c = pool[Math.floor(Math.random() * pool.length)];
   // 表示用に最小限の情報だけ返す
   return { emoji: c.emoji, name: c.name, rarity: c.rarity };
 }
 
-/* 3体消費の選定: 直近ズル防止のため「末尾から」ではなくランダム抽選
-   ただし「変換不可（frontier, _fromMoon）」は除外 */
-function pickThreeConvertibleIndices(){
+/*
+ * 3体消費の選定: 直近ズル防止のため「末尾から」ではなくランダム抽選
+ * ただし「変換不可（frontier, _fromMoon）」は除外
+ */
+function pickThreeConvertibleIndices() {
   const list = GAME.owned
-    .map((c,i)=>({c,i}))
-    .filter(({c})=> isConvertible(c));
-  if(list.length < 3) return null;
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => isConvertible(c));
+
+  if (list.length < 3) return null;
+
   // ランダムに3体
-  for(let i=list.length-1;i>0;i--){
-    const j = Math.floor(Math.random()*(i+1));
-    [list[i],list[j]] = [list[j],list[i]];
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
   }
-  return list.slice(0,3).map(x=>x.i).sort((a,b)=>b-a); // 降順で返す（削除安全）
+
+  // 降順で返す（削除安全）
+  return list.slice(0, 3).map(x => x.i).sort((a, b) => b - a);
 }
 
 /* 置き換え: 鍵キャラ不要・激レア参照名のみ告知・3体消費＋¥10,000リセット＋EZ+1 */
-(function replaceConvertToEmozoo(){
-  window.convertToEmozoo = function(){
+(function replaceConvertToEmozoo() {
+  window.convertToEmozoo = function () {
+
     // 消費対象を抽選
     const delIdx = pickThreeConvertibleIndices();
-    if(!delIdx){
+    if (!delIdx) {
       alert('変換可能なキャラが3体未満です（新領域/ムーン出身は不可）。');
       return;
     }
@@ -2710,10 +2693,12 @@ function pickThreeConvertibleIndices(){
     const ref = pickRandomEzReference();
 
     // 確認
-    const consumeNames = delIdx.map(i=>GAME.owned[i]?.name||'？').join('、');
-    if(!confirm(
+    const consumeNames = delIdx.map(i => GAME.owned[i]?.name || '？').join('、');
+
+    if (!confirm(
       '【エモズー変換】\n\n' +
-      '今回の激レアリファレンス：' + (ref ? `${ref.emoji} ${ref.name}（${ref.rarity}）` : '不明') + '\n' +
+      '今回の激レアリファレンス：' +
+        (ref ? `${ref.emoji} ${ref.name}（${ref.rarity}）` : '不明') + '\n' +
       '※参考表示のみ。所持は不要です。\n\n' +
       '消費キャラ（ランダム抽選で3体）：\n' + consumeNames + '\n\n' +
       'ペナルティ：所持金を ¥10,000 にリセットします。\n\n' +
@@ -2721,8 +2706,8 @@ function pickThreeConvertibleIndices(){
     )) return;
 
     // 3体削除（降順）
-    delIdx.forEach(i=>{
-      if(GAME.owned[i]) GAME.owned.splice(i,1);
+    delIdx.forEach(i => {
+      if (GAME.owned[i]) GAME.owned.splice(i, 1);
     });
 
     // 所持金リセット
@@ -2734,7 +2719,7 @@ function pickThreeConvertibleIndices(){
     // ログ
     addLog('🪙 EZ変換 ▶ ' + consumeNames + ' を消費 → 1 EZ');
     addLog('💰 所持金を ¥10,000 にリセット');
-    if(ref){
+    if (ref) {
       addLog('🔎 激レア参照：' + ref.emoji + ' ' + ref.name + '（' + ref.rarity + '）');
     }
 
@@ -2743,6 +2728,13 @@ function pickThreeConvertibleIndices(){
     updateUI && updateUI();
   };
 })();
+
+/* 起動時に鍵キャラUIの痕跡を出さないための微調整（ダミーにするだけ） */
+(function suppressOldKeyHints() {
+  // 旧ログ/ヒントの自動出力を避けるため、_ezKeyCharは常にnullのまま
+  _ezKeyChar = null;
+})();
+
 
 /* 起動時に鍵キャラUIの痕跡を出さないための微調整（ダミーにするだけ） */
 (function suppressOldKeyHints(){
