@@ -2582,9 +2582,7 @@ const FRONTIER_POOL = [
 /* =========================
    Frontier / EZ Convert Patch (Cleaned)
    ========================= */
-// ==== EZ交換: プレビュー → 確定の2段階フロー ====
 (function initEzExchange() {
-  // 既存の「変換不可タイプ」
   window.NON_CONVERTIBLE_TYPES = window.NON_CONVERTIBLE_TYPES || ["frontier"];
 
   function isConvertible(ch) {
@@ -2594,7 +2592,7 @@ const FRONTIER_POOL = [
     return true;
   }
 
-  // 候補3体の抽出（足りない場合は不足数を返す）
+  // sell値が高い順（強い順）で上位3体を選ぶ
   function pickThreeConvertible() {
     const list = (GAME.owned || [])
       .map((c, i) => ({ c, i }))
@@ -2604,28 +2602,22 @@ const FRONTIER_POOL = [
       return { ok: false, need: 3, have: list.length, indices: [] };
     }
 
-    // シャッフルして上位3件
-    for (let i = list.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [list[i], list[j]] = [list[j], list[i]];
-    }
+    // sell値の高い順でソート
+    list.sort((a, b) => {
+      const sa = Number(a.c.sell) || 0;
+      const sb = Number(b.c.sell) || 0;
+      return sb - sa;
+    });
 
-    const chosen = list.slice(0, 3).map(x => x.i).sort((a, b) => b - a); // 降順
+    const chosen = list.slice(0, 3).map(x => x.i).sort((a, b) => b - a); // 降順（削除時のズレ防止）
     return { ok: true, need: 3, have: list.length, indices: chosen };
   }
 
-  // 激レア参照のサンプル（見本だけ。入手不要）
   const EZ_REF_POOLS = (function () {
     const names = [
-      "PUDDING_POOL",
-      "BIRD_FISH_ULTIMATE_POOL",
-      "TENGOKU_GACHA",
-      "RAINBOW_DRAGON",
-      "TSUYU_MATSURI",
-      "TRIPLE_FOOD",
-      "EARTH_STAR",
-      "ROBO_WARRIOR",
-      "CRYSTAL_GOLEM"
+      "PUDDING_POOL", "BIRD_FISH_ULTIMATE_POOL", "TENGOKU_GACHA",
+      "RAINBOW_DRAGON", "TSUYU_MATSURI", "TRIPLE_FOOD",
+      "EARTH_STAR", "ROBO_WARRIOR", "CRYSTAL_GOLEM"
     ];
     const out = [];
     for (const n of names) {
@@ -2641,21 +2633,15 @@ const FRONTIER_POOL = [
     return c ? { emoji: c.emoji, name: c.name, rarity: c.rarity } : null;
   }
 
-  // プレビュー表示（既存results用ポップアップを流用）
   function showEzPreview(view) {
     const popup = document.getElementById("popup");
     const grid = document.getElementById("results");
-    if (!popup || !grid) {
-      alert("内部エラー：ポップアップが見つかりません。");
-      return;
-    }
+    if (!popup || !grid) { alert("内部エラー：ポップアップが見つかりません。"); return; }
     grid.innerHTML = "";
 
-    // タイトル差し替え
     const titleEl = popup.querySelector(".title");
     if (titleEl) titleEl.textContent = "🪙 エモズー交換プレビュー";
 
-    // 参照見本
     if (view.sample) {
       const refDiv = document.createElement("div");
       refDiv.className = "card";
@@ -2668,12 +2654,10 @@ const FRONTIER_POOL = [
       grid.appendChild(refDiv);
     }
 
-    // 区切り的に空ブロック
     const sep = document.createElement("div");
     sep.style.cssText = "grid-column:1/-1;height:4px;opacity:.2;";
     grid.appendChild(sep);
 
-    // 消費予定3体 or 不足メッセージ
     if (view.ok) {
       view.consume.forEach(ch => {
         const d = document.createElement("div");
@@ -2682,16 +2666,16 @@ const FRONTIER_POOL = [
           <div class="emoji">${ch.emoji}</div>
           <div class="name">${ch.name}</div>
           <div class="rarity">${ch.rarity || ""}</div>
-          <div class="sell">消費予定 ${format(ch.sell || 0)}</div>
+          <div class="sell">消費予定 ${typeof format === "function" ? format(ch.sell || 0) : ch.sell}</div>
         `;
         grid.appendChild(d);
       });
 
-      // 実行ボタン
       const run = document.createElement("button");
       run.className = "closeBtn";
+      run.style.marginTop = "8px";
       run.textContent = "OK（実行）";
-      run.onclick = convertToEmozooConfirm;
+      run.onclick = window.convertToEmozooConfirm;
       grid.appendChild(run);
     } else {
       const warn = document.createElement("div");
@@ -2705,17 +2689,14 @@ const FRONTIER_POOL = [
       grid.appendChild(warn);
     }
 
-    // 閉じるボタンは既存の「閉じる」でOK
     popup.classList.add("active");
   }
 
-  // プレビューエントリ：ボタンから呼ぶ
   window.convertToEmozoo = function convertToEmozooPreview() {
     const chk = pickThreeConvertible();
     const sample = pickReferenceSample();
 
     if (chk.ok) {
-      // 選出した3体のスナップショットを保存（確定時に参照）
       const consume = chk.indices.map(i => GAME.owned[i]);
       window.__ezPending__ = { indices: chk.indices, consume };
       showEzPreview({ ok: true, sample, consume });
@@ -2725,7 +2706,6 @@ const FRONTIER_POOL = [
     }
   };
 
-  // 確定実行：OKボタンから呼ぶ
   window.convertToEmozooConfirm = function () {
     const pending = window.__ezPending__;
     if (!pending || !Array.isArray(pending.indices) || pending.indices.length !== 3) {
@@ -2733,41 +2713,50 @@ const FRONTIER_POOL = [
       return;
     }
 
-    // セーフティ：いまも3体残っているか再チェック
+    // セーフティチェック
     const stillOk = pending.indices.every(i => GAME.owned[i] && isConvertible(GAME.owned[i]));
     if (!stillOk) {
-      alert("直前に編成が変わったため、条件を満たせません。もう一度プレビューしてください。");
+      alert("直前に編成が変わったため条件を満たせません。もう一度プレビューしてください。");
       window.__ezPending__ = null;
       return;
     }
 
-    // 降順で削除
+    // 降順インデックスで削除（配列ズレ防止）
     const toRemove = [...pending.indices].sort((a, b) => b - a);
     const consumedNames = toRemove.map(i => GAME.owned[i].name).join("、");
     toRemove.forEach(i => GAME.owned.splice(i, 1));
 
-    // 所持金を ¥10,000 にリセット
+    // マネーのみ ¥10,000 にリセット
     GAME.money = 10000;
 
-    // EZ +1
-    if (typeof GAME.emozoo !== "number") GAME.emozoo = 0;
+    // EZ +1（確実に加算）
+    if (typeof GAME.emozoo !== "number" || isNaN(GAME.emozoo)) GAME.emozoo = 0;
     GAME.emozoo += 1;
 
-    addLog("🪙 EZ変換 ▶ " + consumedNames + " を消費 → 1 EZ");
-    addLog("💰 所持金を ¥10,000 にリセット");
+    // EZ表示を直接更新（updateUIより先に叩く）
+    const ezEl = document.getElementById("emozoo");
+    if (ezEl) ezEl.innerText = GAME.emozoo.toLocaleString() + " EZ";
 
-    // 演出・UI
+    if (typeof addLog === "function") {
+      addLog("🪙 EZ変換 ▶ " + consumedNames + " を消費 → 1 EZ 獲得");
+      addLog("💰 マネーを ¥10,000 にリセット");
+    }
+
     if (typeof frontierEffect === "function") frontierEffect();
-    if (typeof updateUI === "function") updateUI();
 
-    // 終了・状態クリア
     window.__ezPending__ = null;
+
     const popup = document.getElementById("popup");
     if (popup) popup.classList.remove("active");
+
+    // タイトルを元に戻す
+    const titleEl = popup ? popup.querySelector(".title") : null;
+    if (titleEl) titleEl.textContent = "🎰 ガチャ結果";
+
+    if (typeof save === "function") save();
+    if (typeof updateUI === "function") updateUI();
   };
 })();
-
-// 既存の「キャラ3体 → 🪙1 EZ + ¥10,000」ボタンは convertToEmozoo() を呼ぶままでOK（上でプレビュー起動に差し替え）
 
 /* ---- 新領域ガチャ ---- */
 function frontierGacha() {
