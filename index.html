@@ -3483,6 +3483,185 @@ function whiteWeatherEffect() {
   }
 }
 
+/* ==== EZ/Frontier 修正パッチ v2026-06-03 ==== */
+/* 1) GAME.emozoo の安全初期化とロード時補正 */
+(function ensureEmozooInit(){
+  if (typeof window.GAME !== 'object' || !window.GAME) return;
+  if (typeof GAME.emozoo !== 'number' || isNaN(GAME.emozoo)) {
+    // 既存セーブで未定義だった場合は0で初期化
+    GAME.emozoo = 0;
+  }
+})();
+/* 2) updateUI の最終表示保証（EZを必ず上書き） */
+(function hardPatchUpdateUI(){
+  const orig = window.updateUI;
+  window.updateUI = function(){
+    try { if (typeof orig === 'function') orig(); } catch(e){}
+    try {
+      const ezEl = document.getElementById('emozoo');
+      if (ezEl && typeof GAME === 'object') {
+        const ez = (typeof GAME.emozoo === 'number' && !isNaN(GAME.emozoo)) ? GAME.emozoo : 0;
+        ezEl.innerText = ez.toLocaleString() + " EZ";
+      }
+      // moneyのmax-heightで表示切れ防止（長文化対策）
+      const moneyEl = document.getElementById('money');
+      if (moneyEl) {
+        moneyEl.style.maxHeight = 'calc(1.2em * 4)';
+        moneyEl.style.overflowY = 'auto';
+      }
+    } catch(e){}
+    try { if (typeof save === 'function') save(); } catch(e){}
+  };
+})();
+/* 3) frontierGacha の所持EZ判定/消費/結果表示の堅牢化 */
+(function patchFrontierGacha(){
+  const origFrontier = window.frontierGacha;
+  window.frontierGacha = function(){
+    // 事前ガード
+    if (!window.GAME) { alert("内部エラー：GAME未初期化"); return; }
+    if (typeof GAME.emozoo !== 'number' || isNaN(GAME.emozoo)) GAME.emozoo = 0;
+    // EZ再読み込み（ロード競合対策）
+    try { if (typeof load === 'function') load(); } catch(e){}
+    const haveEz = Number(GAME.emozoo) || 0;
+    const need = 100;
+    if (haveEz < need) {
+      alert(`EZ不足（必要：${need} EZ、所持：${haveEz} EZ）`);
+      // 表示がズレているケースに備え、UIを強制更新
+      if (typeof updateUI === 'function') updateUI();
+      return;
+    }
+    if (!Array.isArray(GAME.owned) || typeof GAME.baseCap !== 'number') {
+      alert("内部エラー：所持/容量情報が不正");
+      return;
+    }
+    if (GAME.owned.length >= GAME.baseCap) {
+      alert("基地容量不足");
+      return;
+    }
+    if (!Array.isArray(window.FRONTIER_POOL) || FRONTIER_POOL.length === 0) {
+      alert("内部エラー：FRONTIER_POOLが空");
+      return;
+    }
+    // 先にEZを安全に減算して保存
+    GAME.emozoo = haveEz - need;
+    try { if (typeof save === 'function') save(); } catch(e){}
+    // 抽選
+    const pick = Math.floor(Math.random() * FRONTIER_POOL.length);
+    const base = FRONTIER_POOL[pick];
+    const char = JSON.parse(JSON.stringify(base));
+    // 取得（必ず実行）
+    try {
+      if (typeof obtain === 'function') obtain(char);
+      else {
+        // obtainが見つからない非常時フォールバック
+        GAME.owned.push(char);
+        GAME.money += Math.floor((Number(char.sell)||0)/4);
+        if (!GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+      }
+    } catch(e){
+      // obtain失敗でもキャラは所持に入れる
+      if (GAME && Array.isArray(GAME.owned)) {
+        GAME.owned.push(char);
+      }
+    }
+    // 結果表示はこの順で安全に
+    try { if (typeof frontierEffect === 'function') frontierEffect(); } catch(e){}
+    try { if (typeof showResults === 'function') showResults([char]); } catch(e){
+      // ポップアップが壊れている場合は簡易表示
+      alert(`入手：${char.emoji} ${char.name} [${char.rarity}]`);
+    }
+    // 最後にUIと保存
+    try { if (typeof updateUI === 'function') updateUI(); } catch(e){}
+    try { if (typeof save === 'function') save(); } catch(e){}
+  };
+})();
+/* 4) EZ変換（convertToEmozooConfirm）の後始末を安定化 */
+(function patchConvertConfirm(){
+  const orig = window.convertToEmozooConfirm;
+  if (!orig) return;
+  window.convertToEmozooConfirm = function(){
+    try { orig(); } catch(e) {}
+    // タイトルが「ガチャ結果」に戻らない/ポップアップが閉じないケースを補修
+    try {
+      const popup = document.getElementById("popup");
+      if (popup) {
+        const titleEl = popup.querySelector(".title");
+        if (titleEl) titleEl.textContent = "🎰 ガチャ結果";
+        popup.classList.remove("active");
+      }
+    } catch(e){}
+    // 最終的なEZ値の強制表示
+    try {
+      const ezEl = document.getElementById("emozoo");
+      if (ezEl && typeof GAME === 'object') {
+        const ez = (typeof GAME.emozoo === 'number' && !isNaN(GAME.emozoo)) ? GAME.emozoo : 0;
+        ezEl.innerText = ez.toLocaleString() + " EZ";
+      }
+    } catch(e){}
+    try { if (typeof save === 'function') save(); } catch(e){}
+    try { if (typeof updateUI === 'function') updateUI(); } catch(e){}
+  };
+})();
+/* 5) showResults 不発時の保険（結果グリッド生成の最低限動作） */
+(function guardShowResults(){
+  const orig = window.showResults;
+  window.showResults = function(results){
+    try { if (typeof orig === 'function') return orig(results); } catch(e){}
+    try {
+      const popup = document.getElementById('popup');
+      const box = document.getElementById('results');
+      if (!popup || !box) return;
+      box.innerHTML = '';
+      (results||[]).forEach(c=>{
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `
+          <div class="emoji">${c.emoji||'❓'}</div>
+          <div class="name">${c.name||'不明'}</div>
+          <div class="rarity">${c.rarity||''}</div>
+          <div class="sell">¥${Number(c.sell||0).toLocaleString()}</div>
+        `;
+        box.appendChild(div);
+      });
+      popup.classList.add('active');
+    } catch(e){}
+  };
+})();
+/* 6) 画面効果が全く出ない環境向けの軽量フォールバック */
+(function fxFallback(){
+  // 一度だけ軽いCSSを注入（演出が全滅する端末向け）
+  if (document.getElementById('fx_fallback_style')) return;
+  const st = document.createElement('style');
+  st.id = 'fx_fallback_style';
+  st.textContent = `
+  .fx_fade_once {
+    position:fixed; inset:0; pointer-events:none; z-index:9999;
+    background: radial-gradient(circle, rgba(0,229,255,.25), transparent 70%);
+    animation: fx_fade_once_anim 0.8s forwards;
+  }
+  @keyframes fx_fade_once_anim {
+    0% { opacity:0; } 40% { opacity:1; } 100% { opacity:0; }
+  }`;
+  document.head.appendChild(st);
+  // frontierEffect等が失敗したときに呼ぶ保険
+  window.__fx_ping = function(){
+    try {
+      const d = document.createElement('div');
+      d.className = 'fx_fade_once';
+      document.body.appendChild(d);
+      setTimeout(()=>d.remove(), 900);
+    } catch(e){}
+  };
+  // frontierEffect をラップして失敗時に保険発動
+  const fe = window.frontierEffect;
+  if (typeof fe === 'function') {
+    window.frontierEffect = function(){
+      try { fe(); }
+      catch(e){ window.__fx_ping(); }
+    };
+  }
+})();
+
 /* ========== ガチャ実行関数 ========== */
 // 夜更かしーズ（💎20000）
 function yofukashiGacha(){
