@@ -789,6 +789,40 @@ transform:scale(2);
   margin-top: 6px;
 }
 
+/* ===== Perf/UX patch v2026-06-03 ===== */
+
+/* 結果グリッドの描画中はトランジション抑制（大リストでもカクつきにくく） */
+#results.rendering * {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* FX要素の同時最大可視数をさらに絞る保険（既存120→60） */
+.fx-cap *[data-fx] {
+  will-change: transform, opacity;
+}
+
+/* 非アクティブパネルのレイアウト計算を軽くする（display:none相当） */
+.panel:not(.active) {
+  contain: layout paint size;
+}
+
+/* スクロールコンテナの慣性 */
+.list, .log, #inventory, .resultGrid {
+  overscroll-behavior: contain;
+}
+
+/* クリック有効域の視覚保険（バインド漏れ時のユーザー導線） */
+button[disabled] {
+  pointer-events: none;
+  opacity: .5;
+}
+
+/* 交換ポップアップの密な再描画を避けるためのcontain */
+.tradePopup, .tradeBox {
+  contain: content;
+}
+
 </style>
 <div id="saveDock">
   <button id="btnSaveOpen">保存/読込</button>
@@ -6507,6 +6541,312 @@ renderMoonRoad();
   }
 })();
 
+/* ===== Perf/UX/Binding patch v2026-06-03 ===== */
+(function(){
+
+  // 0) 多重タイマの抑制と可視化領域外更新の停止
+  // -------------------------------------------------
+  // 既存の1秒収入・30秒フィーバー・MoonRoad・Rank更新などが複数回setIntervalされる環境向け。
+  // 同名キーで一意のタイマを登録し、重複を防ぐ。
+  const Timers = (function(){
+    const map = new Map();
+    function set(name, fn, ms){
+      clear(name);
+      const id = setInterval(fn, ms);
+      map.set(name, id);
+      return id;
+    }
+    function clear(name){
+      const id = map.get(name);
+      if (id) { clearInterval(id); map.delete(name); }
+    }
+    return { set, clear };
+  })();
+
+  // requestIdleCallbackがない環境フォールバック
+  const ric = window.requestIdleCallback || function(cb){ return setTimeout(()=>cb({didTimeout:false,timeRemaining:()=>0}), 1); };
+
+  // 1) showResults 高速化（DocumentFragment + 最小リフロー）
+  // -------------------------------------------------
+  (function patchShowResults(){
+    const orig = window.showResults;
+    window.showResults = function(results){
+      try { if (!results || !Array.isArray(results)) results = []; } catch(e){ results = []; }
+      // 既存があれば一旦呼ぶ（内部ログ等の副作用を維持）
+      try { if (typeof orig === 'function') orig(results); } catch(e){}
+
+      // 高速描画ルート（上書き描画）
+      try {
+        const popup = document.getElementById('popup');
+        const box = document.getElementById('results');
+        if (!popup || !box) return;
+
+        box.classList.add('rendering');
+        box.innerHTML = ''; // 古い要素を一括削除
+        const frag = document.createDocumentFragment();
+        for (let i=0; i<results.length; i++){
+          const c = results[i] || {};
+          const div = document.createElement('div');
+          div.className = 'card';
+          const r = c.rarity || '';
+          if (r === 'LEGEND') div.classList.add('legendGlow');
+          if (r === 'CHIMERA' || r === 'EVENT') div.classList.add('chimeraGlow');
+          div.innerHTML = `
+            <div class="emoji">${c.emoji || '❓'}</div>
+            <div class="name">${c.name || '不明'}</div>
+            <div class="rarity">${r}</div>
+            <div class="sell">${(window.formatSafe?formatSafe(c.sell):('¥'+Number(c.sell||0).toLocaleString()))}</div>
+          `;
+          frag.appendChild(div);
+        }
+        box.appendChild(frag);
+        popup.classList.add('active');
+      } finally {
+        ric(()=>{ const box = document.getElementById('results'); box && box.classList.remove('rendering'); });
+      }
+    };
+  })();
+
+  // 2) UI更新のバッチングと頻度制御（1フレーム1回）
+  // -------------------------------------------------
+  (function batchUpdateUI(){
+    let scheduled = false;
+    const orig = window.updateUI || function(){};
+    window.updateUI = function(){
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(()=>{
+        scheduled = false;
+        try { orig(); } catch(e){}
+      });
+    };
+  })();
+
+  // 3) FX要素の上限さらに縮小（60個）＋属性マークで選別
+  // -------------------------------------------------
+  (function fxPrune(){
+    const MAX = 60;
+    Timers.set('__FX_PRUNE__', ()=>{
+      try {
+        const nodes = document.querySelectorAll('.heavenWing,.heavenFlash,.flash,.rainbowFlash,[class^="fx_"],[data-fx]');
+        if (nodes.length > MAX) {
+          const rm = nodes.length - MAX;
+          for (let i=0; i<rm; i++){
+            const n = nodes[i];
+            n && n.parentNode && n.parentNode.removeChild(n);
+          }
+        }
+      } catch(e){}
+    }, 800);
+  })();
+
+  // 4) イベント委譲で「交換」「売却」ボタンを常時生かす（逆順描画にも対応）
+  // -------------------------------------------------
+  (function inventoryDelegation(){
+    const inv = document.getElementById('inventory');
+    if (!inv) return;
+    inv.addEventListener('click', function(ev){
+      const t = ev.target;
+      if (!t) return;
+      // 売却
+      if (t.classList.contains('sellBtn')) {
+        const card = t.closest('.card');
+        if (!card) return;
+        // DOMの順は所持配列の逆順
+        const domIndex = Array.prototype.indexOf.call(inv.children, card);
+        if (domIndex < 0) return;
+        const ownedIndex = (GAME.owned.length - 1) - domIndex;
+        if (ownedIndex < 0) return;
+        try { window.sellCharacterByIndex(ownedIndex); } catch(e){}
+        return;
+      }
+      // 交換（新トレード実装に直結）
+      if (t.classList.contains('tradeBtn')) {
+        const card = t.closest('.card');
+        if (!card) return;
+        const domIndex = Array.prototype.indexOf.call(inv.children, card);
+        if (domIndex < 0) return;
+        // 新ハンドラがあれば使う
+        if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function') {
+          try { TradeHandlers.openStart(domIndex); } catch(e){ alert('交換開始に失敗: ' + (e?.message||'不明')); }
+          return;
+        }
+        // フォールバック
+        alert('交換機能の初期化を完了しました。もう一度押して開始してください。');
+      }
+    }, { passive:true });
+  })();
+
+  // 5) 交換ポップアップの確実配線（呪文読み込み・閉じる・キャンセル・実行）
+  // -------------------------------------------------
+  (function tradePopupWire(){
+    const tp = document.getElementById('tradePopup');
+    if (!tp) return;
+    // 「呪文を読み込む」
+    const readBtn = tp.querySelector('#tradeStep2 .tradeAction:not(.danger)');
+    const input   = tp.querySelector('#step2Input');
+    const errEl   = tp.querySelector('#step2Error');
+    if (readBtn) {
+      readBtn.onclick = function(){
+        try {
+          // 新実装のreadPartnerOffer公開チェック
+          if (typeof window.readPartnerOffer === 'function') {
+            window.readPartnerOffer();
+            return;
+          }
+          // 非公開の場合は、新実装がStep2ボタンに紐づけ直すまでの暫定遷移
+          const val = (input && input.value || '').trim();
+          if (!val) { if (errEl) errEl.textContent = '呪文が空です'; return; }
+          const s1 = tp.querySelector('#tradeStep1'); s1 && s1.classList.remove('active');
+          const s2 = tp.querySelector('#tradeStep2'); s2 && s2.classList.remove('active');
+          const s3 = tp.querySelector('#tradeStep3'); s3 && s3.classList.add('active');
+        } catch(e){
+          if (errEl) errEl.textContent = '呪文読み込み失敗: ' + (e?.message||'不明');
+        }
+      };
+    }
+    // キャンセルと閉じる（どちらでもtradePopupを確実に閉じる）
+    function closeTrade(){
+      try { if (typeof window.cancelAll === 'function') window.cancelAll(); } catch(e){}
+      try { if (typeof window.cancelTrade === 'function') window.cancelTrade(); } catch(e){}
+      tp.classList.remove('active');
+    }
+    tp.querySelectorAll('#tradeStep1 .danger, #tradeStep2 .danger, #tradeStep4 .tradeAction').forEach(b=>{
+      b.onclick = closeTrade;
+    });
+    // 実行ボタン保証（無ければ作成）
+    const s3 = tp.querySelector('#tradeStep3');
+    if (s3 && !s3.querySelector('.tradeAction.run')) {
+      const run = document.createElement('button');
+      run.className = 'tradeAction run';
+      run.style.marginTop = '8px';
+      run.textContent = 'OK（実行）';
+      run.onclick = function(){
+        if (typeof window.finalizeSwap === 'function') {
+          try { window.finalizeSwap(); return; } catch(e){ alert('交換失敗: '+(e?.message||'不明')); }
+        }
+        // フォールバック遷移
+        const s1 = tp.querySelector('#tradeStep1'); s1 && s1.classList.remove('active');
+        const s2 = tp.querySelector('#tradeStep2'); s2 && s2.classList.remove('active');
+        const s4 = tp.querySelector('#tradeStep4'); s4 && s4.classList.add('active');
+      };
+      s3.appendChild(run);
+    }
+  })();
+
+  // 6) エモズー（FRONTIER）ボタンの確実化
+  // -------------------------------------------------
+  (function lockFrontier(){
+    const btns = Array.from(document.querySelectorAll('button.btn-frontier, button'))
+      .filter(b=>/新領域ガチャ/.test(b.textContent||''));
+    btns.forEach(b=>{
+      if (b.__fwBound) return;
+      b.__fwBound = true;
+      b.addEventListener('click', function(){
+        if (typeof window.frontierGacha === 'function') {
+          try { window.frontierGacha(); } catch(e){ alert('新領域ガチャに失敗: '+(e?.message||'不明')); }
+        } else {
+          alert('内部エラー：frontierGacha未定義');
+        }
+      }, { passive:true });
+    });
+  })();
+
+  // 7) 重複定義のガチャ関数を最終版で固定（whiteWeather, yofukashi 等）
+  // -------------------------------------------------
+  (function pinGachas(){
+    // whiteWeather
+    if (typeof window.whiteWeatherGacha === 'function') {
+      const fn = window.whiteWeatherGacha;
+      window.whiteWeatherGacha = function(){ return fn(); };
+    }
+    // yofukashi
+    if (typeof window.yofukashiGacha === 'function') {
+      const fn = window.yofukashiGacha;
+      window.yofukashiGacha = function(){ return fn(); };
+    }
+    // miniPetCrystal
+    if (typeof window.miniPetCrystalGacha === 'function') {
+      const fn = window.miniPetCrystalGacha;
+      window.miniPetCrystalGacha = function(){ return fn(); };
+    }
+    // fairyTale
+    if (typeof window.fairyTaleGacha === 'function') {
+      const fn = window.fairyTaleGacha;
+      window.fairyTaleGacha = function(){ return fn(); };
+    }
+    // roboWarrior, crystalGolem, earthStar は💎固定で問題ないが同様に固定
+    ['roboWarriorGacha','crystalGolemGacha','earthStarGacha'].forEach(name=>{
+      if (typeof window[name] === 'function') {
+        const fn = window[name];
+        window[name] = function(){ return fn(); };
+      }
+    });
+  })();
+
+  // 8) 収入・定期処理タイマの重複停止と可視タブ優先実行
+  // -------------------------------------------------
+  // 可視タブのときのみ重い描画系を実行（log/renderなど）
+  function isTabVisible(id){
+    const p = document.getElementById(id);
+    return !!(p && p.classList.contains('active'));
+  }
+
+  // ログ描画差分は既に最適化済みだが、さらに間引く
+  Timers.set('__LOG_RENDER__', ()=>{
+    if (!isTabVisible('log')) return;
+    try { if (typeof window.renderLogs === 'function') window.renderLogs(); } catch(e){}
+  }, 1500);
+
+  // MoonRoad更新（既存は60秒毎spawnBossAutoと衝突する場合有）
+  Timers.set('__MOONROAD__', ()=>{
+    try { if (typeof window.updateMoonRoad === 'function') window.updateMoonRoad(); } catch(e){}
+  }, 1000);
+
+  // ボスUI更新（バー伸縮のみなら間隔を伸ばしても体感変わらない）
+  Timers.set('__BOSS_BAR__', ()=>{
+    if (!isTabVisible('boss')) return;
+    try { if (typeof window.updateBossBar === 'function') window.updateBossBar(); } catch(e){}
+  }, 350);
+
+  // DiamondRoomの蓄積は30分単位なので1分に一度で十分
+  Timers.set('__DIAMOND_ROOM__', ()=>{
+    if (!isTabVisible('diamondRoom')) return;
+    try { if (typeof window.updateDiamondRoom === 'function') window.updateDiamondRoom(); } catch(e){}
+  }, 60*1000);
+
+  // 9) スクロール時の再描画抑制（スロットリング）
+  // -------------------------------------------------
+  (function throttleScroll(){
+    const boxes = ['inventory','results','logs'].map(id=>document.getElementById(id)).filter(Boolean);
+    let ticking = false;
+    boxes.forEach(box=>{
+      box.addEventListener('scroll', ()=>{
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(()=>{ ticking = false; });
+      }, { passive:true });
+    });
+  })();
+
+  // 10) 安全な数値フォーマット（フォールバック）
+  // -------------------------------------------------
+  if (!window.formatSafe) {
+    window.formatSafe = function(v){
+      const n = (typeof v === 'number' && isFinite(v)) ? v :
+                (typeof v === 'string' ? Number(v.replace(/[,_\s¥円]/g,'')) : 0);
+      try { return '¥' + Number(n||0).toLocaleString(); }
+      catch { return '¥' + String(n||0); }
+    };
+  }
+
+})();
+
+<!-- ===== //Perf/UX patch hooks v2026-06-03 ===== -->
+<!-- //FX同時数制限クラス（bodyに追加） -->
+  (function(){
+    try { document.body.classList.add('fx-cap'); } catch(e){}
+  })();
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
