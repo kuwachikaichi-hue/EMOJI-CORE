@@ -2500,6 +2500,108 @@ function isLifeFestival(){
    エモズー (EZ) & 新領域ガチャ システム
    ==================================================== */
 
+/* ===== EZガチャ GAME初期化保証パッチ ===== */
+document.addEventListener('DOMContentLoaded', function() {
+
+  // GAME.emozoo の確実な初期化
+  if (typeof GAME === 'object' && GAME !== null) {
+    if (typeof GAME.emozoo !== 'number' || isNaN(GAME.emozoo)) {
+      GAME.emozoo = 0;
+    }
+    if (typeof GAME.buffs !== 'object' || GAME.buffs === null) {
+      GAME.buffs = {};
+    }
+  }
+
+  // EZ表示を強制更新
+  const ezEl = document.getElementById('emozoo');
+  if (ezEl && typeof GAME === 'object') {
+    ezEl.innerText = (GAME.emozoo || 0).toLocaleString() + ' EZ';
+  }
+
+  // frontierGacha を完全に上書き（GAME参照を確実に遅延評価）
+  window.frontierGacha = function() {
+
+    // GAME存在確認
+    if (typeof GAME === 'undefined' || GAME === null) {
+      alert('内部エラー：GAMEオブジェクトが見つかりません。ページを再読み込みしてください。');
+      return;
+    }
+
+    // emozoo 安全初期化
+    if (typeof GAME.emozoo !== 'number' || isNaN(GAME.emozoo)) {
+      GAME.emozoo = 0;
+    }
+
+    const haveEz = GAME.emozoo;
+    const need = 100;
+
+    if (haveEz < need) {
+      alert('EZ不足（必要：' + need + ' EZ、所持：' + haveEz + ' EZ）');
+      if (typeof updateUI === 'function') updateUI();
+      return;
+    }
+
+    if (!Array.isArray(GAME.owned) || typeof GAME.baseCap !== 'number') {
+      alert('内部エラー：所持情報が不正です。');
+      return;
+    }
+
+    if (GAME.owned.length >= GAME.baseCap) {
+      alert('基地容量不足');
+      return;
+    }
+
+    if (!Array.isArray(FRONTIER_POOL) || FRONTIER_POOL.length === 0) {
+      alert('内部エラー：FRONTIER_POOLが空です。');
+      return;
+    }
+
+    // EZ消費
+    GAME.emozoo = haveEz - need;
+
+    // 抽選
+    const pick = Math.floor(Math.random() * FRONTIER_POOL.length);
+    const char = JSON.parse(JSON.stringify(FRONTIER_POOL[pick]));
+
+    // キャラ取得
+    try {
+      if (typeof obtain === 'function') {
+        obtain(char);
+      } else {
+        GAME.owned.push(char);
+        GAME.money += Math.floor((Number(char.sell) || 0) / 4);
+        if (!GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+      }
+    } catch(e) {
+      console.error('obtain error:', e);
+      if (Array.isArray(GAME.owned)) GAME.owned.push(char);
+    }
+
+    // 演出
+    try { if (typeof frontierEffect === 'function') frontierEffect(); } catch(e) {}
+
+    // 結果表示
+    try {
+      if (typeof showResults === 'function') {
+        showResults([char]);
+      } else {
+        alert('入手：' + char.emoji + ' ' + char.name + ' [' + char.rarity + ']');
+      }
+    } catch(e) {}
+
+    // EZ表示を即時更新
+    const el = document.getElementById('emozoo');
+    if (el) el.innerText = GAME.emozoo.toLocaleString() + ' EZ';
+
+    // 保存・UI更新
+    try { if (typeof save === 'function') save(); } catch(e) {}
+    try { if (typeof updateUI === 'function') updateUI(); } catch(e) {}
+  };
+
+}, false);
+
+
 /* ---- 新領域キャラクタープール ---- */
 const FRONTIER_POOL = [
   {
