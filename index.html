@@ -2617,69 +2617,122 @@ function isConvertible(char) {
   };
 })();
 
-function convertToEmozoo() {
-  // 1) 特定キャラ（「エモズーの鍵」）の所持チェック
-  const KEY_NAME = 'エモズーの鍵'; // ←必要に応じて正式名称に変更
-  const keyIdx = GAME.owned.findIndex(ch => ch.name === KEY_NAME);
+// ====== convertToEmozoo 置き換え（ランダム必要キャラ方式） ======
 
-  if (keyIdx === -1) {
-    alert(`必要条件未達：${KEY_NAME} を所持していません。`);
+// 「今回必要な鍵キャラ」を管理するグローバル変数
+// ゲーム起動・変換成功のたびに再抽選される
+let _ezKeyChar = null; // { name, emoji, rarity } or null
+
+/** 鍵キャラをランダムに抽選（変換対象外・ムーン出身以外） */
+function rollEzKeyChar() {
+  // 変換可能なキャラ一覧から所持中のものだけ対象にする
+  const candidates = GAME.owned.filter(ch => isConvertible(ch));
+  if (candidates.length === 0) {
+    _ezKeyChar = null;
     return;
   }
+  // ランダム1体を「今回の鍵」に指定
+  const pick = candidates[Math.floor(Math.random() * candidates.length)];
+  _ezKeyChar = { name: pick.name, emoji: pick.emoji, rarity: pick.rarity };
+}
 
-  // 2) 変換可能なキャラ（新領域/ムーン購入を除外）
+/** 鍵キャラを表示する（所持していない場合は未確定表示） */
+function getEzKeyLabel() {
+  if (!_ezKeyChar) return '（未確定：まず変換可能なキャラを獲得してください）';
+  return `${_ezKeyChar.emoji} ${_ezKeyChar.name}（${_ezKeyChar.rarity}）`;
+}
+
+function convertToEmozoo() {
+  // 1) 変換可能なキャラ一覧（新領域・ムーン出身を除外）
   const convertibles = GAME.owned
     .map((c, i) => ({ c, i }))
     .filter(({ c }) => isConvertible(c));
 
-  if (convertibles.length < 3) {
+  // 2) 鍵キャラが未決定 or 所持していなければ再抽選
+  if (!_ezKeyChar || !convertibles.some(({ c }) => c.name === _ezKeyChar.name)) {
+    rollEzKeyChar();
+  }
+
+  // 3) 鍵キャラが決まっていない（所持ゼロ）
+  if (!_ezKeyChar) {
+    alert('変換可能なキャラがいません。先にガチャでキャラを獲得してください。');
+    return;
+  }
+
+  // 4) 鍵キャラを所持確認
+  const keyMatch = convertibles.find(({ c }) => c.name === _ezKeyChar.name);
+  if (!keyMatch) {
+    // 再抽選して通知
+    rollEzKeyChar();
     alert(
-      `変換可能なキャラが${convertibles.length}体しかいません。\n` +
-      `※ 新領域キャラ・ムーンロード購入キャラは変換不可です。\n` +
-      `3体必要です。`
+      `必要な鍵キャラが見つかりませんでした。\n` +
+      `新しい必要キャラ：${getEzKeyLabel()}\n` +
+      `このキャラを所持した状態でもう一度実行してください。`
     );
     return;
   }
 
-  // 3) 変換対象は最後に追加された3体（既存仕様を維持）
-  const targets = convertibles.slice(-3);
-  const names = targets.map(({ c }) => c.name).join('、');
+  // 5) 変換対象は「鍵キャラ以外」の変換可能キャラから最後の3体
+  const nonKeyConvertibles = convertibles.filter(({ c }) => c.name !== _ezKeyChar.name);
 
-  // 4) 実行確認
-  if (!confirm(
-    `以下の3体をエモズー変換します。\n` +
-    `さらに、特定キャラ「${KEY_NAME}」を消費し、\n` +
-    `全財産を ¥10,000 にリセットします。\n\n` +
-    `対象：${names}\n\n実行しますか？`
-  )) return;
-
-  // 5) 対象3体を削除（インデックス降順で）
-  const indices = targets.map(({ i }) => i).sort((a, b) => b - a);
-  indices.forEach(i => GAME.owned.splice(i, 1));
-
-  // 6) 特定キャラ（鍵）を消費
-  //    既に targets と重複している可能性もあるので、最新のインデックスで探し直す
-  const keyIdx2 = GAME.owned.findIndex(ch => ch.name === KEY_NAME);
-  if (keyIdx2 === -1) {
-    // 直前で消えた等のレース防止：安全に中断
-    alert(`${KEY_NAME} が見つかりませんでした。操作を中断しました。`);
+  if (nonKeyConvertibles.length < 3) {
+    alert(
+      `変換対象キャラが${nonKeyConvertibles.length}体しかいません（鍵キャラ除外後）。\n` +
+      `必要：鍵キャラ1体 ＋ 変換対象3体（計4体）\n` +
+      `現在の必要キャラ：${getEzKeyLabel()}\n` +
+      `※ 新領域キャラ・ムーンロード購入キャラは変換不可です。`
+    );
     return;
   }
-  const keyNameLog = GAME.owned[keyIdx2].name;
-  GAME.owned.splice(keyIdx2, 1);
 
-  // 7) 全財産を ¥10,000 に「固定」
+  // 変換対象3体（末尾から）
+  const targets = nonKeyConvertibles.slice(-3);
+  const names = targets.map(({ c }) => c.name).join('、');
+
+  // 6) 確認ダイアログ
+  if (!confirm(
+    `【エモズー変換】\n\n` +
+    `🔑 鍵キャラ（消費）：${getEzKeyLabel()}\n` +
+    `⚔️ 変換対象3体：${names}\n\n` +
+    `さらに、全財産を ¥10,000 にリセットします。\n\n` +
+    `実行しますか？`
+  )) return;
+
+  // 7) 対象3体を削除（降順）
+  const targetIndices = targets.map(({ i }) => i).sort((a, b) => b - a);
+  targetIndices.forEach(i => GAME.owned.splice(i, 1));
+
+  // 8) 鍵キャラを削除（3体削除後にインデックスが変わるので再検索）
+  const keyIdx = GAME.owned.findIndex(ch => ch.name === _ezKeyChar.name && isConvertible(ch));
+  if (keyIdx === -1) {
+    alert('鍵キャラの削除に失敗しました（操作を中断）');
+    return;
+  }
+  const keyNameLog = GAME.owned[keyIdx].name;
+  GAME.owned.splice(keyIdx, 1);
+
+  // 9) 全財産リセット
   GAME.money = 10000;
 
-  // 8) EZ+1（既存仕様）
+  // 10) EZ +1
   GAME.emozoo = (GAME.emozoo || 0) + 1;
 
-  // 9) ログとUI更新
+  // 11) 次回の鍵キャラを再抽選（毎回変わる）
+  _ezKeyChar = null;
+  rollEzKeyChar();
+
+  // 12) ログ・演出・UI
   addLog(`🪙 EZ変換 ▶ ${names} ＋（鍵：${keyNameLog}）消費 → 1 EZ`);
   addLog(`💰 所持金を ¥10,000 にリセット`);
+  addLog(
+    _ezKeyChar
+      ? `🔑 次回の必要キャラ：${getEzKeyLabel()}`
+      : `🔑 次回の必要キャラ：（キャラを獲得後に決定）`
+  );
   frontierEffect();
   updateUI();
 }
+
 
 
 /* ---- 新領域ガチャ ---- */
