@@ -2760,10 +2760,21 @@ const FRONTIER_POOL = [
 
 /* ---- 新領域ガチャ ---- */
 function frontierGacha() {
-  if (!window.GAME) {
+  // ❌ if (!window.GAME) {
+  if (!GAME) {  // ✅
     alert("内部エラー：ゲームデータが見つかりません。");
     return;
   }
+  // ...
+  // ❌ const haveEz = typeof GAME.emozoo === "number" ? GAME.emozoo : 0;
+  // これはGAMEを直接参照しているのでOK
+
+  // ❌ if (!Array.isArray(window.FRONTIER_POOL) ...)
+  if (!Array.isArray(FRONTIER_POOL) || FRONTIER_POOL.length === 0) {  // ✅
+  
+  // ❌ if (typeof window.obtain !== "function")
+  if (typeof obtain !== "function") {  // ✅
+
   const haveEz = typeof GAME.emozoo === "number" ? GAME.emozoo : 0;
   if (haveEz < 100) {
     alert("EZ不足（必要：100 EZ、所持：" + haveEz + " EZ）");
