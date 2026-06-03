@@ -2579,244 +2579,349 @@ const FRONTIER_POOL = [
   },
 ];
 
-/* ---- 「ムーンロード以外」のガチャ出身キャラか判定 ---- */
-// ムーンロードは購入(buyMoonCharacter)でtypeを付けない→moonRoad出身の判別が難しいため、
-// 「変換対象外」タイプを明示的にリストアップする方式を採用
-const NON_CONVERTIBLE_TYPES = ["frontier"]; // 新領域キャラは変換不可
+/* =========================
+   Frontier / EZ Convert Patch (Cleaned)
+   ========================= */
 
-function isConvertible(char) {
-  // 新領域キャラは変換不可
-  if (char.type === "frontier") return false;
-  // ムーンロード購入キャラを識別するため、buyMoonCharacterでフラグを付ける
-  if (char._fromMoon === true) return false;
+/* ---- 定数・ユーティリティ ---- */
+(function initGlobals() {
+  // 一度だけ定義
+  if (!window.__frontierGlobals__) {
+    window.__frontierGlobals__ = true;
+
+    // 変換不可タイプ一覧（拡張余地を残す）
+    window.NON_CONVERTIBLE_TYPES = ["frontier"];
+
+    // 安全な乱数インデックス
+    window.randIndex = function (arr) {
+      return (Array.isArray(arr) && arr.length > 0)
+        ? Math.floor(Math.random() * arr.length)
+        : -1;
+    };
+
+    // 所持キャラ配列の指定インデックスを降順で削除
+    window.spliceDescending = function (arr, indicesDesc) {
+      if (!Array.isArray(arr) || !Array.isArray(indicesDesc)) return;
+      for (let i = 0; i < indicesDesc.length; i++) {
+        const idx = indicesDesc[i];
+        if (Number.isInteger(idx) && idx >= 0 && idx < arr.length) {
+          arr.splice(idx, 1);
+        }
+      }
+    };
+
+    // ログがあれば使う。なければ console にフォールバック
+    window.safeLog = function (msg) {
+      if (typeof window.addLog === "function") {
+        addLog(msg);
+      } else {
+        console.log("[LOG]", msg);
+      }
+    };
+  }
+})();
+
+/* ---- 変換可否判定（単一実装） ---- */
+function isConvertible(ch) {
+  if (!ch || typeof ch !== "object") return false;
+  // ムーン出身フラグが立っているものは不可
+  if (ch._fromMoon === true) return false;
+  // タイプが変換不可リストに含まれていれば不可
+  if (ch.type && Array.isArray(NON_CONVERTIBLE_TYPES) && NON_CONVERTIBLE_TYPES.includes(ch.type)) {
+    return false;
+  }
   return true;
 }
 
 /* ---- buyMoonCharacter にフラグを付けるパッチ ---- */
-// ※ 既存の buyMoonCharacter 関数内の obtain(JSON.parse(JSON.stringify(c))) を
-//    以下のように1行追加する形で対応：
-// obtain の前に char._fromMoon = true を入れる
-// 既存関数をラップする形で上書き
 (function patchMoonBuy() {
   if (window.__moonBuyPatched__) return;
   window.__moonBuyPatched__ = true;
-  const _orig = window.buyMoonCharacter;
+
+  const orig = window.buyMoonCharacter;
+
+  // 元関数がなくても動く安全な代替を提供
   window.buyMoonCharacter = function (index) {
+    // 基本的な前提チェック
+    if (!window.GAME || !Array.isArray(GAME.moonRoad) || typeof index !== "number") {
+      alert("内部エラー：ムーンデータが見つかりません。");
+      return;
+    }
     const c = GAME.moonRoad[index];
     if (!c) return;
-    const price = c.sell * 10;
-    if (GAME.money < price) { alert("お金不足"); return; }
-    if (GAME.owned.length >= GAME.baseCap) { alert("基地容量不足"); return; }
-    GAME.money -= price;
-    const charCopy = JSON.parse(JSON.stringify(c));
-    charCopy._fromMoon = true; // ← ムーン出身フラグ
-    obtain(charCopy);
-    GAME.moonRoad.splice(index, 1);
-    renderMoonRoad();
-    updateUI();
-  };
-})();
 
-/* ==== EZ変換 — 鍵キャラ撤廃＋激レア限定ルール ==== */
-
-/* 既存の鍵キャラ関連を無効化するための無害ダミー */
-let _ezKeyChar = null;
-function rollEzKeyChar() { _ezKeyChar = null; }
-function getEzKeyLabel() { return ''; }
-
-/* 激レア候補プールを定義（ムーンロードに出ないカテゴリのみ） */
-const EZ_RARE_POOLS = [
-  // 超高額・イベント系（いずれもムーンロードに並ばない想定）
-  PUDDING_POOL,             // プリン無双
-  BIRD_FISH_ULTIMATE_POOL,  // 鳥魚アルティメット
-  TENGOKU_GACHA,            // 天獄
-  RAINBOW_DRAGON,           // レインボードラゴン
-  TSUYU_MATSURI,            // 超梅雨
-  TRIPLE_FOOD,              // トリプルフード
-  EARTH_STAR,               // アーススター（💎）
-  ROBO_WARRIOR,             // ロボット戦士（💎）
-  CRYSTAL_GOLEM             // クリスタルゴーレム（💎）
-];
-
-/* 変換不可タイプは既存方針を継続 */
-const NON_CONVERTIBLE_TYPES = ["frontier"]; // 新領域は不可
-
-/* ムーンロード出身フラグの考慮は既存を流用 */
-function isConvertible(ch) {
-  if (!ch) return false;
-  if (ch.type && NON_CONVERTIBLE_TYPES.includes(ch.type)) return false;
-  if (ch._fromMoon === true) return false;
-  return true;
-}
-
-/* 激レア候補からランダム1体の「参考名」を抽出（所持は不要） */
-function pickRandomEzReference() {
-  const pool = EZ_RARE_POOLS[Math.floor(Math.random() * EZ_RARE_POOLS.length)];
-  const c = pool[Math.floor(Math.random() * pool.length)];
-  // 表示用に最小限の情報だけ返す
-  return { emoji: c.emoji, name: c.name, rarity: c.rarity };
-}
-
-/*
- * 3体消費の選定: 直近ズル防止のため「末尾から」ではなくランダム抽選
- * ただし「変換不可（frontier, _fromMoon）」は除外
- */
-function pickThreeConvertibleIndices() {
-  const list = GAME.owned
-    .map((c, i) => ({ c, i }))
-    .filter(({ c }) => isConvertible(c));
-
-  if (list.length < 3) return null;
-
-  // ランダムに3体
-  for (let i = list.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [list[i], list[j]] = [list[j], list[i]];
-  }
-
-  // 降順で返す（削除安全）
-  return list.slice(0, 3).map(x => x.i).sort((a, b) => b - a);
-}
-
-/* 置き換え: 鍵キャラ不要・激レア参照名のみ告知・3体消費＋¥10,000リセット＋EZ+1 */
-(function replaceConvertToEmozoo() {
-  window.convertToEmozoo = function () {
-
-    // 消費対象を抽選
-    const delIdx = pickThreeConvertibleIndices();
-    if (!delIdx) {
-      alert('変換可能なキャラが3体未満です（新領域/ムーン出身は不可）。');
+    const price = (typeof c.sell === "number" ? c.sell * 10 : 0);
+    if (typeof GAME.money !== "number" || GAME.money < price) {
+      alert("お金不足");
+      return;
+    }
+    if (!Array.isArray(GAME.owned) || typeof GAME.baseCap !== "number") {
+      alert("内部エラー：所持情報が不正です。");
+      return;
+    }
+    if (GAME.owned.length >= GAME.baseCap) {
+      alert("基地容量不足");
+      return;
+    }
+    if (typeof window.obtain !== "function") {
+      alert("内部エラー：obtain 関数が見つかりません。");
       return;
     }
 
-    // 参考として、今回「運営が想定する激レア」名を表示（所持不要）
-    const ref = pickRandomEzReference();
+    GAME.money -= price;
 
-    // 確認
-    const consumeNames = delIdx.map(i => GAME.owned[i]?.name || '？').join('、');
+    const charCopy = JSON.parse(JSON.stringify(c));
+    charCopy._fromMoon = true; // ムーン出身フラグ
+    obtain(charCopy);
 
-    if (!confirm(
-      '【エモズー変換】\n\n' +
-      '今回の激レアリファレンス：' +
-        (ref ? `${ref.emoji} ${ref.name}（${ref.rarity}）` : '不明') + '\n' +
-      '※参考表示のみ。所持は不要です。\n\n' +
-      '消費キャラ（ランダム抽選で3体）：\n' + consumeNames + '\n\n' +
-      'ペナルティ：所持金を ¥10,000 にリセットします。\n\n' +
-      '実行しますか？'
-    )) return;
+    // ムーンロードから削除
+    GAME.moonRoad.splice(index, 1);
 
-    // 3体削除（降順）
-    delIdx.forEach(i => {
-      if (GAME.owned[i]) GAME.owned.splice(i, 1);
-    });
-
-    // 所持金リセット
-    GAME.money = 10000;
-
-    // EZ +1
-    GAME.emozoo = (GAME.emozoo || 0) + 1;
-
-    // ログ
-    addLog('🪙 EZ変換 ▶ ' + consumeNames + ' を消費 → 1 EZ');
-    addLog('💰 所持金を ¥10,000 にリセット');
-    if (ref) {
-      addLog('🔎 激レア参照：' + ref.emoji + ' ' + ref.name + '（' + ref.rarity + '）');
-    }
-
-    // 演出・UI
-    frontierEffect && frontierEffect();
-    updateUI && updateUI();
+    // 表示更新（存在すれば）
+    if (typeof window.renderMoonRoad === "function") renderMoonRoad();
+    if (typeof window.updateUI === "function") updateUI();
   };
+
+  // 元関数がある場合は上書きの形だが、挙動は上記で包括
+  if (typeof orig === "function") {
+    // 何もしない（上記が新実装）
+  }
 })();
 
-/* 起動時に鍵キャラUIの痕跡を出さないための微調整（ダミーにするだけ） */
+/* ==== EZ 変換 修正版 ==== */
+
+// 旧仕様の鍵キャラは常に未使用
+var _ezKeyChar = null;
+
+// 参考用激レアプール（存在する配列のみ採用）
+var EZ_RARE_POOLS_REF = (function () {
+  const names = [
+    "PUDDING_POOL", "BIRD_FISH_ULTIMATE_POOL", "TENGOKU_GACHA",
+    "RAINBOW_DRAGON", "TSUYU_MATSURI", "TRIPLE_FOOD",
+    "EARTH_STAR", "ROBO_WARRIOR"
+  ];
+  const out = [];
+  for (const n of names) {
+    if (Array.isArray(window[n]) && window[n].length > 0) out.push(window[n]);
+  }
+  return out;
+})();
+
+function rollEzKeyChar() { _ezKeyChar = null; }
+function getEzKeyLabel() { return ""; }
+
+function pickRandomEzReference() {
+  if (!Array.isArray(EZ_RARE_POOLS_REF) || EZ_RARE_POOLS_REF.length === 0) return null;
+  const poolIdx = randIndex(EZ_RARE_POOLS_REF);
+  if (poolIdx < 0) return null;
+  const pool = EZ_RARE_POOLS_REF[poolIdx];
+  const cIdx = randIndex(pool);
+  if (cIdx < 0) return null;
+  const c = pool[cIdx];
+  return c ? { emoji: c.emoji, name: c.name, rarity: c.rarity } : null;
+}
+
+function pickThreeConvertibleIndices() {
+  if (!window.GAME || !Array.isArray(GAME.owned)) return null;
+  const list = GAME.owned
+    .map(function (c, i) { return { c: c, i: i }; })
+    .filter(function (x) { return isConvertible(x.c); });
+
+  if (!list || list.length < 3) return null;
+
+  // フィッシャー–イェーツでシャッフル
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+  }
+  // 3つ選び、降順で返す（splice 安全のため）
+  return list.slice(0, 3)
+    .map(function (x) { return x.i; })
+    .sort(function (a, b) { return b - a; });
+}
+
+function convertToEmozoo() {
+  if (!window.GAME || !Array.isArray(GAME.owned)) {
+    alert("内部エラー：所持情報が見つかりません。");
+    return;
+  }
+  const delIdx = pickThreeConvertibleIndices();
+  if (!delIdx) {
+    alert("変換可能なキャラが3体未満です（新領域/ムーン出身は不可）。");
+    return;
+  }
+
+  const ref = pickRandomEzReference();
+  const consumeNames = delIdx.map(function (i) {
+    return (GAME.owned[i] && GAME.owned[i].name) ? GAME.owned[i].name : "？";
+  }).join("、");
+
+  const refLine = ref
+    ? (ref.emoji ? ref.emoji + " " : "") + (ref.name || "不明") + (ref.rarity ? "（" + ref.rarity + "）" : "")
+    : "不明";
+
+  const ok = confirm(
+    "【エモズー変換】\n\n" +
+    "激レアリファレンス：" + refLine + "\n" +
+    "※参考表示のみ。所持不要です。\n\n" +
+    "消費キャラ（3体）：\n" + consumeNames + "\n\n" +
+    "ペナルティ：所持金から ¥10,000 を差し引きます。\n\n" +
+    "実行しますか？"
+  );
+  if (!ok) return;
+
+  // 3体削除（降順で安全に削除）
+  spliceDescending(GAME.owned, delIdx);
+
+  // 所持金を減算（0未満にしない）
+  const moneyBefore = typeof GAME.money === "number" ? GAME.money : 0;
+  GAME.money = Math.max(0, moneyBefore - 10000);
+
+  // EZ +1
+  GAME.emozoo = (typeof GAME.emozoo === "number" ? GAME.emozoo : 0) + 1;
+
+  // ログ出力
+  safeLog("🪙 EZ変換 ▶ " + consumeNames + " を消費 → 1 EZ");
+  safeLog("💰 所持金から ¥10,000 を消費");
+  if (ref) {
+    safeLog("🔎 激レア参照：" + refLine);
+  }
+
+  // 演出とUI更新
+  if (typeof window.frontierEffect === "function") frontierEffect();
+  if (typeof window.updateUI === "function") updateUI();
+}
+
+/* ---- 起動時の旧鍵ヒント抑止（ダミー） ---- */
 (function suppressOldKeyHints() {
-  // 旧ログ/ヒントの自動出力を避けるため、_ezKeyCharは常にnullのまま
+  if (window.__suppressOldKeyHints__) return;
+  window.__suppressOldKeyHints__ = true;
   _ezKeyChar = null;
 })();
-
-
-/* 起動時に鍵キャラUIの痕跡を出さないための微調整（ダミーにするだけ） */
-(function suppressOldKeyHints(){
-  // 旧ログ/ヒントの自動出力を避けるため、_ezKeyCharは常にnullのまま
-  _ezKeyChar = null;
-})();
-
-
 
 /* ---- 新領域ガチャ ---- */
 function frontierGacha() {
-  if (GAME.emozoo < 1000) {
-    alert(`EZ不足（必要：1000 EZ、所持：${GAME.emozoo} EZ）`);
+  if (!window.GAME) {
+    alert("内部エラー：ゲームデータが見つかりません。");
+    return;
+  }
+  const haveEz = typeof GAME.emozoo === "number" ? GAME.emozoo : 0;
+  if (haveEz < 1000) {
+    alert("EZ不足（必要：1000 EZ、所持：" + haveEz + " EZ）");
+    return;
+  }
+  if (!Array.isArray(GAME.owned) || typeof GAME.baseCap !== "number") {
+    alert("内部エラー：所持情報が不正です。");
     return;
   }
   if (GAME.owned.length >= GAME.baseCap) {
     alert("基地容量不足");
     return;
   }
+  if (!Array.isArray(window.FRONTIER_POOL) || FRONTIER_POOL.length === 0) {
+    alert("内部エラー：FRONTIER_POOL が空です。");
+    return;
+  }
+  if (typeof window.obtain !== "function") {
+    alert("内部エラー：obtain 関数が見つかりません。");
+    return;
+  }
 
-  GAME.emozoo -= 1000;
+  GAME.emozoo = haveEz - 1000;
 
-  const char = JSON.parse(JSON.stringify(
-    FRONTIER_POOL[Math.floor(Math.random() * FRONTIER_POOL.length)]
-  ));
+  const pickIdx = randIndex(FRONTIER_POOL);
+  const base = FRONTIER_POOL[pickIdx];
+  const char = JSON.parse(JSON.stringify(base));
 
   obtain(char);
-  frontierEffect();
-  showResults([char]);
-  updateUI();
+
+  if (typeof window.frontierEffect === "function") frontierEffect();
+  if (typeof window.showResults === "function") showResults([char]);
+  if (typeof window.updateUI === "function") updateUI();
 }
 
 /* ---- UI更新パッチ（EZ表示） ---- */
 (function patchUpdateUI() {
   if (window.__ezUIPatched__) return;
   window.__ezUIPatched__ = true;
-  const _orig = window.updateUI;
+
+  const orig = typeof window.updateUI === "function" ? window.updateUI : function () {};
+
   window.updateUI = function () {
-    _orig();
-    const el = document.getElementById('emozoo');
-    if (el) el.innerText = (GAME.emozoo || 0).toLocaleString() + ' EZ';
+    try {
+      orig();
+    } catch (e) {
+      console.error("updateUI(orig) error:", e);
+    }
+    const el = document.getElementById("emozoo");
+    if (el && window.GAME) {
+      const ez = (typeof GAME.emozoo === "number" ? GAME.emozoo : 0);
+      el.innerText = ez.toLocaleString() + " EZ";
+    }
   };
 })();
 
-/* ---- インベントリ描画パッチ（羽CSS付与） ---- */
+/* ---- インベントリ描画パッチ（frontier CSS付与） ---- */
 (function patchRenderInventory() {
   if (window.__invPatched__) return;
   window.__invPatched__ = true;
-  const _orig = window.renderInventory;
+
+  const orig = typeof window.renderInventory === "function" ? window.renderInventory : function () {};
+
   window.renderInventory = function () {
-    _orig();
-    // FRONTIER キャラに羽クラスを追加
-    const box = document.getElementById('inventory');
+    try {
+      orig();
+    } catch (e) {
+      console.error("renderInventory(orig) error:", e);
+    }
+
+    if (!window.GAME || !Array.isArray(GAME.owned)) return;
+
+    const box = document.getElementById("inventory");
     if (!box) return;
-    const cards = box.querySelectorAll('.card');
-    // reversed配列と同順でDOMが生成されているため
+
+    const cards = box.querySelectorAll(".card");
+    if (!cards || cards.length === 0) return;
+
+    // DOM生成順と owned の逆順が対応している前提に合わせる
     const reversed = GAME.owned.map((c, i) => ({ c, i })).reverse();
+
     cards.forEach((card, domIdx) => {
       const charData = reversed[domIdx]?.c;
-      if (charData && charData.type === 'frontier') {
-        card.classList.add('frontier-card', 'frontier-glow');
-        // overflow:visible が card のスタイルで hidden になっているので上書き
-        card.style.overflow = 'visible';
+      if (charData && charData.type === "frontier") {
+        card.classList.add("frontier-card", "frontier-glow");
+        // 羽はみ出し用に overflow を許可
+        card.style.overflow = "visible";
+      } else {
+        // 他タイプでは付与クラスは触らない（再描画のちらつき防止）
       }
     });
   };
 })();
 
-/* ---- ガチャ結果ポップアップパッチ（羽CSS付与） ---- */
+/* ---- ガチャ結果ポップアップパッチ（frontier CSS付与） ---- */
 (function patchShowResults() {
   if (window.__showResultsPatched__) return;
   window.__showResultsPatched__ = true;
-  const _orig = window.showResults;
+
+  const orig = typeof window.showResults === "function" ? window.showResults : function () {};
+
   window.showResults = function (results) {
-    _orig(results);
-    const grid = document.getElementById('results');
-    if (!grid) return;
-    const cards = grid.querySelectorAll('.card');
+    try {
+      orig(results);
+    } catch (e) {
+      console.error("showResults(orig) error:", e);
+    }
+
+    const grid = document.getElementById("results");
+    if (!grid || !Array.isArray(results)) return;
+
+    const cards = grid.querySelectorAll(".card");
     cards.forEach((card, i) => {
-      if (results[i] && results[i].type === 'frontier') {
-        card.classList.add('frontier-card', 'frontier-glow');
-        card.style.overflow = 'visible';
+      const r = results[i];
+      if (r && r.type === "frontier") {
+        card.classList.add("frontier-card", "frontier-glow");
+        card.style.overflow = "visible";
       }
     });
   };
@@ -2824,21 +2929,20 @@ function frontierGacha() {
 
 /* ---- 新領域演出 ---- */
 function frontierEffect() {
-  // 全画面オーロラフラッシュ
-  const flash = document.createElement('div');
-  flash.style.cssText = `
-    position:fixed; inset:0; pointer-events:none; z-index:99997;
-    background: conic-gradient(
-      rgba(0,229,255,0.6), rgba(180,0,255,0.6),
-      rgba(255,60,247,0.6), rgba(0,229,255,0.6)
-    );
-    animation: frontierFlashAnim 2s forwards;
-  `;
+  // フラッシュ
+  const flash = document.createElement("div");
+  flash.style.cssText = [
+    "position:fixed", "inset:0", "pointer-events:none", "z-index:99997",
+    "background: conic-gradient(rgba(0,229,255,0.6), rgba(180,0,255,0.6), rgba(255,60,247,0.6), rgba(0,229,255,0.6))",
+    "animation: frontierFlashAnim 2s forwards"
+  ].join(";");
+
   document.body.appendChild(flash);
 
-  if (!document.getElementById('frontier_style')) {
-    const st = document.createElement('style');
-    st.id = 'frontier_style';
+  // スタイルは一度だけ注入
+  if (!document.getElementById("frontier_style")) {
+    const st = document.createElement("style");
+    st.id = "frontier_style";
     st.textContent = `
       @keyframes frontierFlashAnim {
         0%   { opacity:0; transform:scale(0.8) rotate(0deg); }
@@ -2850,32 +2954,47 @@ function frontierEffect() {
         15%  { opacity:1; }
         100% { opacity:0; transform:translateY(120vh) translateX(var(--fw)) scale(2) rotate(720deg); }
       }
+      .frontier-card {
+        position: relative;
+      }
+      .frontier-glow {
+        box-shadow: 0 0 8px #00e5ff, 0 0 20px #b300ff;
+      }
     `;
     document.head.appendChild(st);
   }
 
-  setTimeout(() => flash.remove(), 2000);
+  // クリーンアップ
+  setTimeout(() => { if (flash && flash.parentNode) flash.parentNode.removeChild(flash); }, 2000);
 
-  // 羽を120枚ばらまく
-  for (let i = 0; i < 120; i++) {
-    const w = document.createElement('div');
-    w.textContent = '🪽';
-    w.style.cssText = `
-      position:fixed; left:${Math.random() * 100}vw; top:-60px;
-      font-size:${14 + Math.random() * 24}px;
-      pointer-events:none; z-index:99998;
-      filter: drop-shadow(0 0 8px #00e5ff) drop-shadow(0 0 20px #b300ff);
-      animation: frontierWingRain ${1.5 + Math.random() * 3}s linear forwards;
-    `;
-    w.style.setProperty('--fw', (Math.random() * 400 - 200) + 'px');
+  // 羽をばらまく
+  const wingCount = 120;
+  for (let i = 0; i < wingCount; i++) {
+    const w = document.createElement("div");
+    w.textContent = "🪽";
+    w.style.cssText = [
+      `position:fixed`,
+      `left:${Math.random() * 100}vw`,
+      `top:-60px`,
+      `font-size:${14 + Math.random() * 24}px`,
+      `pointer-events:none`,
+      `z-index:99998`,
+      `filter: drop-shadow(0 0 8px #00e5ff) drop-shadow(0 0 20px #b300ff)`,
+      `animation: frontierWingRain ${1.5 + Math.random() * 3}s linear forwards`
+    ].join(";");
+
+    w.style.setProperty("--fw", (Math.random() * 400 - 200) + "px");
     document.body.appendChild(w);
-    setTimeout(() => w.remove(), 5000);
+
+    setTimeout(() => { if (w && w.parentNode) w.parentNode.removeChild(w); }, 5000);
   }
 
-  // 画面色変え
-  document.body.style.filter = 'hue-rotate(60deg) brightness(1.3)';
-  setTimeout(() => { document.body.style.filter = ''; }, 1000);
+  // 画面色変化
+  const prevFilter = document.body.style.filter;
+  document.body.style.filter = "hue-rotate(60deg) brightness(1.3)";
+  setTimeout(() => { document.body.style.filter = prevFilter || ""; }, 1000);
 }
+
 
 /* ======== 新ガチャ・デバフ実装 ここから ======== */
 
