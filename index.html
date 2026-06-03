@@ -3262,7 +3262,7 @@ function renderInventory(){
       <div class="rarity">${c.rarity}</div>
       <div class="sell">売却 ${format(c.sell)}</div>
       <button class="sellBtn">売却</button>
-      <button class="tradeBtn">売却</button>
+      <button class="tradeBtn">交換</button>
     `;
     div.querySelector('.sellBtn').addEventListener('click', ()=>sellCharacterByIndex(originalIdx));
     box.appendChild(div);
@@ -3277,43 +3277,6 @@ function sellCharacterByIndex(idx){
   updateUI();
 }
 
-const tradeBtn = div.querySelector('.tradeBtn');
-
-tradeBtn.addEventListener('click', () => {
-  // 交換ポップアップを開く
-  const tp = document.getElementById('tradePopup');
-  if (!tp) return;
-  tp.classList.add('active');
-
-  // 交換フロー初期化（ステップ1から開始）
-  // - ステップの表示制御
-  ['tradeStep0', 'tradeStep1', 'tradeStep2', 'tradeStep3', 'tradeStep4'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('active');
-  });
-
-  const s1 = document.getElementById('tradeStep1');
-  if (s1) s1.classList.add('active');
-
-  // 任意：ここで対象キャラidxをグローバルに保持するなら
-  // window.__tradeSourceIdx = originalIdx; など
-  window.__tradeSourceIdx = originalIdx;
-
-  // 任意：呪文表示欄を初期表示にクリア
-  const disp = document.getElementById('spellDisplay');
-  if (disp) {
-    disp.style.color = '#00e5ff';
-    disp.innerText = '(ここに呪文が表示されます)';
-  }
-
-  const nav = document.getElementById('step1Nav');
-  if (nav) nav.style.display = 'none';
-
-  const nextBtn = document.getElementById('step1NextBtn');
-  if (nextBtn) nextBtn.style.display = 'none';
-
-  // 以降、既存の tradeStep1ToStep2(), tradeStep2Confirm() などに接続してください
-});
 
 function renderResearch(){
   const box = document.getElementById('researchList');
