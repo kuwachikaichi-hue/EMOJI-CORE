@@ -418,6 +418,56 @@ transform:scale(2);
   color: rgba(255, 255, 255, 0.85);
 }
 
+/* ===== エモズー / 新領域 ===== */
+.frontier-card {
+  position: relative;
+  overflow: visible !important;
+}
+.frontier-card::before,
+.frontier-card::after {
+  content: '🪽';
+  position: absolute;
+  font-size: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  animation: wingFlap 0.8s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 6px #00e5ff);
+  pointer-events: none;
+  z-index: 10;
+}
+.frontier-card::before { left: -22px; }
+.frontier-card::after  { right: -22px; transform: translateY(-50%) scaleX(-1); }
+
+@keyframes wingFlap {
+  0%   { transform: translateY(-50%) rotate(-15deg) scale(1);   }
+  100% { transform: translateY(-50%) rotate(15deg)  scale(1.2); }
+}
+/* after は scaleX(-1) を維持しつつ同様に */
+.frontier-card::after {
+  animation: wingFlapR 0.8s ease-in-out infinite alternate;
+}
+@keyframes wingFlapR {
+  0%   { transform: translateY(-50%) scaleX(-1) rotate(-15deg) scale(1);   }
+  100% { transform: translateY(-50%) scaleX(-1) rotate(15deg)  scale(1.2); }
+}
+
+.frontier-glow {
+  box-shadow: 0 0 30px rgba(0,229,255,.7), 0 0 60px rgba(180,0,255,.5);
+  border: 1px solid rgba(0,229,255,.8) !important;
+}
+
+.btn-frontier {
+  background: linear-gradient(135deg, #00e5ff, #b300ff, #ff3cf7);
+  box-shadow: 0 0 25px #b300ff, 0 0 50px rgba(0,229,255,.4);
+  animation: frontierPulse 1.5s infinite alternate;
+}
+@keyframes frontierPulse {
+  0%   { box-shadow: 0 0 20px #b300ff, 0 0 40px rgba(0,229,255,.3); }
+  100% { box-shadow: 0 0 40px #ff3cf7, 0 0 80px rgba(0,229,255,.6); }
+}
+
+.ez-stat { color: #b300ff; text-shadow: 0 0 8px #b300ff; }
+
 </style>
 </head>
 <body>
@@ -432,6 +482,7 @@ transform:scale(2);
       <div class="stat">🏢 BASE<b id="capacity">0 / 5</b></div>
       <div class="stat">🏆 ACHIEVE<b id="achieveCount">0</b></div>
       <div class="stat">📚 INDEX<b id="indexCount">0</b></div>
+　　　　<div class="stat">🪙 EMOZOO<b id="emozoo" class="ez-stat">0 EZ</b></div>
     </div>
   </div>
   <div class="tabs">
@@ -480,6 +531,7 @@ transform:scale(2);
     <button class="btn-dark" onclick="whiteWeatherGacha()">☁️ ホワイトウェザー🤍<br>3000京円</button>
     <button class="btn-pudding" onclick="puddingGacha()">🍮 プリン無双🔱<br>1穣円</button>
     <button class="btn-crystal" onclick="birdFishUltimateGacha()">🐟鳥魚アルティメット🦆<br>100穣円</button>
+    <button class="btn-frontier" onclick="frontierGacha()">🌌 新領域ガチャ🪽<br>💰1000 EZ</button>
   </div>
 </div>
 
@@ -497,6 +549,7 @@ transform:scale(2);
         <button class="action life" onclick="preventEscape()">3LP 妨害阻止</button>
         <!-- 追加ボタン：200LPを💎1に変換 -->
         <button class="action" onclick="convertLPToCrystal()">200LP → 💎1</button>
+        <button class="action" onclick="convertToEmozoo()">キャラ3体 → 🪙1 EZ + ¥10,000</button>
       </div>
     </div>
   </section>
@@ -2440,6 +2493,295 @@ function isLifeFestival(){
     day===3 || // 水
     day===5    // 金
   ) && hour>=12 && hour<14;
+}
+
+
+/* ====================================================
+   エモズー (EZ) & 新領域ガチャ システム
+   ==================================================== */
+
+/* ---- 初期化 ---- */
+if (GAME.emozoo === undefined) GAME.emozoo = 0;
+
+/* ---- 新領域キャラクタープール ---- */
+const FRONTIER_POOL = [
+  {
+    emoji: "🌌🪽", name: "創界天翼 ネオ・エターナ",
+    rarity: "FRONTIER", sell: 999999999999999999999,
+    type: "frontier",
+    skill: "全ステータス+50000%、新領域の門を開く"
+  },
+  {
+    emoji: "💫🪽👑", name: "領域皇 アストラル・オリジン",
+    rarity: "FRONTIER", sell: 888888888888888888888,
+    type: "frontier",
+    skill: "全倍率+30000%、領域支配宣言"
+  },
+  {
+    emoji: "🔮🪽🌠", name: "予言翼神 プロフェシー・ゼロ",
+    rarity: "FRONTIER", sell: 777777777777777777777,
+    type: "frontier",
+    skill: "次戦クリ確定+全体与ダメ+20000%"
+  },
+  {
+    emoji: "⚡🌌🪽", name: "雷域天帝 ライトニング・ボイド",
+    rarity: "FRONTIER", sell: 666666666666666666666,
+    type: "frontier",
+    skill: "感電確定+雷属性+25000%"
+  },
+  {
+    emoji: "🐉💎🪽", name: "結晶龍翼 クリスタル・ドラグエナ",
+    rarity: "FRONTIER", sell: 555555555555555555555,
+    type: "frontier",
+    skill: "竜系+40000%、💎獲得×8"
+  },
+  {
+    emoji: "🌈🌌🪽💀", name: "終焉虹翼 アポカリプス・フライト",
+    rarity: "FRONTIER", sell: 444444444444444444444,
+    type: "frontier",
+    skill: "全ダメ+45000%、虹の終末翼砲"
+  },
+  {
+    emoji: "☀️🪽🔱", name: "太陽領域神 ヘリオス・フロンティア",
+    rarity: "FRONTIER", sell: 333333333333333333333,
+    type: "frontier",
+    skill: "全体燃焼+35000%、恒星域展開"
+  },
+  {
+    emoji: "🌊🪽👼", name: "潮界天使 オケアノス・ウィング",
+    rarity: "FRONTIER", sell: 222222222222222222222,
+    type: "frontier",
+    skill: "水属性+30000%、聖潮域展開"
+  },
+  {
+    emoji: "❄️🌌🪽", name: "氷域創世 フロスト・フロンティア",
+    rarity: "FRONTIER", sell: 111111111111111111111,
+    type: "frontier",
+    skill: "永続凍結フィールド+氷属性+28000%"
+  },
+  {
+    emoji: "🦁🌌🪽", name: "獅界王 レオ・フロンティア・アルファ",
+    rarity: "FRONTIER", sell: 123456789012345678901,
+    type: "frontier",
+    skill: "物理全倍率+32000%、吼えで全体スタン"
+  },
+  {
+    emoji: "🧬🌌🪽", name: "原初融合翼 バイオ・フロンティア",
+    rarity: "FRONTIER", sell: 246913578024691357802,
+    type: "frontier",
+    skill: "全ステ+55000%、生命領域展開"
+  },
+  {
+    emoji: "💥🪽🌠", name: "爆砕流星翼 メテオ・フロンティア",
+    rarity: "FRONTIER", sell: 369369369369369369369,
+    type: "frontier",
+    skill: "隕石落下+60000%、スタン確定"
+  },
+];
+
+/* ---- 「ムーンロード以外」のガチャ出身キャラか判定 ---- */
+// ムーンロードは購入(buyMoonCharacter)でtypeを付けない→moonRoad出身の判別が難しいため、
+// 「変換対象外」タイプを明示的にリストアップする方式を採用
+const NON_CONVERTIBLE_TYPES = ["frontier"]; // 新領域キャラは変換不可
+
+function isConvertible(char) {
+  // 新領域キャラは変換不可
+  if (char.type === "frontier") return false;
+  // ムーンロード購入キャラを識別するため、buyMoonCharacterでフラグを付ける
+  if (char._fromMoon === true) return false;
+  return true;
+}
+
+/* ---- buyMoonCharacter にフラグを付けるパッチ ---- */
+// ※ 既存の buyMoonCharacter 関数内の obtain(JSON.parse(JSON.stringify(c))) を
+//    以下のように1行追加する形で対応：
+// obtain の前に char._fromMoon = true を入れる
+// 既存関数をラップする形で上書き
+(function patchMoonBuy() {
+  if (window.__moonBuyPatched__) return;
+  window.__moonBuyPatched__ = true;
+  const _orig = window.buyMoonCharacter;
+  window.buyMoonCharacter = function (index) {
+    const c = GAME.moonRoad[index];
+    if (!c) return;
+    const price = c.sell * 10;
+    if (GAME.money < price) { alert("お金不足"); return; }
+    if (GAME.owned.length >= GAME.baseCap) { alert("基地容量不足"); return; }
+    GAME.money -= price;
+    const charCopy = JSON.parse(JSON.stringify(c));
+    charCopy._fromMoon = true; // ← ムーン出身フラグ
+    obtain(charCopy);
+    GAME.moonRoad.splice(index, 1);
+    renderMoonRoad();
+    updateUI();
+  };
+})();
+
+/* ---- EZ変換処理 ---- */
+function convertToEmozoo() {
+  // 変換可能なキャラを抽出（新領域・ムーン購入以外）
+  const convertibles = GAME.owned
+    .map((c, i) => ({ c, i }))
+    .filter(({ c }) => isConvertible(c));
+
+  if (convertibles.length < 3) {
+    alert(
+      `変換可能なキャラが${convertibles.length}体しかいません。\n` +
+      `※ 新領域キャラ・ムーンロード購入キャラは変換不可です。\n` +
+      `3体必要です。`
+    );
+    return;
+  }
+
+  // 最後に追加された3体を変換（インデックスが大きい順）
+  const targets = convertibles.slice(-3);
+  const names = targets.map(({ c }) => c.name).join('、');
+
+  if (!confirm(`以下の3体を変換しますか？\n\n${names}\n\n→ 🪙1 EZ + ¥10,000 獲得`)) return;
+
+  // インデックス降順で削除（前から消すとインデックスがズレるため）
+  const indices = targets.map(({ i }) => i).sort((a, b) => b - a);
+  indices.forEach(i => GAME.owned.splice(i, 1));
+
+  GAME.emozoo += 1;
+  GAME.money += 10000;
+
+  addLog(`🪙 EZ変換 ▶ ${names} → 1 EZ + ¥10,000`);
+  frontierEffect();
+  updateUI();
+}
+
+/* ---- 新領域ガチャ ---- */
+function frontierGacha() {
+  if (GAME.emozoo < 1000) {
+    alert(`EZ不足（必要：1000 EZ、所持：${GAME.emozoo} EZ）`);
+    return;
+  }
+  if (GAME.owned.length >= GAME.baseCap) {
+    alert("基地容量不足");
+    return;
+  }
+
+  GAME.emozoo -= 1000;
+
+  const char = JSON.parse(JSON.stringify(
+    FRONTIER_POOL[Math.floor(Math.random() * FRONTIER_POOL.length)]
+  ));
+
+  obtain(char);
+  frontierEffect();
+  showResults([char]);
+  updateUI();
+}
+
+/* ---- UI更新パッチ（EZ表示） ---- */
+(function patchUpdateUI() {
+  if (window.__ezUIPatched__) return;
+  window.__ezUIPatched__ = true;
+  const _orig = window.updateUI;
+  window.updateUI = function () {
+    _orig();
+    const el = document.getElementById('emozoo');
+    if (el) el.innerText = (GAME.emozoo || 0).toLocaleString() + ' EZ';
+  };
+})();
+
+/* ---- インベントリ描画パッチ（羽CSS付与） ---- */
+(function patchRenderInventory() {
+  if (window.__invPatched__) return;
+  window.__invPatched__ = true;
+  const _orig = window.renderInventory;
+  window.renderInventory = function () {
+    _orig();
+    // FRONTIER キャラに羽クラスを追加
+    const box = document.getElementById('inventory');
+    if (!box) return;
+    const cards = box.querySelectorAll('.card');
+    // reversed配列と同順でDOMが生成されているため
+    const reversed = GAME.owned.map((c, i) => ({ c, i })).reverse();
+    cards.forEach((card, domIdx) => {
+      const charData = reversed[domIdx]?.c;
+      if (charData && charData.type === 'frontier') {
+        card.classList.add('frontier-card', 'frontier-glow');
+        // overflow:visible が card のスタイルで hidden になっているので上書き
+        card.style.overflow = 'visible';
+      }
+    });
+  };
+})();
+
+/* ---- ガチャ結果ポップアップパッチ（羽CSS付与） ---- */
+(function patchShowResults() {
+  if (window.__showResultsPatched__) return;
+  window.__showResultsPatched__ = true;
+  const _orig = window.showResults;
+  window.showResults = function (results) {
+    _orig(results);
+    const grid = document.getElementById('results');
+    if (!grid) return;
+    const cards = grid.querySelectorAll('.card');
+    cards.forEach((card, i) => {
+      if (results[i] && results[i].type === 'frontier') {
+        card.classList.add('frontier-card', 'frontier-glow');
+        card.style.overflow = 'visible';
+      }
+    });
+  };
+})();
+
+/* ---- 新領域演出 ---- */
+function frontierEffect() {
+  // 全画面オーロラフラッシュ
+  const flash = document.createElement('div');
+  flash.style.cssText = `
+    position:fixed; inset:0; pointer-events:none; z-index:99997;
+    background: conic-gradient(
+      rgba(0,229,255,0.6), rgba(180,0,255,0.6),
+      rgba(255,60,247,0.6), rgba(0,229,255,0.6)
+    );
+    animation: frontierFlashAnim 2s forwards;
+  `;
+  document.body.appendChild(flash);
+
+  if (!document.getElementById('frontier_style')) {
+    const st = document.createElement('style');
+    st.id = 'frontier_style';
+    st.textContent = `
+      @keyframes frontierFlashAnim {
+        0%   { opacity:0; transform:scale(0.8) rotate(0deg); }
+        30%  { opacity:0.8; transform:scale(1.05) rotate(5deg); }
+        100% { opacity:0; transform:scale(2) rotate(15deg); }
+      }
+      @keyframes frontierWingRain {
+        0%   { opacity:0; transform:translateY(-80px) translateX(0) scale(0.5) rotate(0deg); }
+        15%  { opacity:1; }
+        100% { opacity:0; transform:translateY(120vh) translateX(var(--fw)) scale(2) rotate(720deg); }
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  setTimeout(() => flash.remove(), 2000);
+
+  // 羽を120枚ばらまく
+  for (let i = 0; i < 120; i++) {
+    const w = document.createElement('div');
+    w.textContent = '🪽';
+    w.style.cssText = `
+      position:fixed; left:${Math.random() * 100}vw; top:-60px;
+      font-size:${14 + Math.random() * 24}px;
+      pointer-events:none; z-index:99998;
+      filter: drop-shadow(0 0 8px #00e5ff) drop-shadow(0 0 20px #b300ff);
+      animation: frontierWingRain ${1.5 + Math.random() * 3}s linear forwards;
+    `;
+    w.style.setProperty('--fw', (Math.random() * 400 - 200) + 'px');
+    document.body.appendChild(w);
+    setTimeout(() => w.remove(), 5000);
+  }
+
+  // 画面色変え
+  document.body.style.filter = 'hue-rotate(60deg) brightness(1.3)';
+  setTimeout(() => { document.body.style.filter = ''; }, 1000);
 }
 
 /* ======== 新ガチャ・デバフ実装 ここから ======== */
