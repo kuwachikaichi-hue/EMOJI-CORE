@@ -3859,6 +3859,50 @@ function isLifeFestival(){
   ) && hour>=12 && hour<14;
 }
 
+// 交換キャンセル/クローズの実装を補完
+window.cancelTrade = function(){
+  try {
+    // ロック解除
+    if (window.TradeState) {
+      TradeState.offer = null;
+      TradeState.partnerOffer = null;
+      TradeState.reply = null;
+      if (TradeState.timer) { clearInterval(TradeState.timer); TradeState.timer = null; }
+    }
+    // ポップアップを閉じる
+    const tp = document.getElementById('tradePopup');
+    if (tp) tp.classList.remove('active');
+    // UI更新
+    if (typeof updateUI === 'function') updateUI();
+  } catch(e) {}
+};
+
+window.closeTrade = function(){
+  // 完了画面「閉じる」などから呼ぶ用
+  window.cancelTrade();
+};
+
+// 旧名で呼ばれても動くように互換関数も用意
+window.tradeStep1ToStep2 = window.tradeStep1ToStep2 || function(){
+  // 新実装では TradeHandlers 内で処理されるが、誤タップ対策でStep2へ誘導
+  try {
+    const s1 = document.getElementById('tradeStep1');
+    const s2 = document.getElementById('tradeStep2');
+    if (s1) s1.classList.remove('active');
+    if (s2) s2.classList.add('active');
+  } catch(e){}
+};
+
+window.tradeStep2Confirm = window.tradeStep2Confirm || function(){
+  // 新実装の readPartnerOffer() を呼び出す
+  try {
+    if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function') {
+      // ここでは openStart は不要。Step2の「読み込む」ボタンの紐付けに倣う
+      const btn = document.querySelector('#tradeStep2 .tradeAction:not(.danger)');
+      if (btn && typeof btn.onclick === 'function') btn.onclick();
+    }
+  } catch(e){}
+};
 
 /* ====================================================
    エモズー (EZ) & 新領域ガチャ システム
