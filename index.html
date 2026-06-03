@@ -2765,8 +2765,8 @@ function frontierGacha() {
     return;
   }
   const haveEz = typeof GAME.emozoo === "number" ? GAME.emozoo : 0;
-  if (haveEz < 1000) {
-    alert("EZ不足（必要：1000 EZ、所持：" + haveEz + " EZ）");
+  if (haveEz < 100) {
+    alert("EZ不足（必要：100 EZ、所持：" + haveEz + " EZ）");
     return;
   }
   if (!Array.isArray(GAME.owned) || typeof GAME.baseCap !== "number") {
@@ -2786,7 +2786,7 @@ function frontierGacha() {
     return;
   }
 
-  GAME.emozoo = haveEz - 1000;
+  GAME.emozoo = haveEz - 100;
 
   const pickIdx = randIndex(FRONTIER_POOL);
   const base = FRONTIER_POOL[pickIdx];
