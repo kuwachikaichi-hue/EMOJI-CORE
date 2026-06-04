@@ -8542,15 +8542,6 @@ renderMoonRoad();
         ev.stopImmediatePropagation && ev.stopImmediatePropagation();
       }, true); // captureで最優先
     } else {
-      // 既に印があっても onclick が外れていたら復旧
-      if (btn.onclick == null) {
-        btn.onclick = function(ev){
-          ev && ev.preventDefault && ev.preventDefault();
-          ev && ev.stopPropagation && ev.stopPropagation();
-          goStep2();
-          return false;
-        };
-      }
     }
   }
   // 何度か遅延で再結線（後書き対策）
@@ -8831,15 +8822,7 @@ renderMoonRoad();
         if (ev && ev.stopImmediatePropagation) ev.stopImmediatePropagation();
       }, true); // capture
     } else {
-      // 既に印があっても onclick が外れていれば復旧
-      if (btn.onclick == null) {
-        btn.onclick = function(ev){
-          if (ev && ev.preventDefault) ev.preventDefault();
-          if (ev && ev.stopPropagation) ev.stopPropagation();
-          goStep2();
-          return false;
-        };
-      }
+    
     }
     // ナビの強制表示（offer が未設定でも導線を可視化）
     var nav = el('step1Nav'); if (nav) nav.style.display = 'block';
@@ -9084,6 +9067,146 @@ renderMoonRoad();
 
 })();
 
+// ==== Trade Event Stabilizer v2026-06-04 ====
+(function(){
+
+  if(window.__tradeEventStabilizer__) return;
+  window.__tradeEventStabilizer__ = true;
+
+  function el(id){
+    return document.getElementById(id);
+  }
+
+  function showStep(id){
+
+    ["tradeStep1","tradeStep2","tradeStep3","tradeStep4"]
+      .forEach(step=>{
+        const n = el(step);
+        if(!n) return;
+
+        n.classList.remove("active");
+        n.style.display = "none";
+      });
+
+    const target = el(id);
+
+    if(target){
+      target.classList.add("active");
+      target.style.display = "block";
+    }
+
+    const popup = el("tradePopup");
+
+    if(popup){
+      popup.classList.add("active");
+      popup.style.display = "flex";
+    }
+  }
+
+  function wireStep1(){
+
+    const btn =
+      el("step1NextBtn") ||
+      document.querySelector("#tradeStep1 .tradeAction:not(.danger)");
+
+    if(!btn || btn.__stabilized) return;
+
+    btn.__stabilized = true;
+
+    btn.addEventListener("click",function(e){
+
+      e.preventDefault();
+
+      setTimeout(()=>{
+
+        const s2 = el("tradeStep2");
+
+        if(
+          !s2 ||
+          !s2.classList.contains("active")
+        ){
+          showStep("tradeStep2");
+        }
+
+      },50);
+
+    });
+
+  }
+
+  function wireStep2(){
+
+    const btn =
+      document.querySelector("#tradeStep2 .tradeAction:not(.danger)");
+
+    if(!btn || btn.__stabilized) return;
+
+    btn.__stabilized = true;
+
+    btn.addEventListener("click",function(){
+
+      setTimeout(()=>{
+
+        const s3 = el("tradeStep3");
+
+        if(
+          !s3 ||
+          !s3.classList.contains("active")
+        ){
+
+          const text =
+            (el("step2Input")?.value || "")
+              .trim();
+
+          if(text){
+            showStep("tradeStep3");
+          }
+
+        }
+
+      },100);
+
+    });
+
+  }
+
+  function wireClose(){
+
+    const popup = el("tradePopup");
+
+    if(!popup) return;
+
+    popup.addEventListener("click",function(e){
+
+      if(e.target === popup){
+        popup.classList.remove("active");
+      }
+
+    });
+
+  }
+
+  function repair(){
+
+    wireStep1();
+    wireStep2();
+    wireClose();
+
+  }
+
+  repair();
+
+  const obs = new MutationObserver(()=>{
+    repair();
+  });
+
+  obs.observe(document.body,{
+    childList:true,
+    subtree:true
+  });
+
+})();
+  
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
