@@ -4203,16 +4203,26 @@ function load(){
   try{
     const obj = JSON.parse(data);
 
-    // moneyが壊れていたら読み込まない
-    if(!Number.isFinite(Number(obj.money))){
-      console.warn("money broken in save", obj.money);
-      return;
+    // money復旧
+    if(
+      obj.money === undefined ||
+      obj.money === null ||
+      Number.isNaN(Number(obj.money))
+    ){
+      console.warn("money broken in save");
+
+      // 旧セーブ救済
+      if(typeof GAME.money === "number" && GAME.money > 0){
+        obj.money = GAME.money;
+      }else{
+        obj.money = 100000;
+      }
     }
 
     Object.assign(GAME, obj);
 
   }catch(e){
-    console.warn('save broken');
+    console.warn("save broken", e);
   }
 }
 
