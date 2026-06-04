@@ -1034,6 +1034,61 @@ button:active {
 #ezCloseBtn { background: linear-gradient(135deg,#ff355b,#ff8844); }
 #ezWarn { color:#ff6b6b; font-size:12px; font-weight:900; margin-top:6px; }
 
+/* === Fix Pack v2026-06-04 (UI click & money display) === */
+
+/* 最前面に残った半透明FXがクリックをブロックしないように */
+.heavenFlash,
+.flash,
+.rainbowFlash,
+[class^="fx_"],
+.particle {
+  pointer-events: none !important;
+}
+
+/* 広告スティッキーがUIを覆わないように */
+#adBarSticky {
+  z-index: 80 !important; /* header(100)未満に */
+  pointer-events: none !important;
+}
+#adBarSticky .adRow {
+  pointer-events: auto !important; /* テキスト選択は可、他UIは貫通 */
+}
+
+/* 重要ボタンは常にクリック可能に（disabledの誤残しを無効化） */
+button[disabled]:not([data-keep-disabled]) {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+
+/* moneyの複数行表示で切れないように最終指定 */
+#money {
+  max-height: calc(1.2em * 4) !important;
+  line-height: 1.2em !important;
+  overflow-y: auto !important;
+  word-break: break-all;
+  white-space: normal;
+  text-shadow: 0 0 5px #ffd700,0 0 10px #ffcc00,0 0 20px #ffaa00,0 0 40px rgba(255,200,0,.8);
+}
+
+/* 交換/トレード重複ポップアップの旧DOMを見えなくする保険 */
+#ezPopup_old,
+#tradePopup_old {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+/* 低モーション/軽量表示の既存クラスが過度に透明にしない保険 */
+.perf-lite .flash,
+.perf-lite .rainbowFlash,
+.perf-lite [class^="fx_"],
+.low-motion .flash,
+.low-motion .rainbowFlash,
+.low-motion [class^="fx_"] {
+  opacity: 0.5 !important;
+  filter: none !important;
+  pointer-events: none !important;
+}
+
 </style>
 <div id="saveDock">
   <button id="btnSaveOpen">保存/読込</button>
@@ -1472,6 +1527,12 @@ onclick="buyDiamondMoney()">
   </div>
 </div>
 
+<!-- === Fix Pack anchors (safe mounts) === -->
+<!-- 既存に無ければ作るダミー領域（scriptが参照しても安全） -->
+<div id="fxSafeMount" style="position:fixed;inset:0;pointer-events:none;z-index:-1;"></div>
+
+<!-- 重複ポップアップがある環境のためのID矯正フック（後段JSが実施） -->
+<div id="dupGuardAnchor" hidden></div>
 
 <script>
 
@@ -6901,6 +6962,209 @@ renderMoonRoad();
   })();
 })();
 
+/* === Fix Pack v2026-06-04 (clickability & money display hard-guard) === */
+(function FixPack_20260604(){
+  if (window.__FixPack_20260604__) return;
+  window.__FixPack_20260604__ = true;
+
+  // 安全数値/フォーマッタ（最終版）
+  function toNum(v, fb=0){
+    try{
+      if (v == null) return fb;
+      if (typeof v === 'number') return isFinite(v) ? v : fb;
+      if (typeof v === 'bigint') { const n = Number(v); return isFinite(n) ? n : fb; }
+      if (typeof v === 'string'){ const s = v.replace(/[,_\s¥円]/g,''); const n = Number(s); return isFinite(n)?n:fb; }
+      if (typeof v === 'object' && v.valueOf){ const n = Number(v.valueOf()); return isFinite(n)?n:fb; }
+      return fb;
+    }catch{ return fb; }
+  }
+  function formatSafe(v){
+    const n = Math.max(0, toNum(v, 0));
+    try { return '¥' + n.toLocaleString(); } catch { return '¥' + String(n); }
+  }
+  function normalizeSell(c){
+    if (!c || typeof c!=='object') return 1;
+    let s = toNum(c.sell, NaN);
+    if (!isFinite(s) || s<=0){
+      const sc = toNum(c.sellCrystal, NaN);
+      s = isFinite(sc) ? Math.max(1, Math.floor(sc)) : 1;
+    }
+    c.sell = s;
+    return s;
+  }
+
+  // 1) クリック不能の元凶を排除（全画面FXのpointer-eventsを切る）
+  (function unblockClicks(){
+    const killers = [
+      '.heavenFlash','.flash','.rainbowFlash',
+      '[class^="fx_"]','.particle'
+    ];
+    killers.forEach(sel=>{
+      document.querySelectorAll(sel).forEach(el=>{
+        el.style.pointerEvents = 'none';
+      });
+    });
+    // スティッキー広告はUIを覆わない
+    const sticky = document.getElementById('adBarSticky');
+    if (sticky){
+      sticky.style.zIndex = '80';
+      sticky.style.pointerEvents = 'none';
+      const row = sticky.querySelector('.adRow');
+      if (row) row.style.pointerEvents = 'auto';
+    }
+    // 誤ってdisabledのボタンを救済（本当に無効にしたいときは data-keep-disabled を付ける）
+    document.querySelectorAll('button[disabled]:not([data-keep-disabled])').forEach(b=>{
+      b.disabled = false;
+      b.style.pointerEvents = 'auto';
+      b.style.opacity = '1';
+    });
+  })();
+
+  // 2) money 表示の強制更新フック（UIが上書きされても勝つ最後の1手）
+  (function hardPatchUpdateUI(){
+    const orig = window.updateUI;
+    window.updateUI = function(){
+      try { if (typeof orig === 'function') orig(); } catch(e){}
+      try {
+        // GAMEが未初期でも最低限置く
+        if (typeof window.GAME !== 'object' || !window.GAME) {
+          window.GAME = { money: 0, lp: 0, crystal: 0, baseCap: 5, owned: [], dex: [], achievements: [], research: {luck:0,legend:0,event:0,chimera:0,life:0,cap:0,auto:0,time:0} };
+        }
+        const moneyEl = document.getElementById('money');
+        const lpEl = document.getElementById('lp');
+        const crystalEl = document.getElementById('crystal');
+        if (moneyEl) moneyEl.textContent = formatSafe(GAME.money);
+        if (lpEl) lpEl.textContent = (toNum(GAME.lp,0)) + ' LP';
+        if (crystalEl) crystalEl.textContent = toNum(GAME.crystal,0);
+      } catch(e){}
+      try { if (typeof save === 'function') save(); } catch(e){}
+    };
+    // 起動直後に一発反映
+    setTimeout(()=>{ try{ updateUI(); }catch(e){} }, 0);
+  })();
+
+  // 3) showResults / renderInventory の売値を必ず¥1以上で表示
+  (function patchRenderers(){
+    function fixPrices(root){
+      if (!root) return;
+      root.querySelectorAll('.card .sell').forEach(el=>{
+        const v = toNum(el.textContent, 1);
+        el.textContent = formatSafe(Math.max(1, v));
+      });
+    }
+    const origShow = window.showResults;
+    window.showResults = function(results){
+      try { if (typeof origShow === 'function') origShow(results); } catch(e){}
+      try { fixPrices(document.getElementById('results')); } catch(e){}
+    };
+    const origInv = window.renderInventory;
+    if (typeof origInv === 'function') {
+      window.renderInventory = function(){
+        const r = origInv.apply(this, arguments);
+        try { fixPrices(document.getElementById('inventory')); } catch(e){}
+        return r;
+      };
+    }
+  })();
+
+  // 4) obtain/gacha 最終ガード（NaN/0売値/所持金負数を抑止）
+  (function patchObtainGacha(){
+    const origObtain = window.obtain;
+    window.obtain = function(char){
+      const s = normalizeSell(char);
+      try {
+        if (typeof origObtain === 'function') origObtain(char);
+        else {
+          window.GAME = window.GAME || {};
+          GAME.owned = Array.isArray(GAME.owned)?GAME.owned:[];
+          GAME.owned.push(char);
+          GAME.money = toNum(GAME.money,0) + Math.floor(s/4);
+          GAME.dex = Array.isArray(GAME.dex)?GAME.dex:[];
+          if (char?.name && !GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+        }
+      } catch(e){
+        window.GAME = window.GAME || {};
+        GAME.owned = Array.isArray(GAME.owned)?GAME.owned:[];
+        GAME.owned.push(char);
+        GAME.money = toNum(GAME.money,0) + Math.floor(s/4);
+      }
+      if (!isFinite(toNum(GAME.money,NaN)) || toNum(GAME.money,0) < 0) {
+        GAME.money = Math.max(0, Math.floor(s/4));
+      }
+      try { if (typeof addLog === 'function') addLog('獲得 ▶ ' + (char?.name||'？')); } catch(e){}
+      try { updateUI(); } catch(e){}
+    };
+
+    const origGacha = window.gacha;
+    if (typeof origGacha === 'function') {
+      window.gacha = function(pool, opts){
+        const out = origGacha.apply(this, arguments);
+        // outが配列なら中身のsellを正規化
+        if (Array.isArray(out)) {
+          out.forEach(normalizeSell);
+        }
+        try { updateUI(); } catch(e){}
+        return out;
+      };
+    }
+  })();
+
+  // 5) MoonRoad の価格取り扱いも最終補強
+  (function patchMoonRoad(){
+    const origBuy = window.buyMoonCharacter;
+    if (typeof origBuy === 'function' && !origBuy.__fixPackWrapped){
+      window.buyMoonCharacter = function(index){
+        const c = (window.GAME && GAME.moonRoad && GAME.moonRoad[index]) || null;
+        if (!c) return;
+        const s = normalizeSell(c);
+        const price = Math.max(1, s * 10);
+        if (toNum(GAME.money,0) < price) { alert('お金不足'); return; }
+        if ((GAME.owned?.length||0) >= toNum(GAME.baseCap,0)) { alert('基地容量不足'); return; }
+        GAME.money = toNum(GAME.money,0) - price;
+        obtain(JSON.parse(JSON.stringify(c)));
+        GAME.moonRoad.splice(index,1);
+        try{ renderMoonRoad && renderMoonRoad(); }catch(e){}
+        try{ updateUI(); }catch(e){}
+      };
+      window.buyMoonCharacter.__fixPackWrapped = true;
+    }
+  })();
+
+  // 6) 重複ポップアップIDを無害化（最後の1つ以外のIDをリネーム）
+  (function dedupePopups(){
+    const fixDup = (idBase)=>{
+      const nodes = document.querySelectorAll('#'+idBase);
+      if (nodes.length <= 1) return;
+      for (let i=0; i<nodes.length-1; i++){
+        nodes[i].id = idBase + '_old';
+        nodes[i].style.display = 'none';
+      }
+    };
+    fixDup('ezPopup');
+    fixDup('tradePopup');
+  })();
+
+  // 7) 起動後にもう一度「クリック復旧」と「資金表示」を確認
+  window.addEventListener('load', ()=>{
+    // 再度クリック復旧
+    (function reUnblock(){
+      document.querySelectorAll('.heavenFlash,.flash,.rainbowFlash,[class^="fx_"],.particle')
+        .forEach(el=> el.style.pointerEvents='none');
+      const sticky = document.getElementById('adBarSticky');
+      if (sticky){
+        sticky.style.zIndex = '80';
+        sticky.style.pointerEvents = 'none';
+        const row = sticky.querySelector('.adRow');
+        if (row) row.style.pointerEvents = 'auto';
+      }
+    })();
+    // moneyを確実に表示
+    try { updateUI(); } catch(e){}
+  }, { once:true });
+
+})();
+
+  
 
 <!-- =========================================
   //Consolidated Patch Bundle (2026-06-04)
@@ -7140,6 +7404,7 @@ renderMoonRoad();
 
 })();
 </script>
+
 
 <!-- =========================
      Group B: Emozoo Exchange
@@ -8180,7 +8445,7 @@ renderMoonRoad();
 
 })();
 </script>
-
+  
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
