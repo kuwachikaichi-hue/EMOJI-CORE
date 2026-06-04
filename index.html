@@ -7488,6 +7488,194 @@ renderMoonRoad();
   }
 })();
 
+// ===== Trade Spell Read Fix v2026-06-04-b =====
+(function(){
+  // 安全ユーティリティ
+  function $(s){ return document.querySelector(s); }
+  function el(id){ return document.getElementById(id); }
+  function showStep(id){
+    ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(k=>{
+      const n = el(k); if(n) n.classList.remove('active');
+    });
+    const s = el(id); if(s) s.classList.add('active');
+  }
+  function ensureDecode(){
+    // TradeUtil.decodeSpell が無い環境でも「違う」エラーを必ず返す簡易版
+    if (window.TradeUtil && typeof TradeUtil.decodeSpell === 'function') return TradeUtil.decodeSpell;
+    return function(spell){
+      try{
+        const json = atob(spell.replace(/-/g,'+').replace(/_/g,'/'));
+        const raw = JSON.parse(json);
+        const p = raw?.body?.p || raw?.p || raw;
+        if (!p || p.kind!=='offer' || !p.token) throw new Error('invalid-offer');
+        return p;
+      }catch(e){
+        const err = new Error('decode-failed');
+        err.code = 'DECODE_FAILED';
+        throw err;
+      }
+    };
+  }
+  function wireReadButton(){
+    const btn = $('#tradeStep2 .tradeAction:not(.danger)');
+    const input = el('step2Input');
+    const errEl = el('step2Error');
+    if (!btn || !input) return;
+    // 二重バインド防止
+    if (btn.__wiredRead__) return;
+    btn.__wiredRead__ = true;
+    btn.onclick = function(){
+      // 既存の readPartnerOffer があればそれを優先
+      if (typeof window.readPartnerOffer === 'function') {
+        try { window.readPartnerOffer(); return; } catch(_){}
+      }
+      // フォールバック読み込み
+      try{
+        const val = (input.value||'').trim();
+        if (!val) {
+          if (errEl) errEl.textContent = '呪文が空です';
+          // 目視できる軽い振動
+          const s2 = el('tradeStep2'); if (s2){ s2.classList.add('shaking'); setTimeout(()=>s2.classList.remove('shaking'), 360); }
+          return;
+        }
+        const decode = ensureDecode();
+        const data = decode(val); // ここで例外→catchへ
+        // 受け取ったオファーをステートへ
+        window.TradeState = window.TradeState || {};
+        TradeState.partnerOffer = {
+          name: data.name || '不明',
+          sell: (window.TradeUtil ? TradeUtil.toNum(data.sell,0) : (Number(data.sell)||0)),
+          token: data.token
+        };
+        // ACK呪文を生成してStep3に表示
+        const ack = { kind:'ack', ok:true, token:data.token };
+        let ackSpell = '';
+        try{
+          ackSpell = (window.TradeUtil ? TradeUtil.encodeSpell(ack)
+                                       : btoa(unescape(encodeURIComponent(JSON.stringify({body:{v:1,t:Date.now(),p:ack},sig:'lite'})))))
+        }catch(_){
+          ackSpell = JSON.stringify(ack);
+        }
+        const disp2 = el('spellDisplay2'); if (disp2) disp2.textContent = ackSpell;
+        // タイマーを開始（常に走らせる）
+        startTradeCountdown(30);
+        // 画面をStep3へ
+        showStep('tradeStep3');
+        // 既存の内部関数が後から上書きしてもよいように、成功ログだけ追加
+        try { if (typeof addLog==='function') addLog('🔐 呪文を読み込みました'); } catch(_){}
+        if (errEl) errEl.textContent = '';
+      }catch(e){
+        // ここに来たら確実にエラーを見せる
+        const msg =
+          (e && (e.message==='invalid-offer' || e.code==='DECODE_FAILED')) ? '呪文が違う/壊れています' :
+          '呪文を読み込めません';
+        if (errEl) errEl.textContent = msg;
+        // 視覚的フィードバック
+        const s2 = el('tradeStep2'); if (s2){ s2.classList.add('shaking'); setTimeout(()=>s2.classList.remove('shaking'), 360); }
+      }
+    };
+  }
+  function ensureRunButton(){
+    const s3 = el('tradeStep3');
+    if (!s3) return;
+    let run = s3.querySelector('.tradeAction.run');
+    if (!run) {
+      run = document.createElement('button');
+      run.className = 'tradeAction run';
+      run.style.marginTop = '8px';
+      run.textContent = 'OK（実行）';
+      s3.appendChild(run);
+    }
+    if (run.__wiredRun__) return;
+    run.__wiredRun__ = true;
+    run.onclick = function(){
+      // finalizeSwap があればそれを使う
+      if (typeof window.finalizeSwap === 'function') {
+        try { window.finalizeSwap(); return; } catch(e){
+          alert('交換を完了できません：' + (e?.message||'不明なエラー'));
+          return;
+        }
+      }
+      // 最低限のフォールバック（必ず入替を行う）
+      try{
+        if (!window.TradeState || !TradeState.offer || !TradeState.partnerOffer) {
+          alert('交換データが不足しています'); return;
+        }
+        const idx = TradeState.offer.ownedIdx;
+        const snap = TradeState.offer.snapshot||{};
+        const cur = (window.GAME && GAME.owned) ? GAME.owned[idx] : null;
+        if (!cur || cur.name !== snap.name) {
+          alert('対象キャラが変更されています'); return;
+        }
+        const removed = GAME.owned.splice(idx,1)[0];
+        const incoming = {
+          emoji: '🪽',
+          name: TradeState.partnerOffer.name||'交換受領キャラ',
+          rarity: removed?.rarity||'TRADE',
+          sell: Number(TradeState.partnerOffer.sell||0),
+          type: removed?.type||'trade'
+        };
+        GAME.owned.push(incoming);
+        try { if (typeof addLog==='function') addLog('🔀 交換成立 ▶ '+(removed?.name||'？')+' ⇄ '+incoming.name); } catch(_){}
+        const info = el('tradeResultInfo');
+        if (info) info.textContent = `あなたの「${removed?.name||'？'}」と相手の「${incoming.name}」を交換しました。`;
+        showStep('tradeStep4');
+        try { if (typeof updateUI==='function') updateUI(); } catch(_){}
+        try { if (typeof save==='function') save(); } catch(_){}
+      }catch(e){
+        alert('交換を完了できません：' + (e?.message||'不明なエラー'));
+      }
+    };
+  }
+  function startTradeCountdown(sec){
+    const t = el('tradeTimer');
+    const frame = el('dangerFrame');
+    if (!t) return;
+    clearInterval(window.__tradeTimer_fix__);
+    let rest = sec|0;
+    t.textContent = String(rest);
+    t.classList.remove('danger');
+    if (frame) frame.style.display = 'none';
+    window.__tradeTimer_fix__ = setInterval(()=>{
+      rest--;
+      if (t) {
+        t.textContent = String(rest);
+        if (rest<=5) {
+          t.classList.add('danger');
+          if (frame) frame.style.display = 'block';
+        }
+      }
+      if (rest<=0) {
+        clearInterval(window.__tradeTimer_fix__);
+        if (frame) frame.style.display = 'none';
+      }
+    }, 1000);
+  }
+  function ensureOfferLock(){
+    // 在庫「交換」ボタンから入ったときだけ offer が入るケースへの保険。
+    // Step1が開いたのに offer が空なら、ユーザに再選択を促す。
+    const s1 = el('tradeStep1');
+    if (!s1 || !s1.classList.contains('active')) return;
+    if (!window.TradeState || !TradeState.offer || typeof TradeState.offer.ownedIdx!=='number') {
+      const disp = el('spellDisplay');
+      if (disp) disp.textContent = '在庫の「交換」ボタンから開始してください。';
+      const nav = el('step1Nav'); if (nav) nav.style.display = 'none';
+      const next = el('step1NextBtn'); if (next) next.style.display = 'none';
+    }
+  }
+  // 初期化と再結線（動的差し替えに強くするため複数回走らせる）
+  function arm(){
+    try { wireReadButton(); } catch(_){}
+    try { ensureRunButton(); } catch(_){}
+    try { ensureOfferLock(); } catch(_){}
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', ()=>{ arm(); setTimeout(arm, 300); setTimeout(arm, 1200); }, {once:true});
+  } else {
+    arm(); setTimeout(arm, 300); setTimeout(arm, 1200);
+  }
+})();
+  
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
