@@ -8157,6 +8157,297 @@ renderMoonRoad();
   }
 })();
 
+// ==== TRADE HOTFIX v2026-06-04-FINAL ====
+// 交換ボタン無限アラート → 呪文表示に到達できない不具合を強制修正
+(function TradeHotfixFinal(){
+  // 安全ユーティリティ
+  const $ = s => document.querySelector(s);
+  const $$ = s => Array.from(document.querySelectorAll(s));
+  // 1) 在庫の「交換」ボタンを強制的に新実装へ結線
+  function wireInventoryTradeButtons(){
+    const inv = document.getElementById('inventory');
+    if (!inv) return;
+    // イベント委譲で恒久配線（個別バインドの競合を避ける）
+    if (!inv.__tradeHotfixBound__) {
+      inv.__tradeHotfixBound__ = true;
+      inv.addEventListener('click', function(ev){
+        const t = ev.target;
+        if (!t) return;
+        if (!t.classList.contains('tradeBtn')) return;
+        // DOM順 → 所持配列インデックス（逆順描画）
+        const card = t.closest('.card');
+        if (!card) return;
+        const domIndex = Array.prototype.indexOf.call(inv.children, card);
+        try {
+          // 新実装がある場合は必ずこちらを使用（フォールバックのアラート禁止）
+          if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function') {
+            TradeHandlers.openStart(domIndex);
+          } else {
+            // 新実装がまだ初期化途中の可能性。最低限ポップアップを開き手順を案内。
+            ensureTradePopup();
+            openTradePopup('tradeStep1');
+            const disp = document.getElementById('spellDisplay');
+            if (disp) {
+              disp.textContent = '初期化中… 1秒後に再度ボタンを押してください。';
+            }
+            setTimeout(()=>{}, 800);
+          }
+        } catch(e){
+          alert('交換開始に失敗: ' + (e && e.message ? e.message : '未知のエラー'));
+        }
+      }, { passive: true });
+    }
+    // 旧フォールバックで注入された click ハンドラの案内アラートを無効化（存在する場合）
+    $$('.card .tradeBtn').forEach(btn=>{
+      // 直付け onclick を消す（旧コードが出したフォールバックを殺す）
+      if (typeof btn.onclick === 'function') btn.onclick = null;
+      btn.__bound = true; // 旧パッチが再配線しないようにダミーフラグ
+    });
+  }
+  // 2) tradePopup がなければ最小UIを挿入（念のため）
+  function ensureTradePopup(){
+    if (document.getElementById('tradePopup')) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="tradePopup" id="tradePopup" style="position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;align-items:center;justify-content:center;z-index:9999;">
+        <div class="tradeBox" style="width:100%;max-width:540px;max-height:90vh;overflow:auto;background:#08111f;border-radius:20px;padding:16px;border:1px solid rgba(0,229,255,.3);">
+          <div class="tradeTitle" style="font-size:18px;font-weight:900;color:#00e5ff;margin-bottom:12px;text-align:center;">🔀 キャラクター交換</div>
+          <div class="tradeStep active" id="tradeStep1">
+            <div class="tradeMeta">交換開始</div>
+            <div id="spellDisplay" class="num-mono" style="background:#000d1a;border:1px solid rgba(0,229,255,.4);border-radius:10px;padding:12px;min-height:80px;color:#00e5ff;"></div>
+            <button class="tradeAction danger" style="margin-top:8px;" onclick="(document.getElementById('tradePopup').classList.remove('active'))">閉じる</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap.firstChild);
+  }
+  // 3) Stepボタンを新実装に直結（常に上書き）
+  function wireTradeSteps(){
+    const tp = document.getElementById('tradePopup');
+    if (!tp) return;
+    // Step1 → Step2
+    const step1Next = document.getElementById('step1NextBtn') || $('#tradeStep1 .tradeAction:not(.danger)');
+    if (step1Next) {
+      step1Next.onclick = function(){
+        showStep('tradeStep2');
+        const err = document.getElementById('step2Error');
+        if (err) err.textContent = '';
+      };
+    }
+    // Step2 「呪文を読み込む」→ readPartnerOffer に強制結線
+    const readBtn = $('#tradeStep2 .tradeAction:not(.danger)');
+    if (readBtn) {
+      readBtn.onclick = function(){
+        if (typeof window.readPartnerOffer === 'function') {
+          try { window.readPartnerOffer(); return; } catch(e){}
+        }
+        // フォールバック（軽量デコーダ）
+        const ta = document.getElementById('step2Input');
+        const err = document.getElementById('step2Error');
+        try{
+          const val = (ta?.value || '').trim();
+          if (!val) { if (err) err.textContent = '呪文が空です'; return; }
+          const decoder = getDecode();
+          const data = decoder(val);
+          window.TradeState = window.TradeState || {};
+          TradeState.partnerOffer = { name: data.name||'不明', sell: toNum(data.sell,0), token: data.token };
+          const ack = { kind:'ack', ok:true, token:data.token };
+          const disp2 = document.getElementById('spellDisplay2');
+          if (disp2) disp2.textContent = encodeAck(ack);
+          showStep('tradeStep3');
+          startTimer30();
+          if (err) err.textContent = '';
+        } catch(e){
+          if (err) err.textContent = '呪文が無効/期限切れ';
+        }
+      };
+    }
+    // Step3 実行（OK）→ finalizeSwap に強制結線。なければフォールバック実装。
+    const s3 = document.getElementById('tradeStep3');
+    if (s3) {
+      let run = s3.querySelector('.tradeAction.run');
+      if (!run) {
+        run = document.createElement('button');
+        run.className = 'tradeAction run';
+        run.style.marginTop = '8px';
+        run.textContent = 'OK（実行）';
+        s3.appendChild(run);
+      }
+      run.onclick = function(){
+        if (typeof window.finalizeSwap === 'function') {
+          try { window.finalizeSwap(); return; } catch(e){ alert('交換失敗: '+(e?.message||'不明')); }
+        }
+        // フォールバック: 最低限入替
+        try {
+          if (!window.TradeState || !TradeState.offer || !TradeState.partnerOffer) {
+            alert('交換データ不足'); return;
+          }
+          const idx = TradeState.offer.ownedIdx;
+          const snap = TradeState.offer.snapshot||{};
+          const cur = (window.GAME && GAME.owned) ? GAME.owned[idx] : null;
+          if (!cur || cur.name !== snap.name) { alert('対象キャラが変更されています'); return; }
+          const removed = GAME.owned.splice(idx,1)[0];
+          const incoming = {
+            emoji:'🪽', name:TradeState.partnerOffer.name||'交換受領キャラ',
+            rarity: removed?.rarity||'TRADE', sell: toNum(TradeState.partnerOffer.sell,0),
+            type: removed?.type||'trade'
+          };
+          GAME.owned.push(incoming);
+          const info = document.getElementById('tradeResultInfo');
+          if (info) info.textContent = `あなたの「${removed?.name||'？'}」と相手の「${incoming.name}」を交換しました。`;
+          if (typeof addLog==='function') addLog('🔀 交換成立 ▶ '+(removed?.name||'？')+' ⇄ '+incoming.name);
+          showStep('tradeStep4');
+          if (typeof updateUI==='function') updateUI();
+          if (typeof save==='function') save();
+        } catch(e){
+          alert('交換を完了できません：' + (e?.message||'不明'));
+        }
+      };
+    }
+    // キャンセル/閉じる → ポップアップを確実に閉じる
+    $$('#tradeStep1 .danger, #tradeStep2 .danger, #tradeStep4 .tradeAction').forEach(b=>{
+      b.onclick = function(){
+        const tp = document.getElementById('tradePopup');
+        if (tp) tp.classList.remove('active');
+        try {
+          if (window.TradeState) {
+            TradeState.offer = null; TradeState.partnerOffer = null; TradeState.reply = null;
+          }
+        } catch(e){}
+      };
+    });
+  }
+  // 4) Step1の offer ロックと呪文発行の入口を補強
+  // TradeHandlers.openStart が呼ばれたとき確実に Step1 に呪文を出すようにラップ
+  (function wrapOpenStart(){
+    const orig = window.TradeHandlers && TradeHandlers.openStart;
+    if (!orig) return;
+    TradeHandlers.openStart = function(domIdx){
+      // 先に元処理を試行（offerロックやスナップショット作成は元実装）
+      let ok = true;
+      try { orig(domIdx); } catch(e){ ok = false; }
+      // 呪文が出ていない環境向けに、最低限の発行を補助
+      try {
+        const s1 = document.getElementById('tradeStep1');
+        const disp = document.getElementById('spellDisplay');
+        const tp = document.getElementById('tradePopup');
+        if (tp) tp.classList.add('active');
+        if (s1) showStep('tradeStep1');
+        // 既に新実装が spell を出していればスキップ
+        if (disp && !disp.textContent) {
+          // 安全に offer を再構築
+          const ownedIdx = mapDomIdxToOwnedIdx(domIdx);
+          const ch = (window.GAME && GAME.owned) ? GAME.owned[ownedIdx] : null;
+          if (!ch) throw new Error('対象が見つかりません');
+          window.TradeState = window.TradeState || {};
+          TradeState.offer = { ownedIdx, snapshot: JSON.parse(JSON.stringify(ch)), until: Date.now()+30*60*1000 };
+          const payload = { kind:'offer', token: cryptoToken(), name: ch.name, sell: toNum(ch.sell,0) };
+          const spell = encodeOffer(payload);
+          disp.textContent = spell;
+          const nav = document.getElementById('step1Nav');
+          const next = document.getElementById('step1NextBtn');
+          if (nav) nav.style.display = 'block';
+          if (next) next.style.display = 'inline-block';
+        }
+      } catch(e){}
+    };
+  })();
+  // 5) ヘルパ群
+  function showStep(id){
+    ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(k=>{
+      const n = document.getElementById(k); if (n) n.classList.remove('active');
+    });
+    const s = document.getElementById(id); if (s) s.classList.add('active');
+    const tp = document.getElementById('tradePopup'); if (tp) tp.classList.add('active');
+  }
+  function startTimer30(){
+    const t = document.getElementById('tradeTimer');
+    const frame = document.getElementById('dangerFrame');
+    if (!t) return;
+    let rest = 30;
+    t.textContent = String(rest);
+    t.classList.remove('danger');
+    if (frame) frame.style.display = 'none';
+    clearInterval(window.__tradeTimer_hotfix__);
+    window.__tradeTimer_hotfix__ = setInterval(()=>{
+      rest--;
+      if (t) {
+        t.textContent = String(rest);
+        if (rest<=5) {
+          t.classList.add('danger');
+          if (frame) frame.style.display = 'block';
+        }
+      }
+      if (rest<=0) {
+        clearInterval(window.__tradeTimer_hotfix__);
+        if (frame) frame.style.display = 'none';
+      }
+    }, 1000);
+  }
+  function toNum(v, fb=0){
+    try{
+      if (v==null) return fb;
+      if (typeof v==='number') return isFinite(v)?v:fb;
+      if (typeof v==='string') return (n=>isFinite(n)?n:fb)(Number(v.replace(/[,_\s¥円]/g,'')));
+      if (typeof v==='bigint') return Number(v);
+      if (typeof v==='object' && v.valueOf) return Number(v.valueOf());
+      return fb;
+    }catch{ return fb; }
+  }
+  function b64url(s){
+    const b = (typeof btoa==='function') ? btoa(unescape(encodeURIComponent(s)))
+                                         : Buffer.from(s,'utf8').toString('base64');
+    return b.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
+  function encodeOffer(p){ return b64url(JSON.stringify({ body:{v:1,t:Date.now(),p}, sig:'lite' })); }
+  function encodeAck(p){ return b64url(JSON.stringify({ body:{v:1,t:Date.now(),p}, sig:'lite' })); }
+  function getDecode(){
+    if (window.TradeUtil && typeof TradeUtil.decodeSpell==='function') return TradeUtil.decodeSpell;
+    // 簡易デコーダ（署名/TTLは無視）
+    return function(spell){
+      const pad = spell.length%4 ? '===='.slice(spell.length%4) : '';
+      const b64 = spell.replace(/-/g,'+').replace(/_/g,'/') + pad;
+      const json = (typeof atob==='function') ? atob(b64) : Buffer.from(b64,'base64').toString('utf8');
+      const raw = JSON.parse(json);
+      const p = raw?.body?.p || raw?.p || raw;
+      if (!p || p.kind!=='offer' || !p.token) throw new Error('invalid-offer');
+      return p;
+    };
+  }
+  function cryptoToken(){
+    try{
+      const a = new Uint32Array(4);
+      crypto.getRandomValues(a);
+      return Array.from(a).map(x=>x.toString(16).padStart(8,'0')).join('');
+    }catch{
+      return String(Math.random()).slice(2)+Date.now().toString(16);
+    }
+  }
+  function mapDomIdxToOwnedIdx(domIdx){
+    const owned = (window.GAME?.owned||[]).map((c,i)=>({i})).reverse();
+    const rec = owned[domIdx];
+    return (rec && typeof rec.i==='number') ? rec.i : -1;
+  }
+  // 6) 初期・再配線（動的更新の上書きに対抗）
+  function arm(){
+    wireInventoryTradeButtons();
+    wireTradeSteps();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ()=>{
+      arm();
+      setTimeout(arm, 300);
+      setTimeout(arm, 1000);
+      setTimeout(arm, 2000);
+    }, {once:true});
+  } else {
+    arm();
+    setTimeout(arm, 300);
+    setTimeout(arm, 1000);
+    setTimeout(arm, 2000);
+  }
+})();
+  
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
