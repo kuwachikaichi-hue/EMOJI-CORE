@@ -1639,20 +1639,34 @@ onclick="buyDiamondMoney()">
   doExport();
 })();
 
-// ===== スマホ広告バー可視化パッチ v1 =====
+// ===== スマホ広告バー可視化パッチ v1 + アニメーション統合 =====
 (function adStickyPatch(){
   const LIST = (window.AD_LIST && AD_LIST.length) ? AD_LIST : [
-    {icon:"📰",text:"最新情報をチェック！"}, {icon:"⚔️",text:"ボス襲来に備えよう！"}
+    { icon: "🎉", text: "新ガチャ「新領域ガチャ」登場！EZ100個で引けるぞ！必ずレアキャラゲットできるよ！" },
+    { icon: "🪙", text: "エモズー硬貨で新領域ガチャを解放せよ！キャラ3体→EZ1枚" },
+    { icon: "💎", text: "火曜日と金曜日と土日の昼は、ダイヤ祭！お見逃しなく！" },
+    { icon: "⚔️", text: "ボスレイドで強制出現コマンド使えば、いつでもボスが現れる！" },
+    { icon: "📰", text: "公式ブログを毎日チェック！最新アップデート情報をお届け中！" },
+    { icon: "🌌", text: "天獄ガチャは💎1000！天獄神アストラ・ゼロを目指せ！" },
+    { icon: "🍮", text: "プリン無双ガチャ爆誕！創世無双神プリンが宇宙を塗り替える！" },
+    { icon: "🌈", text: "レインボードラゴンガチャで虹神ウルティマを狙え！" },
+    { icon: "🏆", text: "ランクタブで実力を証明！♾️ランクを目指して挑戦しよう！" },
+    { icon: "🌕", text: "ムーンロードで限定キャラを購入できる！15分ごとに更新！" },
+    { icon: "📤", text: "新たに追加された交換機能を試そう！" },
   ];
+  // グローバルにも参照できるように公開（既存コード互換）
+  window.AD_LIST = LIST;
   let idx = 0;
   const row = document.getElementById('adStickyRow');
   const text = document.getElementById('adStickyText');
   function show(){
     const ad = LIST[idx % LIST.length];
-    if (row && text) {
+    if (row) {
+      // フェードアウト
       row.style.opacity = '0';
       setTimeout(()=>{
         row.innerHTML = `<span style="font-size:18px">${ad.icon||'📰'}</span><span id="adStickyText" style="color:rgba(0,229,255,0.95)">${ad.text||''}</span>`;
+        // フェードイン
         row.style.opacity = '1';
       }, 180);
     }
@@ -1671,14 +1685,15 @@ onclick="buyDiamondMoney()">
       const rect = hdr?.getBoundingClientRect();
       const tabRow = document.querySelector('.tabs');
       const tabsH = tabRow ? tabRow.getBoundingClientRect().height : 40;
-      sticky.style.top = Math.max(40, Math.floor((rect?.height||80) - tabsH) ) + 'px';
+      if (sticky) {
+        sticky.style.top = Math.max(40, Math.floor((rect?.height||80) - tabsH) ) + 'px';
+      }
     }catch(e){}
   }
   window.addEventListener('resize', alignTop, {passive:true});
   setTimeout(alignTop, 0);
   setTimeout(alignTop, 500);
 })();
-
 /* ===== スマホ広告バーの位置補正（衝突回避） ===== */
 (function stickyAlignFix(){
   function align() {
@@ -1696,6 +1711,31 @@ onclick="buyDiamondMoney()">
   }
   window.addEventListener('resize', align, {passive:true});
   document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(align, 0); setTimeout(align, 400); }, {once:true});
+})();
+/* ===== 回転アニメーション（adContent 対応） ===== */
+(function startAdRotation() {
+  let adIndex = 0;
+  function showAd() {
+    const bar = document.getElementById("adContent");
+    if (!bar || !window.AD_LIST || !AD_LIST.length) return;
+    // フェードアウト
+    bar.style.opacity = "0";
+    setTimeout(() => {
+      const ad = AD_LIST[adIndex % AD_LIST.length];
+      const icon = ad?.icon || "📰";
+      const text = ad?.text || "";
+      bar.innerHTML = `<span style="font-size:18px">${icon}</span><span style="color:rgba(0,229,255,0.95)">${text}</span>`;
+      // フェードイン
+      bar.style.opacity = "1";
+      adIndex++;
+    }, 350);
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    // 初期表示
+    showAd();
+    // 以後ローテーション
+    setInterval(showAd, 3000);
+  });
 })();
  
 /* ===== 0円表示/計算ズレ修正ユーティリティ ===== */
