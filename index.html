@@ -7430,35 +7430,44 @@ renderMoonRoad();
     }, 60000);
   })();
 
-  // A-8) money/lp/crystal 差分更新 + コンパクト表記オプション
-  (function headerNumbers(){
-    const moneyEl = document.getElementById('money');
-    const lpEl = document.getElementById('lp');
-    const crystalEl = document.getElementById('crystal');
-    const moneyKey = 'cec-compact-money';
-    function formatCompact(n){
-      const num = (typeof n === 'number' && isFinite(n)) ? n :
-                  (typeof n === 'bigint' ? Number(n) :
-                  (typeof n === 'string' ? Number(n.replace(/[,_\s¥円]/g,'')) : 0));
-      const abs = Math.abs(num);
-      const u = [{v:1e12,s:'T'},{v:1e9,s:'B'},{v:1e6,s:'M'},{v:1e3,s:'K'}];
-      for (const x of u) if (abs>=x.v) return '¥' + (num/x.v).toFixed(2).replace(/\.?0+$/,'') + x.s;
-      return '¥' + (Number(num)||0).toLocaleString();
+// A-8) money/lp/crystal 差分更新（デバッグ強化版）
+(function headerNumbers(){
+  const moneyEl = document.getElementById('money');
+  const lpEl = document.getElementById('lp');
+  const crystalEl = document.getElementById('crystal');
+
+  let last = { m:null, l:null, c:null };
+
+  __setNamedInterval('perf_header_nums', ()=>{
+    try{
+      if (!window.GAME) return;
+
+      // moneyの生値をそのまま表示
+      const curM = String(GAME.money);
+
+      const curL = String(GAME.lp || 0) + ' LP';
+      const curC = String(GAME.crystal || 0);
+
+      if (moneyEl && curM !== last.m){
+        last.m = curM;
+        moneyEl.textContent = curM;
+      }
+
+      if (lpEl && curL !== last.l){
+        last.l = curL;
+        lpEl.textContent = curL;
+      }
+
+      if (crystalEl && curC !== last.c){
+        last.c = curC;
+        crystalEl.textContent = curC;
+      }
+
+    }catch(e){
+      console.error('headerNumbers error', e);
     }
-    let last = { m:null, l:null, c:null };
-    __setNamedInterval('perf_header_nums', ()=>{
-      try{
-        if (!window.GAME) return;
-        const compact = localStorage.getItem(moneyKey)==='1';
-        const curM = compact ? formatCompact(GAME.money) : (window.formatSafe?formatSafe(GAME.money):('¥'+Number(GAME.money||0).toLocaleString()));
-        const curL = (GAME.lp||0)+' LP';
-        const curC = (GAME.crystal||0);
-        if (moneyEl && curM !== last.m) { last.m=curM; moneyEl.textContent=curM; moneyEl.classList.add('num-compact'); }
-        if (lpEl && curL !== last.l) { last.l=curL; lpEl.textContent=curL; }
-        if (crystalEl && curC !== last.c) { last.c=curC; crystalEl.textContent=curC; }
-      }catch(_){}
-    }, 250);
-  })();
+  }, 250);
+})();
 
   // A-9) スクロールスロットリング
   (function throttleScroll(){
