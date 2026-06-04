@@ -8922,6 +8922,220 @@ renderMoonRoad();
 })();
 </script>
 
+<script>
+// ============ ZERO-YEN FINAL LOCK v2026-06-04 ============
+// 1) 数値・表示ユーティリティ（単一ソース）
+(function ZeroYenFinalLock(){
+  if (window.__ZERO_YEN_FINAL_LOCK__) return;
+  window.__ZERO_YEN_FINAL_LOCK__ = true;
+
+  function toNum(v, fb=0){
+    try{
+      if (v==null) return fb;
+      if (typeof v==='number') return isFinite(v)?v:fb;
+      if (typeof v==='bigint'){ const n=Number(v); return isFinite(n)?n:fb; }
+      if (typeof v==='string'){ const s=v.replace(/[,_\s¥円]/g,''); const n=Number(s); return isFinite(n)?n:fb; }
+      if (typeof v==='object' && v.valueOf){ const n=Number(v.valueOf()); return isFinite(n)?n:fb; }
+      return fb;
+    }catch{ return fb; }
+  }
+  function formatSafeYen(v){ // UIは常に非NaNを表示（実データは弄らない）
+    const n = Math.max(0, toNum(v, 0));
+    try { return '¥' + n.toLocaleString(); } catch { return '¥' + String(n); }
+  }
+  function normalizeSell(obj){ // 取得/表示に使う売値を最低¥1に正規化
+    if (!obj || typeof obj!=='object') return 1;
+    let s = toNum(obj.sell, NaN);
+    if (!isFinite(s) || s<=0){
+      const sc = toNum(obj.sellCrystal, NaN);
+      s = isFinite(sc) ? Math.max(1, Math.floor(sc)) : 1;
+    }
+    obj.sell = s;
+    return s;
+  }
+
+  // 2) obtain の最終固定（どの経路でも必ず1円以上で入る + moneyは壊さない）
+  (function patchObtain(){
+    const orig = window.obtain;
+    window.obtain = function(char){
+      const s = normalizeSell(char);
+      try{
+        if (typeof orig === 'function') orig(char);
+        else {
+          window.GAME = window.GAME || {};
+          GAME.owned = Array.isArray(GAME.owned)?GAME.owned:[];
+          GAME.owned.push(char);
+          GAME.money = toNum(GAME.money,0) + Math.floor(s/4);
+          GAME.dex = Array.isArray(GAME.dex)?GAME.dex:[];
+          if (char?.name && !GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+        }
+      }catch(e){
+        window.GAME = window.GAME || {};
+        GAME.owned = Array.isArray(GAME.owned)?GAME.owned:[];
+        GAME.owned.push(char);
+        GAME.money = toNum(GAME.money,0) + Math.floor(s/4);
+        GAME.dex = Array.isArray(GAME.dex)?GAME.dex:[];
+        if (char?.name && !GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+      }
+      // moneyがNaN/負なら最低0へ
+      if (!isFinite(toNum(GAME.money,NaN)) || toNum(GAME.money,0) < 0) {
+        GAME.money = Math.max(0, Math.floor(s/4));
+      }
+      try{ window.addLog && addLog('獲得 ▶ ' + (char?.name||'？')); }catch(_){}
+      try{ window.updateUI && updateUI(); }catch(_){}
+    };
+  })();
+
+  // 3) gacha の最終固定（価格計算→抽選→正規化→表示の順を保証）
+  ;(function patchGacha(){
+    const orig = window.gacha;
+    window.gacha = function(pool, opts){
+      const count = toNum(opts?.count, 1) || 1;
+      const priceCrystal = toNum(opts?.priceCrystal, 0);
+      const priceMoney   = toNum(opts?.priceMoney, 0);
+
+      if (!Array.isArray(pool) || pool.length===0) { alert('内部エラー：ガチャプール空'); return; }
+      if (!window.GAME) { alert('内部エラー：GAME未初期化'); return; }
+      if ((GAME.owned?.length||0) + count > toNum(GAME.baseCap, 0)) { alert('基地容量不足'); return; }
+
+      if ((priceCrystal<=0 && priceMoney<=0) || (priceCrystal>0 && priceMoney>0)) {
+        alert('コスト設定エラー'); return;
+      }
+      if (priceCrystal>0){
+        if (toNum(GAME.crystal,0) < priceCrystal) { alert('💎不足'); return; }
+        GAME.crystal = toNum(GAME.crystal,0) - priceCrystal;
+      } else {
+        if (toNum(GAME.money,0) < priceMoney) { alert('お金不足'); return; }
+        GAME.money = toNum(GAME.money,0) - priceMoney;
+      }
+
+      const results=[];
+      for (let i=0;i<count;i++){
+        const base = pool[Math.floor(Math.random()*pool.length)] || {};
+        const ch = JSON.parse(JSON.stringify(base));
+        normalizeSell(ch);          // ←ここで必ず¥1以上保持
+        results.push(ch);
+        obtain(ch);                 // ←obtain側でも再ガード
+      }
+
+      try{ (opts?.effects||[]).forEach(f=>{ if (typeof f==='function') f(); }); }catch(_){}
+      try{ updateUI && updateUI(); }catch(_){}
+      try{ showResults && showResults(results); }catch(_){}
+      return results;
+    };
+  })();
+
+  // 4) MoonRoad 購入/表示の最終固定（価格= sell*10 も最低¥10以上）
+  ;(function patchMoonRoad(){
+    const origRender = window.renderMoonRoad;
+    if (typeof origRender === 'function'){
+      window.renderMoonRoad = function(){
+        const r = origRender.apply(this, arguments);
+        try{
+          const box = document.getElementById('moonRoadShop');
+          if (!box) return r;
+          box.querySelectorAll('.card .sell').forEach(el=>{
+            const v = toNum(el.textContent, 10);
+            el.textContent = formatSafeYen(Math.max(10, v));
+          });
+        }catch(_){}
+        return r;
+      };
+    }
+    const origBuy = window.buyMoonCharacter;
+    if (typeof origBuy === 'function'){
+      window.buyMoonCharacter = function(index){
+        const c = (window.GAME && GAME.moonRoad && GAME.moonRoad[index]) || null;
+        if (!c) return;
+        const s = normalizeSell(c);
+        const price = Math.max(10, s * 10);
+        if (toNum(GAME.money,0) < price) { alert('お金不足'); return; }
+        if ((GAME.owned?.length||0) >= toNum(GAME.baseCap,0)) { alert('基地容量不足'); return; }
+        GAME.money = toNum(GAME.money,0) - price;
+        obtain(JSON.parse(JSON.stringify(c)));
+        GAME.moonRoad.splice(index,1);
+        try{ renderMoonRoad && renderMoonRoad(); }catch(_){}
+        try{ updateUI && updateUI(); }catch(_){}
+      };
+    }
+  })();
+
+  // 5) showResults / renderInventory の表示を最後に矯正（必ず¥1以上で描画）
+  ;(function patchRenderers(){
+    function fixCardPrices(root){
+      if (!root) return;
+      root.querySelectorAll('.card .sell').forEach(el=>{
+        const v = toNum(el.textContent, 1);
+        el.textContent = formatSafeYen(Math.max(1, v));
+      });
+    }
+    const origShow = window.showResults;
+    window.showResults = function(results){
+      try{ if (typeof origShow==='function') origShow(results); }catch(_){}
+      try{ fixCardPrices(document.getElementById('results')); }catch(_){}
+    };
+    const origInv = window.renderInventory;
+    if (typeof origInv === 'function'){
+      window.renderInventory = function(){
+        const r = origInv.apply(this, arguments);
+        try{ fixCardPrices(document.getElementById('inventory')); }catch(_){}
+        return r;
+      };
+    }
+  })();
+
+  // 6) updateUI の金額表示を常に formatSafeYen 経由に（他が上書きしても最後に勝つ）
+  ;(function patchUpdateUI(){
+    const orig = window.updateUI;
+    window.updateUI = function(){
+      try{ if (typeof orig==='function') orig(); }catch(_){}
+      try{
+        const m = document.getElementById('money');
+        const l = document.getElementById('lp');
+        const c = document.getElementById('crystal');
+        if (m && window.GAME) m.textContent = formatSafeYen(GAME.money);
+        if (l && window.GAME) l.textContent = (toNum(GAME.lp,0)) + ' LP';
+        if (c && window.GAME) c.textContent = toNum(GAME.crystal,0);
+      }catch(_){}
+      try{ window.save && save(); }catch(_){}
+    };
+    // 起動直後にも一発矯正
+    setTimeout(()=>{ try{ updateUI(); }catch(_){} }, 0);
+  })();
+
+  // 7) インベントリの「売却」ボタン経路も矯正（誤って0円加算にならない）
+  ;(function guardSellButtons(){
+    const inv = document.getElementById('inventory');
+    if (!inv) return;
+    inv.addEventListener('click', function(e){
+      const t = e.target;
+      if (!t) return;
+      if (t.classList.contains('sellBtn')){
+        const card = t.closest('.card');
+        if (!card) return;
+        const nameEl = card.querySelector('.name');
+        const name = nameEl ? nameEl.textContent : '';
+        // GAME.owned内の該当キャラ検索（逆順描画の可能性があるため後ろから）
+        if (!window.GAME || !Array.isArray(GAME.owned)) return;
+        for (let i=GAME.owned.length-1; i>=0; i--){
+          if (GAME.owned[i]?.name === name){
+            const s = normalizeSell(GAME.owned[i]);
+            GAME.money = toNum(GAME.money,0) + s;
+            GAME.owned.splice(i,1);
+            try{ window.addLog && addLog('💸 売却 ▶ '+name); }catch(_){}
+            try{ updateUI && updateUI(); }catch(_){}
+            break;
+          }
+        }
+        e.preventDefault?.(); e.stopPropagation?.();
+        return false;
+      }
+    }, { capture:true });
+  })();
+
+})();
+</script>
+  
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
