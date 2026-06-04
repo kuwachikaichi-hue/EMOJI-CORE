@@ -1197,13 +1197,14 @@ button[disabled]:not([data-keep-disabled]) {
     <!-- 1) 余分な </style> を削除（head内終盤のこの1行を削除） -->
 <!-- 不要な閉じタグ: </style> を削除 -->
 
-<!-- 2) 全角スペースを削除（moneyBox 2段目の行を次に置換） -->
-　<div class="moneyBox">
+<!-- 2) headerの moneyBox 行（全角スペース除去版） -->
+<div class="moneyBox">
   <div class="stat">🏢 BASE<b id="capacity">0 / 5</b></div>
   <div class="stat">🏆 ACHIEVE<b id="achieveCount">0</b></div>
   <div class="stat">📚 INDEX<b id="indexCount">0</b></div>
   <div class="stat">🪙 EMOZOO<b id="emozoo" class="ez-stat">0 EZ</b></div>
 </div>
+
 
   <div class="tabs">
     <button class="tabBtn active" data-tab="home">基地</button>
@@ -8765,7 +8766,162 @@ renderMoonRoad();
 
 })();
 </script>
-  
+
+<script>
+// 3) ガチャ/価格/売値 最終セーフ実装（重複定義の競合を抑止）
+
+(function FinalSafeGachaPatch(){
+  if (window.__FINAL_SAFE_GACHA__) return;
+  window.__FINAL_SAFE_GACHA__ = true;
+
+  function toNum(v, fb=0){
+    try{
+      if (v==null) return fb;
+      if (typeof v==='number') return isFinite(v)?v:fb;
+      if (typeof v==='bigint'){ const n=Number(v); return isFinite(n)?n:fb; }
+      if (typeof v==='string'){ const n=Number(v.replace(/[,_\s¥円]/g,'')); return isFinite(n)?n:fb; }
+      if (typeof v==='object' && v.valueOf){ const n=Number(v.valueOf()); return isFinite(n)?n:fb; }
+      return fb;
+    }catch{ return fb; }
+  }
+  function formatSafe(v){
+    const n = Math.max(0, toNum(v,0));
+    try { return '¥' + n.toLocaleString(); } catch { return '¥' + String(n); }
+  }
+  function normalizeSell(c){
+    if (!c || typeof c!=='object') return 1;
+    let s = toNum(c.sell, NaN);
+    if (!isFinite(s) || s<=0){
+      const sc = toNum(c.sellCrystal, NaN);
+      s = isFinite(sc) ? Math.max(1, Math.floor(sc)) : 1;
+    }
+    c.sell = s;
+    return s;
+  }
+
+  // obtain 最終セーフ化（NaN/負値防止）
+  (function(){
+    const orig = window.obtain;
+    window.obtain = function(char){
+      const s = normalizeSell(char);
+      try{
+        if (typeof orig === 'function') orig(char);
+        else {
+          window.GAME = window.GAME || {};
+          GAME.owned = Array.isArray(GAME.owned)?GAME.owned:[];
+          GAME.owned.push(char);
+          GAME.money = toNum(GAME.money,0) + Math.floor(s/4);
+          GAME.dex = Array.isArray(GAME.dex)?GAME.dex:[];
+          if (char?.name && !GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+        }
+      }catch(e){
+        window.GAME = window.GAME || {};
+        GAME.owned = Array.isArray(GAME.owned)?GAME.owned:[];
+        GAME.owned.push(char);
+        GAME.money = toNum(GAME.money,0) + Math.floor(s/4);
+      }
+      if (!isFinite(toNum(GAME.money,NaN)) || toNum(GAME.money,0) < 0){
+        GAME.money = Math.max(0, Math.floor(s/4));
+      }
+      try{ typeof addLog==='function' && addLog('獲得 ▶ '+(char?.name||'？')); }catch(_){}
+      try{ typeof updateUI==='function' && updateUI(); }catch(_){}
+    };
+  })();
+
+  // gacha 最終セーフ化（価格Number化・容量/コスト厳格判定）
+  (function(){
+    const orig = window.gacha; // 後段が複数あっても最終で包む
+    window.gacha = function(pool, opts){
+      const count = toNum(opts?.count, 1) || 1;
+      const pc = toNum(opts?.priceCrystal, 0);
+      const pm = toNum(opts?.priceMoney, 0);
+
+      if (!Array.isArray(pool) || pool.length===0){ alert('内部エラー：ガチャプールが空'); return; }
+      if (!window.GAME){ alert('内部エラー：GAME未初期化'); return; }
+      if ((GAME.owned?.length||0) + count > toNum(GAME.baseCap, 0)){ alert('基地容量不足'); return; }
+
+      if ((pc<=0 && pm<=0) || (pc>0 && pm>0)){ alert('コスト設定エラー'); return; }
+      if (pc>0){
+        if (toNum(GAME.crystal,0) < pc){ alert('💎不足'); return; }
+        GAME.crystal = toNum(GAME.crystal,0) - pc;
+      } else {
+        if (toNum(GAME.money,0) < pm){ alert('お金不足'); return; }
+        GAME.money = toNum(GAME.money,0) - pm;
+      }
+
+      const results=[];
+      for (let i=0;i<count;i++){
+        const base = pool[Math.floor(Math.random()*pool.length)] || {};
+        const ch = JSON.parse(JSON.stringify(base));
+        normalizeSell(ch);
+        results.push(ch);
+        obtain(ch);
+      }
+
+      try{ (opts?.effects||[]).forEach(f=>{ if(typeof f==='function') f(); }); }catch(_){}
+      try{ typeof updateUI==='function' && updateUI(); }catch(_){}
+      try{ typeof showResults==='function' && showResults(results); }catch(_){}
+      return results;
+    };
+  })();
+
+  // showResults/renderInventory の売値を最終矯正（常に¥1以上）
+  ;(function(){
+    function fixPrices(root){
+      if (!root) return;
+      root.querySelectorAll('.card .sell').forEach(el=>{
+        const v = toNum(el.textContent, 1);
+        el.textContent = formatSafe(Math.max(1, v));
+      });
+    }
+    const origShow = window.showResults;
+    window.showResults = function(results){
+      try{ if (typeof origShow==='function') origShow(results); }catch(_){}
+      try{ fixPrices(document.getElementById('results')); }catch(_){}
+    };
+    const origInv = window.renderInventory;
+    if (typeof origInv === 'function'){
+      window.renderInventory = function(){
+        const r = origInv.apply(this, arguments);
+        try{ fixPrices(document.getElementById('inventory')); }catch(_){}
+        return r;
+      };
+    }
+  })();
+
+  // 価格のNumber固定（BigInt/指数を全てNumber化）- 最終版を一元に
+  window.puddingGacha = function(){
+    return gacha(window.PUDDING_POOL, { priceMoney: Number(1e28), effects: [window.puddingEffect].filter(Boolean) });
+  };
+  window.birdFishUltimateGacha = function(){
+    return gacha(window.BIRD_FISH_ULTIMATE_POOL, { priceMoney: Number(1e28), effects: [window.birdFishSplashEffect].filter(Boolean) });
+  };
+  window.whiteWeatherGacha = function(){
+    return gacha(window.WHITE_WEATHER_POOL, { priceMoney: Number(3e18), effects: [window.whiteWeatherEffect].filter(Boolean) });
+  };
+  window.miniPetCrystalGacha = function(){
+    return gacha(window.MINI_PET_CRYSTAL_POOL, { priceMoney: Number(2e17), effects: [window.prismShine].filter(Boolean) });
+  };
+  window.fairyTaleGacha = function(){
+    return gacha(window.FAIRY_TALE_POOL, { priceMoney: Number(3e17), effects: [window.starlightBloom].filter(Boolean) });
+  };
+
+  // money表示の最終確定（常にformatSafe）
+  (function(){
+    const orig = window.updateUI;
+    window.updateUI = function(){
+      try{ if (typeof orig==='function') orig(); }catch(_){}
+      try{
+        const m = document.getElementById('money');
+        if (m && window.GAME) m.textContent = formatSafe(GAME.money);
+      }catch(_){}
+      try{ typeof save==='function' && save(); }catch(_){}
+    };
+  })();
+
+})();
+</script>
+
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
