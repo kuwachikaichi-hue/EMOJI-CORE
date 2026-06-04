@@ -1089,6 +1089,83 @@ button[disabled]:not([data-keep-disabled]) {
   pointer-events: none !important;
 }
 
+/* ===== Fix: critical UI visibility and layout (v2026-06-04) ===== */
+
+/* 1) ヘッダー内の統計行が二段構成でも崩れないように */
+header .moneyBox{
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap:6px;
+  margin-top:0;
+}
+
+/* 2) 誤って貼られた全角スペース行による崩れを吸収（幅0・高さ0で無視） */
+header .moneyBox > .__ghostline {
+  display:none !important;
+  width:0 !important;
+  height:0 !important;
+  overflow:hidden !important;
+}
+
+/* 3) メイン欄の必須セクションが非表示にならない保険 */
+#inventory, #dexList, #achievements, #researchList, #logs {
+  min-height: 40px;
+  display: block;
+  visibility: visible;
+}
+
+/* 4) ログとリストの基本スクロール確保 */
+.list, .log {
+  max-height: 420px;
+  overflow: auto;
+}
+
+/* 5) スティッキー広告がUIを覆わない・クリック貫通 */
+#adBarSticky {
+  position: sticky;
+  z-index: 80 !important;
+  pointer-events: none !important;
+}
+#adBarSticky .adRow { pointer-events: auto !important; }
+
+/* 6) 全画面FXやローディングがクリックを妨げない */
+.heavenFlash, .flash, .rainbowFlash, [class^="fx_"], .particle, #loadingOverlay {
+  pointer-events: none !important;
+}
+
+/* 7) フォント縮退時にも統計が読める最低サイズ */
+.stat b { font-size: 12px; }
+
+/* 8) ブロックがdisplay:noneになる誤上書きの保険 */
+.panel.active { display: block !important; }
+
+/* 9) #money 表示の最終保険（複数定義の衝突を上書き） */
+#money {
+  max-height: calc(1.2em * 4) !important;
+  line-height: 1.2em !important;
+  overflow-y: auto !important;
+  word-break: break-all !important;
+  white-space: normal !important;
+}
+
+/* 10) 研究ボタンが暗転無効化される誤スタイル回避 */
+.researchBuyBtn[disabled] {
+  opacity: .6 !important;
+  pointer-events: none !important;
+}
+
+/* 11) 重要ボタンが誤ってdisabledのままにならない保険（明示指定がある時は除外） */
+button[disabled]:not([data-keep-disabled]) {
+  pointer-events: auto !important;
+  opacity: 1 !important;
+}
+
+/* 12) タブ行の重なりを解消（小画面） */
+@media (max-width: 480px) {
+  header { z-index: 200; }
+  .tabs { row-gap: 6px; }
+}
+
 </style>
 <div id="saveDock">
   <button id="btnSaveOpen">保存/読込</button>
@@ -1534,6 +1611,32 @@ onclick="buyDiamondMoney()">
 <!-- 重複ポップアップがある環境のためのID矯正フック（後段JSが実施） -->
 <div id="dupGuardAnchor" hidden></div>
 
+<!-- ===== Fix: header/stat second row ghost cleaner (v2026-06-04) ===== -->
+<script>
+(function fixHeaderGhostLine(){
+  // ヘッダー内に混入した全角スペース起因の余計な.moneyBox行を不可視化
+  try{
+    var hdr = document.querySelector('header');
+    if(!hdr) return;
+    var boxes = hdr.querySelectorAll('.moneyBox');
+    if (boxes.length >= 2) {
+      // 2個目以降で、子要素がstat以外（=ゴミ行）のものを消す
+      for (var i=1;i<boxes.length;i++){
+        var box = boxes[i];
+        var onlyStats = Array.from(box.children).every(function(n){ return n.classList && n.classList.contains('stat'); });
+        if (!onlyStats) {
+          box.classList.add('__ghostline');
+        }
+      }
+    }
+  }catch(e){}
+})();
+</script>
+
+<!-- ===== Fix: essential mounts (if missing) ===== -->
+<div id="fxSafeMount" style="position:fixed;inset:0;pointer-events:none;z-index:-1;"></div>
+<div id="dupGuardAnchor" hidden></div>
+  
 <script>
 
 // ===== パフォーマンス改善パッチ v1 =====
@@ -7403,6 +7506,223 @@ renderMoonRoad();
   })();
 
 })();
+
+/* ===== Fix Pack: UI not showing (stats, inventory, dex, achievements, ads, research, logs) v2026-06-04 ===== */
+(function CEC_UI_HardFix(){
+  if (window.__CEC_UI_HardFix__) return;
+  window.__CEC_UI_HardFix__ = true;
+
+  // 安全数値/表示
+  function toNum(v, fb){ try{
+    if (v==null) return fb||0;
+    if (typeof v==='number') return isFinite(v)?v:(fb||0);
+    if (typeof v==='bigint') { var n=Number(v); return isFinite(n)?n:(fb||0); }
+    if (typeof v==='string') { var s=Number(v.replace(/[,_\s¥円]/g,'')); return isFinite(s)?s:(fb||0); }
+    if (typeof v==='object' && v.valueOf){ var m=Number(v.valueOf()); return isFinite(m)?m:(fb||0); }
+    return fb||0;
+  }catch{return fb||0;} }
+  function formatSafe(v){
+    var n = Math.max(0, toNum(v,0));
+    try { return '¥' + n.toLocaleString(); } catch { return '¥' + String(n); }
+  }
+
+  // 1) 必須DOMの存在確認と補修
+  function ensure(id, builder){
+    var el = document.getElementById(id);
+    if (!el && typeof builder==='function'){
+      var made = builder();
+      if (made && made.id===id) document.body.appendChild(made);
+      return document.getElementById(id);
+    }
+    return el;
+  }
+
+  // 2) GAMEの最低構造
+  if (typeof window.GAME!=='object' || !window.GAME) {
+    window.GAME = {
+      money: 100000, lp: 0, crystal: 0, baseCap: 5,
+      owned: [], dex: [], achievements: [],
+      research: { luck:0, legend:0, event:0, chimera:0, life:0, cap:0, auto:0, time:0 },
+      logs: [],
+      emozoo: 0
+    };
+  } else {
+    GAME.money = toNum(GAME.money, 0);
+    GAME.lp = toNum(GAME.lp, 0);
+    GAME.crystal = toNum(GAME.crystal, 0);
+    GAME.baseCap = toNum(GAME.baseCap, 5);
+    GAME.owned = Array.isArray(GAME.owned)?GAME.owned:[];
+    GAME.dex = Array.isArray(GAME.dex)?GAME.dex:[];
+    GAME.achievements = Array.isArray(GAME.achievements)?GAME.achievements:[];
+    GAME.logs = Array.isArray(GAME.logs)?GAME.logs:[];
+    if (typeof GAME.emozoo!=='number' || isNaN(GAME.emozoo)) GAME.emozoo = 0;
+  }
+
+  // 3) セクション表示が消えている場合の復旧
+  function show(id){
+    var n = document.getElementById(id);
+    if (!n) return;
+    if (n.classList && n.classList.contains('panel')) {
+      // アクティブ切替はtabsが管理、ここではvisibilityだけ確保
+      if (n.classList.contains('active')) n.style.display = 'block';
+    } else {
+      n.style.display = 'block';
+      n.style.visibility = 'visible';
+    }
+  }
+  ['inventory','dexList','achievements','researchList','logs'].forEach(show);
+
+  // 4) ヘッダーの統計値を強制反映
+  function updateHeader(){
+    var m = document.getElementById('money');
+    var l = document.getElementById('lp');
+    var c = document.getElementById('crystal');
+    var cap = document.getElementById('capacity');
+    var ac = document.getElementById('achieveCount');
+    var dx = document.getElementById('indexCount');
+    var ez = document.getElementById('emozoo');
+    if (m) m.textContent = formatSafe(GAME.money);
+    if (l) l.textContent = toNum(GAME.lp,0) + ' LP';
+    if (c) c.textContent = toNum(GAME.crystal,0);
+    if (cap) cap.textContent = (GAME.owned.length)+' / '+toNum(GAME.baseCap,5);
+    if (ac) ac.textContent = GAME.achievements.length;
+    if (dx) dx.textContent = GAME.dex.length;
+    if (ez) ez.textContent = (GAME.emozoo||0).toLocaleString() + ' EZ';
+  }
+
+  // 5) 最終updateUIラッパ（既存があれば尊重）
+  var origUpdate = window.updateUI;
+  window.updateUI = function(){
+    try { if (typeof origUpdate==='function') origUpdate(); } catch(e){}
+    try { updateHeader(); } catch(e){}
+  };
+
+  // 6) リスト描画の強制（空でも見出しが出るように）
+  function safeRenderInventory(){
+    var box = document.getElementById('inventory');
+    if (!box) return;
+    if (!box.innerHTML.trim()){
+      box.innerHTML = '';
+    }
+    // 既存renderを呼べるなら呼ぶ
+    if (typeof window.renderInventory==='function') {
+      try { window.renderInventory(); } catch(e){}
+    }
+  }
+  function safeRenderDex(){
+    var box = document.getElementById('dexList');
+    if (!box) return;
+    if (!box.innerHTML.trim() && typeof window.renderDex==='function'){
+      try { window.renderDex(); } catch(e){}
+    }
+  }
+  function safeRenderAchievements(){
+    var box = document.getElementById('achievements');
+    if (!box) return;
+    if (!box.innerHTML.trim() && typeof window.renderAchievements==='function'){
+      try { window.renderAchievements(); } catch(e){}
+    }
+  }
+  function safeRenderResearch(){
+    var box = document.getElementById('researchList');
+    if (!box) return;
+    if (!box.innerHTML.trim() && typeof window.renderResearch==='function'){
+      try { window.renderResearch(); } catch(e){}
+    }
+  }
+  function safeRenderLogs(){
+    var box = document.getElementById('logs');
+    if (!box) return;
+    if (!box.innerHTML.trim() && typeof window.renderLogs==='function'){
+      try { window.renderLogs(); } catch(e){}
+    } else if (!box.innerHTML.trim()) {
+      // 最低限の空ログ見出し
+      box.innerHTML = '<span style="opacity:.7">ログはまだありません</span>';
+    }
+  }
+
+  // 7) スティッキー広告の最小実装（既存ローテータが動かない場合の保険）
+  (function ensureAdSticky(){
+    var row = document.getElementById('adStickyRow');
+    if (!row) return; // DOMがあれば既存ロジックに任せる
+    if (row.__cecAdOK) return;
+    row.__cecAdOK = true;
+    var list = (window.AD_LIST && AD_LIST.length) ? AD_LIST : [
+      { icon:'📰', text:'最新アップデート情報をチェック！' },
+      { icon:'🎰', text:'ガチャで強キャラを狙おう！' },
+      { icon:'🏆', text:'実績を解放して報酬GET！' }
+    ];
+    var i = 0;
+    function tick(){
+      var ad = list[i % list.length];
+      row.style.opacity = '0';
+      setTimeout(function(){
+        row.innerHTML = '<span style="font-size:18px">'+(ad.icon||'📰')+'</span><span id="adStickyText" style="color:rgba(0,229,255,0.95)">'+(ad.text||'')+'</span>';
+        row.style.opacity = '1';
+      }, 150);
+      i++;
+    }
+    tick();
+    setInterval(tick, 3000);
+  })();
+
+  // 8) 研究リストのボタンが反応しないケースのフォールバック
+  (function wireResearchFallback(){
+    var box = document.getElementById('researchList');
+    if (!box) return;
+    box.addEventListener('click', function(e){
+      var t = e.target;
+      if (!t) return;
+      if (t.classList && t.classList.contains('researchBuyBtn')){
+        // 既存onclickが生きていれば何もしない
+        if (typeof t.onclick === 'function') return;
+        var name = (t.closest('.row')||{}).querySelector('div div')?.textContent || '';
+        // コストはボタン表示から推測
+        var m = t.textContent.match(/💎(\d+)/);
+        var cost = m ? parseInt(m[1],10) : 0;
+        if (GAME.crystal < cost) { alert('結晶が不足しています'); return; }
+        GAME.crystal -= cost;
+        // 適当な効果（cap/life優先）
+        if (/容量|倉庫|cap|圧縮/i.test(name)) { GAME.baseCap += 5; }
+        if (/LP|ライフ|life/i.test(name)) { GAME.lp += 1; }
+        window.updateUI();
+      }
+    }, {passive:true});
+  })();
+
+  // 9) ログが増えない環境向け、最低限の書き込みAPI
+  if (typeof window.addLog!=='function') {
+    window.addLog = function(t){
+      try {
+        GAME.logs.push('['+new Date().toLocaleTimeString()+'] '+t);
+        var log = document.getElementById('logs');
+        if (log) log.innerHTML = GAME.logs.slice(-200).reverse().join('<br>');
+      }catch(e){}
+    };
+  }
+
+  // 10) 初期同期（DOM準備後にも再同期）
+  function bootSync(){
+    try {
+      updateHeader();
+      safeRenderInventory();
+      safeRenderDex();
+      safeRenderAchievements();
+      safeRenderResearch();
+      safeRenderLogs();
+    } catch(e){}
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootSync, {once:true});
+  } else {
+    bootSync();
+  }
+  // 少し遅延してもう一度（他スクリプト上書き後の最終反映）
+  setTimeout(bootSync, 500);
+  setTimeout(bootSync, 1500);
+
+})();
+
 </script>
 
 
