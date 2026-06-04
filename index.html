@@ -975,6 +975,65 @@ button:active {
   filter: brightness(1.05);
 }
 
+/* === Fix: Trade spell visibility and EZ exchange UI === */
+
+/* 交換(トレード)の呪文テキスト見やすさ強化 */
+#spellDisplay, #spellDisplay2 {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* エモズー交換ポップアップ */
+#ezPopup {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000000;
+  background: rgba(0,0,0,.86);
+}
+#ezPopup.active { display: flex; }
+#ezBox {
+  width: min(560px, 94vw);
+  max-height: 90vh;
+  overflow: auto;
+  background: #08111f;
+  border: 1px solid rgba(0,229,255,.35);
+  border-radius: 16px;
+  box-shadow: 0 0 28px rgba(0,229,255,.25);
+  padding: 14px;
+}
+#ezTitle {
+  font-size: 18px; font-weight: 900; color: #00e5ff; text-align: center; margin-bottom: 10px;
+}
+#ezPickGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+.ezPickCard {
+  background: #0d172a;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 12px;
+  padding: 10px;
+}
+.ezPickCard .emoji { font-size: 28px; }
+.ezPickCard .name { font-weight: 800; margin-top: 6px; font-size: 12px; }
+.ezPickCard .sell { font-size: 11px; opacity: .85; margin-top: 4px; }
+#ezHint { font-size: 12px; opacity: .8; margin-top: 8px; line-height: 1.6; }
+#ezActionRow {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px;
+}
+#ezDoBtn, #ezCloseBtn {
+  border: none; border-radius: 12px; padding: 12px;
+  font-weight: 900; font-size: 14px; cursor: pointer; color: #fff;
+}
+#ezDoBtn { background: linear-gradient(135deg,#ffd700,#ff8800); color: #00131b; }
+#ezCloseBtn { background: linear-gradient(135deg,#ff355b,#ff8844); }
+#ezWarn { color:#ff6b6b; font-size:12px; font-weight:900; margin-top:6px; }
+
 </style>
 <div id="saveDock">
   <button id="btnSaveOpen">保存/読込</button>
@@ -1386,6 +1445,29 @@ onclick="buyDiamondMoney()">
     金額の簡易表示（K/M/B/T）
   </label>
 </div>
+
+  <!-- === Fix: EZ交換用の軽量ポップアップ（ページ末尾 or body直下に追記） === -->
+<div id="ezPopup" aria-modal="true" role="dialog">
+  <div id="ezBox">
+    <div id="ezTitle">🪙 エモズー交換（キャラ3体 → EZ1 + ¥10,000）</div>
+    <div id="ezInfo" class="small" style="opacity:.85;">
+      条件を満たす自動選出上位3体を消費して、エモズーを1獲得し、お金を¥10,000入手します。
+    </div>
+    <div id="ezPickGrid"></div>
+    <div id="ezHint">
+      対象条件:
+      <br>- 自分の所持キャラのうち売却額が高い順に3体
+      <br>- ムーンロードに出てこない（_fromMoon 等のショップ出自を除外）
+      <br>- 新領域ガチャ(FRONTIER_POOL)に含まれない
+    </div>
+    <div id="ezWarn"></div>
+    <div id="ezActionRow">
+      <button id="ezDoBtn">実行（確定）</button>
+      <button id="ezCloseBtn">閉じる</button>
+    </div>
+  </div>
+</div>
+
 
 <script>
 
@@ -8319,6 +8401,200 @@ renderMoonRoad();
   },500);
 
 })();
+
+/* === Fix A: 交換ボタンで必ず呪文を表示させる強化 === */
+(function ensureTradeSpellShows(){
+  // DOM -> 所持配列インデックス変換（在庫は逆順描画）
+  function domToOwnedIndex(domIdx){
+    if (!window.GAME || !Array.isArray(GAME.owned)) return -1;
+    return (GAME.owned.length - 1) - domIdx;
+  }
+  // 呪文生成の最小実装（既存TradeUtilがあれば優先）
+  function genSpell(payload){
+    try {
+      if (window.TradeUtil && typeof TradeUtil.encodeSpell === 'function') {
+        return TradeUtil.encodeSpell(payload);
+      }
+      // 簡易b64url
+      const raw = { body:{ v:1, t:Date.now(), p:payload }, sig:'lite' };
+      const s = unescape(encodeURIComponent(JSON.stringify(raw)));
+      const b = btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+      return b;
+    } catch {
+      return JSON.stringify({p:payload});
+    }
+  }
+  // 交換開始（在庫カードから）
+  function startTradeFromDom(domIdx){
+    const ownedIdx = domToOwnedIndex(domIdx);
+    const ch = (ownedIdx>=0 && GAME.owned[ownedIdx]) ? GAME.owned[ownedIdx] : null;
+    if (!ch) { alert('対象キャラが見つかりません'); return; }
+    // 交換不可の簡易判定（frontier/typeなどは除外）
+    if (ch._fromMoon || ch.type==='frontier') { alert('このキャラは交換不可です'); return; }
+    // スナップショット/ロック
+    window.TradeState = window.TradeState || {};
+    TradeState.offer = { ownedIdx, snapshot: JSON.parse(JSON.stringify(ch)), until: Date.now()+30*60*1000 };
+    // 呪文生成
+    const spell = genSpell({ kind:'offer', token: String(Math.random()).slice(2)+Date.now().toString(16), name: ch.name, sell: ch.sell|0 });
+    // ポップアップに反映（存在すれば）
+    const disp = document.getElementById('spellDisplay');
+    if (disp) {
+      disp.textContent = spell;
+      // UIをStep1に切り替え
+      const tp = document.getElementById('tradePopup');
+      if (tp) tp.classList.add('active');
+      ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(id=>{
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active');
+      });
+      const s1 = document.getElementById('tradeStep1');
+      if (s1) s1.classList.add('active');
+      // ナビ表示
+      const nav = document.getElementById('step1Nav');
+      const next = document.getElementById('step1NextBtn');
+      if (nav) nav.style.display = 'block';
+      if (next) next.style.display = 'inline-block';
+    } else {
+      // 最低限のフォールバック
+      prompt('この呪文を相手に渡してください', spell);
+    }
+  }
+  // 在庫の「交換」ボタンを代理委譲（多重描画に強い）
+  (function delegateInventoryTrade(){
+    const inv = document.getElementById('inventory');
+    if (!inv || inv.__tradeSpellWired) return;
+    inv.__tradeSpellWired = true;
+    inv.addEventListener('click', function(e){
+      const t = e.target;
+      if (!t) return;
+      if (t.classList.contains('tradeBtn')) {
+        const card = t.closest('.card');
+        if (!card) return;
+        const domIdx = Array.prototype.indexOf.call(inv.children, card);
+        if (domIdx<0) return;
+        // 既存実装があれば使う、無ければ強制生成
+        if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function') {
+          try { TradeHandlers.openStart(domIdx); } catch { startTradeFromDom(domIdx); }
+        } else {
+          startTradeFromDom(domIdx);
+        }
+      }
+    }, { passive:true });
+  })();
+})();
+
+/* === Fix B: エモズー交換（キャラ3体 → EZ1 + ¥10,000）UI/ロジック 実装 === */
+(function emozooExchangeUI(){
+  // 安全な条件判定
+  function isFrontierChar(c){
+    // FRONTIER_POOLの名前一致で判定（高速のためセット化）
+    try{
+      if (!window.__FRONTIER_NAME_SET__) {
+        const s = new Set((Array.isArray(window.FRONTIER_POOL)?FRONTIER_POOL:[]).map(x=>x && x.name).filter(Boolean));
+        window.__FRONTIER_NAME_SET__ = s;
+      }
+      return __FRONTIER_NAME_SET__.has(c?.name);
+    }catch{ return false; }
+  }
+  function isFromMoon(c){
+    // ムーンロード／ショップ経由を除外するための一般的フラグ群
+    return !!(c && (c._fromMoon || c._shop || c._source==='moon' || c._source==='shop'));
+  }
+  // 候補抽出（売値降順、条件を満たすものから3体）
+  function pickTop3(){
+    const owned = Array.isArray(GAME?.owned) ? GAME.owned : [];
+    // 除外条件: frontier, fromMoon など
+    const ok = owned
+      .map((c,i)=>({c,i}))
+      .filter(o=>o.c && Number.isFinite(Number(o.c.sell)) && !isFrontierChar(o.c) && !isFromMoon(o.c) && o.c.type!=='frontier');
+    ok.sort((a,b)=> (Number(b.c.sell)||0) - (Number(a.c.sell)||0));
+    return ok.slice(0,3);
+  }
+  // UI構築
+  function openEzPopup(){
+    const pop = document.getElementById('ezPopup');
+    const grid = document.getElementById('ezPickGrid');
+    const warn = document.getElementById('ezWarn');
+    if (!pop || !grid) return;
+    grid.innerHTML = '';
+    const picks = pickTop3();
+    if (picks.length<3){
+      if (warn) warn.textContent = '条件を満たすキャラクターが3体見つかりません。';
+    } else {
+      if (warn) warn.textContent = '';
+    }
+    picks.forEach(({c})=>{
+      const div = document.createElement('div');
+      div.className = 'ezPickCard';
+      div.innerHTML = `
+        <div class="emoji">${c.emoji||'❔'}</div>
+        <div class="name">${c.name||'？？？'}</div>
+        <div class="sell">売却 ¥${Number(c.sell||0).toLocaleString()}</div>
+      `;
+      grid.appendChild(div);
+    });
+    pop.classList.add('active');
+  }
+  function closeEzPopup(){
+    const pop = document.getElementById('ezPopup');
+    if (pop) pop.classList.remove('active');
+  }
+  // 実行
+  function doEzExchange(){
+    const picks = pickTop3();
+    if (picks.length<3){
+      alert('条件を満たすキャラクターが3体見つかりません');
+      return;
+    }
+    // 所持から該当3体を削除（インデックスは昇順で消すとズレるため降順で）
+    const idxs = picks.map(p=>p.i).sort((a,b)=>b-a);
+    idxs.forEach(i=>{
+      if (GAME.owned[i]) GAME.owned.splice(i,1);
+    });
+    // 報酬
+    GAME.emozoo = (Number(GAME.emozoo)||0) + 1;
+    GAME.money = (Number(GAME.money)||0) + 10000;
+    // ログ
+    try{
+      if (typeof addLog === 'function') {
+        addLog('🪙 エモズー交換 ▶ キャラ3体消費 → +1 EZ, +¥10,000');
+      }
+    }catch{}
+    // 表示更新
+    try{
+      const ezEl = document.getElementById('emozoo');
+      if (ezEl) ezEl.innerText = (GAME.emozoo||0).toLocaleString() + ' EZ';
+    }catch{}
+    if (typeof updateUI === 'function') updateUI();
+    if (typeof save === 'function') save();
+    closeEzPopup();
+  }
+  // 既存の「キャラ3体 → 🪙1 EZ + ¥10,000」ボタンにバインド（存在しない場合は何もしない）
+  function wireConvertButton(){
+    // 既存: <button class="action" onclick="convertToEmozoo()">キャラ3体 → 🪙1 EZ + ¥10,000</button>
+    // 元の関数を上書きして専用UIを開く
+    window.convertToEmozoo = function(){ openEzPopup(); };
+  }
+  // ポップアップ内ボタン結線
+  function wirePopupButtons(){
+    const doBtn = document.getElementById('ezDoBtn');
+    const closeBtn = document.getElementById('ezCloseBtn');
+    if (doBtn && !doBtn.__wired){ doBtn.__wired = true; doBtn.addEventListener('click', doEzExchange); }
+    if (closeBtn && !closeBtn.__wired){ closeBtn.__wired = true; closeBtn.addEventListener('click', closeEzPopup); }
+  }
+
+  // 起動
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){
+      wireConvertButton();
+      wirePopupButtons();
+    }, {once:true});
+  } else {
+    wireConvertButton();
+    wirePopupButtons();
+  }
+})();
+
   
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
