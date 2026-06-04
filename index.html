@@ -823,6 +823,96 @@ button[disabled] {
   contain: content;
 }
 
+/* ===== vLite-2026-06-04: 低負荷スタイル ===== */
+
+/* 1) アニメ/トランジションの一括停止トグル（bodyに .low-motion 付与で有効） */
+.low-motion *, 
+.low-motion *::before, 
+.low-motion *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* 2) 結果ポップアップの高コスト装飾を簡素化（.lite-ui で適用） */
+.lite-ui #results .card {
+  box-shadow: none !important;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.lite-ui .legendGlow, 
+.lite-ui .chimeraGlow {
+  box-shadow: none !important;
+  border-color: rgba(255,255,255,0.12) !important;
+}
+
+/* 3) 粒子/FXの視覚密度を弱める（.lite-ui で） */
+.lite-ui .heavenWing,
+.lite-ui .heavenFlash,
+.lite-ui .flash,
+.lite-ui .rainbowFlash,
+.lite-ui [class^="fx_"] {
+  opacity: 0.5 !important;
+  filter: none !important;
+}
+
+/* 4) スクロール最適化（スムーズスクロールやレイヤ固定） */
+.list, .log, #inventory, .resultGrid {
+  will-change: auto !important;
+}
+
+/* 5) ローディング簡素版（既存と干渉しないID） */
+#liteLoading {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,.7);
+  z-index: 1000000;
+}
+#liteLoading .box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  background: #091322;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(0,229,255,.25);
+  box-shadow: 0 0 16px rgba(0,229,255,.2);
+}
+#liteLoading .bar {
+  width: 220px;
+  height: 8px;
+  background: rgba(255,255,255,.06);
+  border-radius: 999px;
+  overflow: hidden;
+}
+#liteLoading .bar > span {
+  display: block;
+  width: 35%;
+  height: 100%;
+  background: linear-gradient(90deg, #00e5ff, #0077ff);
+  border-radius: 999px;
+  animation: liteIndet 1.1s linear infinite;
+}
+@keyframes liteIndet {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+/* 6) タップ視認性をわずかに強化（hover無し環境でも） */
+button:active {
+  filter: brightness(1.05);
+}
+
+/* 7) モバイルでのミスタップ対策（ボタンの最小高さ） */
+button {
+  min-height: 40px;
+}
+
+/* 8) アクセシビリティ：小さな文字の可読性強化（控えめ） */
+.small { letter-spacing: 0.2px; }
+
 </style>
 <div id="saveDock">
   <button id="btnSaveOpen">保存/読込</button>
@@ -1195,7 +1285,29 @@ onclick="buyDiamondMoney()">
   <div class="adRow" id="adStickyRow"><span style="font-size:18px">📰</span><span id="adStickyText" style="color:rgba(0,229,255,0.95)"></span></div>
   <div class="adMark">AD</div>
 </div>
-  
+
+  <!-- ===== vLite 追加UI: 軽量化トグルと簡易ローディング ===== -->
+<!-- ヘッダーの tabs 直下あたり（または任意の見える位置）に追記してください -->
+<div id="liteBar" style="display:flex;gap:8px;align-items:center;margin:8px 0;">
+  <label style="display:flex;align-items:center;gap:6px;font-size:12px;opacity:.9;">
+    <input id="liteToggle" type="checkbox" />
+    軽量モード
+  </label>
+  <label style="display:flex;align-items:center;gap:6px;font-size:12px;opacity:.9;">
+    <input id="motionToggle" type="checkbox" />
+    アニメ停止
+  </label>
+</div>
+
+<!-- 低負荷ローディングオーバーレイ（既存 #loadingOverlay と併用可能） -->
+<div id="liteLoading" aria-live="polite" aria-busy="true">
+  <div class="box">
+    <div style="font-weight:900;color:#00e5ff;">読み込み中…</div>
+    <div class="bar"><span></span></div>
+    <div id="liteLoadingHint" style="font-size:12px;opacity:.8;color:#cfefff;">初回は少し時間がかかることがあります</div>
+  </div>
+</div>
+
 <script>
 
 // ===== パフォーマンス改善パッチ v1 =====
@@ -6847,6 +6959,273 @@ renderMoonRoad();
   (function(){
     try { document.body.classList.add('fx-cap'); } catch(e){}
   })();
+
+/* ===== vLite-2026-06-04: 軽量化パッチ ===== */
+(function vLitePatch(){
+  // 安全ガード
+  if (window.__vLiteApplied__) return;
+  window.__vLiteApplied__ = true;
+
+  const doc = document;
+  const $ = sel => doc.querySelector(sel);
+
+  // 1) 軽量モードとアニメ停止のトグル
+  function setLiteUI(on){
+    try {
+      document.body.classList.toggle('lite-ui', !!on);
+      // 重い陰影のある領域を簡素化（必要に応じて拡張）
+      const stickyAd = $('#adBarSticky');
+      if (stickyAd) stickyAd.style.boxShadow = on ? 'none' : '';
+    } catch (e) {}
+  }
+  function setLowMotion(on){
+    try { document.body.classList.toggle('low-motion', !!on); } catch(e){}
+  }
+
+  // 2) ハイコストFXの発生頻度/同時数をさらに抑制
+  const FX_LIMIT = 30;       // 同時可視FXの上限（既存よりさらに厳しめ）
+  const FX_SWEEP_MS = 700;   // 監視間隔
+  setInterval(()=>{
+    try {
+      const nodes = doc.querySelectorAll('.heavenWing,.heavenFlash,.flash,.rainbowFlash,[class^="fx_"],[data-fx]');
+      if (nodes.length > FX_LIMIT) {
+        const rm = nodes.length - FX_LIMIT;
+        for (let i=0; i<rm; i++) {
+          const n = nodes[i];
+          if (n && n.parentNode) n.parentNode.removeChild(n);
+        }
+      }
+    } catch(e){}
+  }, FX_SWEEP_MS);
+
+  // 3) 結果カードの描画をさらに軽量化（大量結果時）
+  (function patchShowResultsLite(){
+    const orig = window.showResults;
+    window.showResults = function(results){
+      // 大量結果のときに一括HTML生成に切り替えてreflow最小化
+      try {
+        const popup = $('#popup');
+        const box = $('#results');
+        if (!popup || !box) {
+          if (typeof orig === 'function') return orig(results);
+          return;
+        }
+        const list = Array.isArray(results) ? results : [];
+        // 閾値（多いときのみ高速経路）
+        const HEAVY = 24;
+        if (list.length < HEAVY) {
+          if (typeof orig === 'function') return orig(results);
+        } else {
+          // 軽量HTML
+          let html = '';
+          for (let i=0;i<list.length;i++){
+            const c = list[i] || {};
+            const rare = c.rarity || '';
+            const glowClass = (rare==='LEGEND') ? 'legendGlow' :
+                              ((rare==='CHIMERA' || rare==='EVENT') ? 'chimeraGlow' : '');
+            const price = (window.formatSafe ? formatSafe(c.sell) : ('¥'+Number(c.sell||0).toLocaleString()));
+            html += `<div class="card ${glowClass}">
+              <div class="emoji">${c.emoji||'❓'}</div>
+              <div class="name">${c.name||''}</div>
+              <div class="rarity">${rare}</div>
+              <div class="sell">${price}</div>
+            </div>`;
+          }
+          box.innerHTML = html;
+          popup.classList.add('active');
+        }
+      } catch(e) {
+        try { if (typeof orig === 'function') return orig(results); } catch(_) {}
+      }
+    };
+  })();
+
+  // 4) ログ/ムーン/ダイヤなど定期描画の間引き（可視時優先）
+  function isVisible(id) {
+    const el = $('#'+id);
+    return !!(el && el.classList.contains('active'));
+  }
+  // 既存ループの上に軽い可視判定ガードを被せる
+  const safeWrap = (fn, check) => function(){ try { if (!check || check()) fn(); } catch(e){} };
+
+  if (typeof window.renderLogs === 'function') {
+    const base = window.renderLogs;
+    window.renderLogs = safeWrap(base, ()=>isVisible('log'));
+  }
+  if (typeof window.renderMoonRoad === 'function') {
+    const base = window.renderMoonRoad;
+    window.renderMoonRoad = safeWrap(base, ()=>isVisible('moonRoad'));
+  }
+  if (typeof window.updateDiamondRoom === 'function') {
+    const base = window.updateDiamondRoom;
+    // 1分に1回で十分だが既存が短周期の場合に可視判定で軽減
+    window.updateDiamondRoom = safeWrap(base, ()=>isVisible('diamondRoom'));
+  }
+
+  // 5) 在庫グリッド（inventory）の委譲クリックでバインド数削減
+  (function delegateInventory(){
+    const inv = $('#inventory');
+    if (!inv || inv.__liteDelegated) return;
+    inv.__liteDelegated = true;
+    inv.addEventListener('click', function(ev){
+      const t = ev.target;
+      if (!t) return;
+      const card = t.closest('.card');
+      if (!card) return;
+
+      // DOM上のインデックス（逆順描画前提）
+      const domIndex = Array.prototype.indexOf.call(inv.children, card);
+      const ownedIndex = (window.GAME && Array.isArray(GAME.owned))
+        ? (GAME.owned.length - 1) - domIndex
+        : -1;
+
+      // 売却
+      if (t.classList.contains('sellBtn')) {
+        if (ownedIndex >= 0 && typeof window.sellCharacterByIndex === 'function') {
+          window.sellCharacterByIndex(ownedIndex);
+        }
+        return;
+      }
+      // 交換
+      if (t.classList.contains('tradeBtn')) {
+        if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function') {
+          TradeHandlers.openStart(domIndex);
+        } else {
+          alert('交換機能を初期化しました。もう一度押してください。');
+        }
+        return;
+      }
+    }, { passive: true });
+  })();
+
+  // 6) ローディング簡易API（重たい処理の前後で使う）
+  function liteLoading(on, hint){
+    const box = $('#liteLoading');
+    if (!box) return;
+    if (on) {
+      const txt = $('#liteLoadingHint');
+      if (txt && hint) txt.textContent = hint;
+      box.style.display = 'flex';
+    } else {
+      box.style.display = 'none';
+    }
+  }
+  window.__liteLoading = liteLoading;
+
+  // 7) ガチャ実行時の軽負荷モード：大量FXの抑止（必要時のみ）
+  function wrapGacha(name){
+    const orig = window[name];
+    if (typeof orig !== 'function') return;
+    window[name] = function(){
+      // 短時間だけFX抑止フラグ
+      document.body.classList.add('lite-ui'); // 視覚簡素化
+      try { return orig.apply(this, arguments); }
+      finally {
+        // 少し遅延して元に戻す（結果表示後に負荷を戻す）
+        setTimeout(()=>document.body.classList.remove('lite-ui'), 900);
+      }
+    };
+  }
+  ['normalGacha','lifeGacha','dimensionGacha','animalArmyGacha','fairyGacha','robotPetGacha',
+   'tengokuGacha','tsuyuGacha','rainbowDragonGacha','foodGacha','miniPetCrystalGacha',
+   'fairyTaleGacha','roboWarriorGacha','crystalGolemGacha','earthStarGacha','puddingGacha',
+   'birdFishUltimateGacha','whiteWeatherGacha','yofukashiGacha','zombieSoulGacha','frontierGacha'
+  ].forEach(wrapGacha);
+
+  // 8) 初期ロードを明示（既存のloadと競合しないよう短時間のみ）
+  document.addEventListener('DOMContentLoaded', ()=>{
+    // 既にページが十分描画済みなら出さない
+    const t = performance && performance.timing ? performance.timing : null;
+    const fastBoot = t ? (t.loadEventEnd || Date.now()) - (t.navigationStart || 0) < 1200 : false;
+    if (!fastBoot) {
+      liteLoading(true, 'ゲームデータを準備しています…');
+      setTimeout(()=>liteLoading(false), 800); // 体感の一拍
+    }
+  });
+
+  // 9) UIトグルのバインド
+  document.addEventListener('DOMContentLoaded', ()=>{
+    const lite = $('#liteToggle');
+    const motion = $('#motionToggle');
+
+    // 既定値（初期は有効化推奨）
+    const savedLite = localStorage.getItem('cec-lite-ui');
+    const savedMotion = localStorage.getItem('cec-low-motion');
+
+    const liteOn = savedLite === null ? true : savedLite === '1';
+    const motionOn = savedMotion === null ? true : savedMotion === '1';
+
+    if (lite) {
+      lite.checked = liteOn;
+      setLiteUI(liteOn);
+      lite.addEventListener('change', ()=>{
+        setLiteUI(lite.checked);
+        localStorage.setItem('cec-lite-ui', lite.checked ? '1' : '0');
+      }, { passive:true });
+    }
+    if (motion) {
+      motion.checked = motionOn;
+      setLowMotion(motionOn);
+      motion.addEventListener('change', ()=>{
+        setLowMotion(motion.checked);
+        localStorage.setItem('cec-low-motion', motion.checked ? '1' : '0');
+      }, { passive:true });
+    }
+  });
+
+  // 10) ボタン反応性の改善：クリック処理を最短経路で実行
+  // 既存onclick直付けはそのまま活かしつつ、重い処理の直前で描画を解放
+  function yieldFrame(){ return new Promise(r=>requestAnimationFrame(()=>r())); }
+  function makeResponsiveButton(selector){
+    const btns = document.querySelectorAll(selector);
+    btns.forEach(b=>{
+      if (b.__liteFast) return;
+      b.__liteFast = true;
+      const origClick = b.onclick;
+      if (typeof origClick === 'function') {
+        b.onclick = async function(e){
+          // 先に押した感を出す（activeスタイルはCSS任せ）
+          await yieldFrame();
+          return origClick.call(this, e);
+        };
+      }
+    });
+  }
+  // 起動後・動的増殖にも対応
+  const fastBind = ()=> {
+    makeResponsiveButton('.gachaGrid button');
+    makeResponsiveButton('.gachaBtns button');
+    makeResponsiveButton('.sellBtn');
+    makeResponsiveButton('.tradeBtn');
+    makeResponsiveButton('.tabBtn');
+  };
+  document.addEventListener('DOMContentLoaded', ()=> {
+    fastBind();
+    // その後、数回だけ再試行（動的描画直後のDOMにも付与）
+    let n=0; const iv=setInterval(()=>{ fastBind(); if(++n>=4) clearInterval(iv); }, 400);
+  });
+
+  // 11) 高頻度UI更新の集約（既存バッチに追従しつつ安全側に）
+  (function throttleHeader(){
+    const money = $('#money');
+    const lp = $('#lp');
+    const crystal = $('#crystal');
+    let last = { m:null, l:null, c:null };
+    setInterval(()=>{
+      try{
+        if (!window.GAME) return;
+        const m = window.formatSafe ? formatSafe(GAME.money) : '¥'+Number(GAME.money||0).toLocaleString();
+        const l = (GAME.lp||0)+' LP';
+        const c = (GAME.crystal||0);
+        if (money && m!==last.m) { last.m=m; money.textContent=m; }
+        if (lp && l!==last.l) { last.l=l; lp.textContent=l; }
+        if (crystal && c!==last.c) { last.c=c; crystal.textContent=c; }
+      }catch(e){}
+    }, 250);
+  })();
+
+})();
+
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
