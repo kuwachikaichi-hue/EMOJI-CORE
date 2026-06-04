@@ -8483,6 +8483,90 @@ renderMoonRoad();
   })();
 })();
 
+// === HOTFIX: Step1「相手の入力が終わったら進む」強制遷移 v2026-06-04-c ===
+(function fixStep1NextReliable(){
+  function el(id){ return document.getElementById(id); }
+  function showStep(id){
+    ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(k=>{
+      const n = el(k);
+      if (!n) return;
+      n.classList.remove('active');
+      n.style.display = 'none';
+    });
+    const t = el(id);
+    if (t){
+      t.classList.add('active');
+      t.style.display = 'block';
+    }
+    const tp = el('tradePopup');
+    if (tp){
+      tp.classList.add('active');
+      tp.style.display = 'flex';
+    }
+  }
+  // 確実にStep2へ進める関数（既存が壊れていても動く）
+  function goStep2(){
+    try {
+      // 既存の遷移関数があれば先に呼んで副作用を維持
+      if (typeof window.tradeStep1ToStep2 === 'function') {
+        try { window.tradeStep1ToStep2(); } catch(e){}
+      }
+    } catch(e){}
+    // フォールバックで強制遷移
+    try {
+      showStep('tradeStep2');
+      const err = el('step2Error'); if (err) err.textContent = '';
+      const ta  = el('step2Input');
+      if (ta) { ta.focus(); ta.select && ta.select(); }
+    } catch(e){}
+  }
+  // ボタンへ強制結線（後から上書きされても勝つ）
+  function wire(){
+    // 明示IDがあれば最優先
+    var btn = el('step1NextBtn');
+    // 無い環境では Step1 内の .tradeAction:not(.danger) をfallback
+    if (!btn) btn = document.querySelector('#tradeStep1 .tradeAction:not(.danger)');
+    if (!btn) return;
+    // 一度だけ印を付ける
+    if (!btn.__fixedNext){
+      btn.__fixedNext = true;
+      btn.onclick = function(ev){
+        ev && ev.preventDefault && ev.preventDefault();
+        ev && ev.stopPropagation && ev.stopPropagation();
+        goStep2();
+        return false;
+      };
+      // 他ハンドラの上書きを抑える
+      btn.addEventListener('click', function(ev){
+        // 既に goStep2 が呼ばれているので、他のリスナーを止める
+        ev.stopImmediatePropagation && ev.stopImmediatePropagation();
+      }, true); // captureで最優先
+    } else {
+      // 既に印があっても onclick が外れていたら復旧
+      if (btn.onclick == null) {
+        btn.onclick = function(ev){
+          ev && ev.preventDefault && ev.preventDefault();
+          ev && ev.stopPropagation && ev.stopPropagation();
+          goStep2();
+          return false;
+        };
+      }
+    }
+  }
+  // 何度か遅延で再結線（後書き対策）
+  function arm(){
+    wire();
+    setTimeout(wire, 200);
+    setTimeout(wire, 800);
+    setTimeout(wire, 1600);
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', arm, {once:true});
+  } else {
+    arm();
+  }
+})();
+
 /* === Fix B: エモズー交換（キャラ3体 → EZ1 + ¥10,000）UI/ロジック 実装 === */
 (function emozooExchangeUI(){
   // 安全な条件判定
@@ -8693,153 +8777,8 @@ renderMoonRoad();
     if (closeBtn && !closeBtn.__wired) { closeBtn.__wired = true; closeBtn.addEventListener('click', closeEzPopup); }
   })();
 })();
-
-// === HOTFIX: Step1「進む」ボタンが反応しない問題を強制修正 v2026-06-04 ===
-(function fixStep1NextForce(){
-  function el(id){ return document.getElementById(id); }
-  function showStep(id){
-    ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(k=>{
-      const n = el(k);
-      if (n){ n.classList.remove('active'); n.style.display = 'none'; }
-    });
-    const t = el(id);
-    if (t){ t.classList.add('active'); t.style.display = 'block'; }
-    const tp = el('tradePopup');
-    if (tp){ tp.classList.add('active'); tp.style.display = 'flex'; }
-  }
-  // Step1→Step2の確実な遷移処理
-  function goStep2(){
-    try{
-      // 既存の関数があれば先に呼ぶ（副作用維持）
-      if (typeof window.tradeStep1ToStep2 === 'function') {
-        try { window.tradeStep1ToStep2(); } catch(e){}
-      }
-      // 強制でStep2へ（既存が不発でも確実に遷移）
-      showStep('tradeStep2');
-      // エラー表示エリア初期化
-      var err = el('step2Error'); if (err) err.textContent = '';
-      // 入力欄を軽くフォーカス
-      var ta = el('step2Input'); if (ta) { ta.focus(); ta.select && ta.select(); }
-    }catch(e){
-      // 最終フォールバック
-      showStep('tradeStep2');
-    }
-  }
-  // ボタンに一度だけ強制結線
-  function wire(){
-    var btn = el('step1NextBtn') || document.querySelector('#tradeStep1 .tradeAction:not(.danger)');
-    if (!btn) return;
-    if (btn.__wiredStep1Next) return;
-    btn.__wiredStep1Next = true;
-    btn.onclick = function(ev){
-      ev && ev.preventDefault && ev.preventDefault();
-      ev && ev.stopPropagation && ev.stopPropagation();
-      goStep2();
-      return false;
-    };
-    // 他のスクリプトが後からonclickを上書きしても即時この処理を優先
-    btn.addEventListener('click', function(ev){
-      ev.stopImmediatePropagation && ev.stopImmediatePropagation();
-    }, true);
-  }
-  // すぐ結線＋遅延で再結線（上書き対策）
-  function arm(){
-    wire();
-    setTimeout(wire, 200);
-    setTimeout(wire, 800);
-    setTimeout(wire, 1600);
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', arm, {once:true});
-  } else {
-    arm();
-  }
-})();
-
-// === HOTFIX: Step1「相手の入力が終わったら進む」強制遷移 v2026-06-04-c ===
-(function fixStep1NextReliable(){
-  function el(id){ return document.getElementById(id); }
-  function showStep(id){
-    ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(k=>{
-      const n = el(k);
-      if (!n) return;
-      n.classList.remove('active');
-      n.style.display = 'none';
-    });
-    const t = el(id);
-    if (t){
-      t.classList.add('active');
-      t.style.display = 'block';
-    }
-    const tp = el('tradePopup');
-    if (tp){
-      tp.classList.add('active');
-      tp.style.display = 'flex';
-    }
-  }
-  // 確実にStep2へ進める関数（既存が壊れていても動く）
-  function goStep2(){
-    try {
-      // 既存の遷移関数があれば先に呼んで副作用を維持
-      if (typeof window.tradeStep1ToStep2 === 'function') {
-        try { window.tradeStep1ToStep2(); } catch(e){}
-      }
-    } catch(e){}
-    // フォールバックで強制遷移
-    try {
-      showStep('tradeStep2');
-      const err = el('step2Error'); if (err) err.textContent = '';
-      const ta  = el('step2Input');
-      if (ta) { ta.focus(); ta.select && ta.select(); }
-    } catch(e){}
-  }
-  // ボタンへ強制結線（後から上書きされても勝つ）
-  function wire(){
-    // 明示IDがあれば最優先
-    var btn = el('step1NextBtn');
-    // 無い環境では Step1 内の .tradeAction:not(.danger) をfallback
-    if (!btn) btn = document.querySelector('#tradeStep1 .tradeAction:not(.danger)');
-    if (!btn) return;
-    // 一度だけ印を付ける
-    if (!btn.__fixedNext){
-      btn.__fixedNext = true;
-      btn.onclick = function(ev){
-        ev && ev.preventDefault && ev.preventDefault();
-        ev && ev.stopPropagation && ev.stopPropagation();
-        goStep2();
-        return false;
-      };
-      // 他ハンドラの上書きを抑える
-      btn.addEventListener('click', function(ev){
-        // 既に goStep2 が呼ばれているので、他のリスナーを止める
-        ev.stopImmediatePropagation && ev.stopImmediatePropagation();
-      }, true); // captureで最優先
-    } else {
-      // 既に印があっても onclick が外れていたら復旧
-      if (btn.onclick == null) {
-        btn.onclick = function(ev){
-          ev && ev.preventDefault && ev.preventDefault();
-          ev && ev.stopPropagation && ev.stopPropagation();
-          goStep2();
-          return false;
-        };
-      }
-    }
-  }
-  // 何度か遅延で再結線（後書き対策）
-  function arm(){
-    wire();
-    setTimeout(wire, 200);
-    setTimeout(wire, 800);
-    setTimeout(wire, 1600);
-  }
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', arm, {once:true});
-  } else {
-    arm();
-  }
-})();
   
+
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
