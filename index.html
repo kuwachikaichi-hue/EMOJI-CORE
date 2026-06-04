@@ -6669,6 +6669,235 @@ renderMoonRoad();
 }
 );
 
+/* ===== Fix: Safe number + price normalization (single source of truth) ===== */
+(function installMoneySanitizer(){
+  if (window.__moneyFixInstalled__) return;
+  window.__moneyFixInstalled__ = true;
+
+  // 1) 単一の toNum
+  window.toNum = function toNum(v, fb = 0){
+    try {
+      if (v == null) return fb;
+      if (typeof v === 'number') return isFinite(v) ? v : fb;
+      if (typeof v === 'bigint') { const n = Number(v); return isFinite(n) ? n : fb; }
+      if (typeof v === 'string') {
+        const s = v.replace(/[,_\s¥円]/g, '');
+        const n = Number(s);
+        return isFinite(n) ? n : fb;
+      }
+      if (typeof v === 'object' && v.valueOf) {
+        const n = Number(v.valueOf());
+        return isFinite(n) ? n : fb;
+      }
+      return fb;
+    } catch { return fb; }
+  };
+
+  // 2) 単一の formatSafe
+  window.formatSafe = function formatSafe(v){
+    const n = toNum(v, 0);
+    try { return '¥' + n.toLocaleString(); } catch { return '¥' + String(n); }
+  };
+
+  // 3) 価格/売値の正規化（sell/sellCrystal の両対応）
+  window.normalizeSell = function normalizeSell(char){
+    if (!char || typeof char !== 'object') return 0;
+    // sellCrystal を持つ場合はダイヤ系の売値換算を「0円表示にしない」ため最小1円に寄せる
+    if (char.sell == null && char.sellCrystal != null) {
+      // 表示専用の円換算（極小で可視化、ロジック的な金額加算は行わない）
+      const yen = Math.max(1, Math.floor(toNum(char.sellCrystal, 0))); // 1円以上に
+      char.sell = yen;
+      return yen;
+    }
+    const s = toNum(char.sell, 0);
+    char.sell = s;
+    return s;
+  };
+
+  // 4) obtain の一元化（1/4加算時の NaN/0 防止）
+  (function patchObtain(){
+    const orig = window.obtain;
+    window.obtain = function(char){
+      if (!char) return;
+      const sell = normalizeSell(char); // 必ず正規化
+      // 元の挙動を尊重しつつ、安全弁
+      if (typeof orig === 'function') {
+        try {
+          const before = toNum(window.GAME?.money, 0);
+          const res = orig(char);
+          if (!isFinite(window.GAME?.money)) {
+            if (window.GAME) GAME.money = before + Math.floor(sell/4);
+          }
+          return res;
+        } catch(e){}
+      }
+      // フォールバック
+      window.GAME = window.GAME || {};
+      GAME.owned = Array.isArray(GAME.owned) ? GAME.owned : [];
+      GAME.owned.push(char);
+      GAME.money = toNum(GAME.money, 0) + Math.floor(sell/4);
+      if (char.name) {
+        GAME.dex = Array.isArray(GAME.dex) ? GAME.dex : [];
+        if (!GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+      }
+      if (typeof addLog === 'function') addLog('獲得 ▶ '+(char.name||'？'));
+      if (typeof updateUI === 'function') updateUI();
+    };
+  })();
+
+  // 5) gacha の単一点検（多重ラップの衝突回避）
+  (function patchGacha(){
+    const orig = window.gacha;
+    if (!orig || window.__gachaFixed__) return;
+    window.__gachaFixed__ = true;
+    window.gacha = function(pool, opts){
+      const count = toNum(opts?.count, 1) || 1;
+      const priceCrystal = toNum(opts?.priceCrystal, 0);
+      const priceMoney = toNum(opts?.priceMoney, 0);
+
+      if (!Array.isArray(pool) || pool.length === 0) { alert('内部エラー：ガチャプールが空'); return; }
+      if (!window.GAME) { alert('内部エラー：GAME未初期化'); return; }
+      if ((GAME.owned?.length||0) + count > toNum(GAME.baseCap, 0)) { alert('基地容量不足'); return; }
+
+      // 「両方0」はエラー。それ以外はどちらかのみ課金
+      if (priceCrystal <= 0 && priceMoney <= 0) { alert('コスト設定エラー'); return; }
+      if (priceCrystal > 0 && priceMoney > 0) { alert('内部エラー：コスト重複'); return; }
+
+      if (priceCrystal > 0) {
+        if (toNum(GAME.crystal, 0) < priceCrystal) { alert('💎不足'); return; }
+        GAME.crystal = toNum(GAME.crystal, 0) - priceCrystal;
+      } else {
+        if (toNum(GAME.money, 0) < priceMoney) { alert('お金不足'); return; }
+        GAME.money = toNum(GAME.money, 0) - priceMoney;
+      }
+
+      const results = [];
+      for (let i = 0; i < count; i++) {
+        const base = pool[Math.floor(Math.random() * pool.length)];
+        const ch = JSON.parse(JSON.stringify(base||{}));
+        normalizeSell(ch); // ここで必ず売値を持たせる（0円化を防止）
+        results.push(ch);
+        obtain(ch);
+      }
+
+      try { (opts?.effects||[]).forEach(fn=>{ if (typeof fn==='function') fn(); }); } catch(e){}
+      if (typeof updateUI === 'function') updateUI();
+      if (typeof showResults === 'function') showResults(results);
+      return results;
+    };
+  })();
+
+  // 6) showResults/renderInventory の表示を「値の再抽出」ではなく formatSafe に統一
+  (function patchResultAndInventory(){
+    const wrapFix = (fnName, selector, prefix='')=>{
+      const orig = window[fnName];
+      if (!orig) return;
+      if (orig.__priceFixWrapped) return;
+      window[fnName] = function(){
+        const res = orig.apply(this, arguments);
+        try {
+          const root = document.getElementById(selector);
+          if (!root) return res;
+          root.querySelectorAll('.card').forEach(card=>{
+            const sellNode = card.querySelector('.sell');
+            if (!sellNode) return;
+            // カードの元データを引けない時はテキストから再抽出せず、そのまま整形
+            const txt = sellNode.textContent || '';
+            // 数値を無理に抽出しない。既に normalize 済みのデータで描画されているはず。
+            // 「売却」表記の有無だけ整える
+            const valMatch = txt.replace(/[^\d,._¥円-]/g,'');
+            const n = toNum(valMatch, NaN);
+            if (isFinite(n)) {
+              sellNode.textContent = (prefix ? prefix+' ' : '') + formatSafe(n);
+            } else if (!/¥/.test(txt)) {
+              // 万一数値が見つからない場合の最終フォールバック（0円に落とさない）
+              sellNode.textContent = (prefix ? prefix+' ' : '') + formatSafe(1);
+            }
+          });
+        } catch(e){}
+        return res;
+      };
+      window[fnName].__priceFixWrapped = true;
+    };
+    wrapFix('showResults', 'results', '');
+    wrapFix('renderInventory', 'inventory', '売却');
+  })();
+
+  // 7) MoonRoad: sell のないキャラが混じっても価格10倍が NaN にならないよう補正
+  (function patchMoonRoadBuyRender(){
+    const origRender = window.renderMoonRoad;
+    if (origRender && !origRender.__moonFix){
+      window.renderMoonRoad = function(){
+        const res = origRender.apply(this, arguments);
+        try{
+          const box = document.getElementById('moonRoadShop');
+          if (!box) return res;
+          box.querySelectorAll('.card .sell').forEach(el=>{
+            const txt = el.textContent||'';
+            // 既に formatSafe 済みでも上書き統一
+            const val = toNum(txt, NaN);
+            el.textContent = formatSafe(isFinite(val)?val:1);
+          });
+        }catch(e){}
+        return res;
+      };
+      window.renderMoonRoad.__moonFix = true;
+    }
+
+    const origBuy = window.buyMoonCharacter;
+    if (origBuy && !origBuy.__moonFix){
+      window.buyMoonCharacter = function(index){
+        const c = (window.GAME && GAME.moonRoad && GAME.moonRoad[index]) || null;
+        if (!c) return;
+        const sell = normalizeSell(c); // ここで必ず sell を持たせる
+        const price = sell * 10;
+        if (toNum(GAME.money, 0) < price) { alert('お金不足'); return; }
+        if ((GAME.owned||[]).length >= toNum(GAME.baseCap, 0)) { alert('基地容量不足'); return; }
+        GAME.money = toNum(GAME.money, 0) - price;
+        obtain(JSON.parse(JSON.stringify(c)));
+        GAME.moonRoad.splice(index, 1);
+        if (typeof renderMoonRoad === 'function') renderMoonRoad();
+        if (typeof updateUI === 'function') updateUI();
+      };
+      window.buyMoonCharacter.__moonFix = true;
+    }
+  })();
+
+  // 8) BigInt 価格の誤用を排除（常に Number に正規化）
+  (function patchHardcodedPrices(){
+    // 二重定義されがちな関数を最後に強制再定義（Number化のみ）
+    window.puddingGacha = function(){
+      return gacha(PUDDING_POOL, { priceMoney: Number(1e28), effects: [puddingEffect] });
+    };
+    window.birdFishUltimateGacha = function(){
+      return gacha(BIRD_FISH_ULTIMATE_POOL, { priceMoney: Number(1e28), effects: [birdFishSplashEffect] });
+    };
+    window.whiteWeatherGacha = function(){
+      return gacha(WHITE_WEATHER_POOL, { priceMoney: Number(3e18), effects: [whiteWeatherEffect] });
+    };
+    window.miniPetCrystalGacha = function(){
+      return gacha(MINI_PET_CRYSTAL_POOL, { priceMoney: Number(2e17), effects: [prismShine] });
+    };
+    window.fairyTaleGacha = function(){
+      return gacha(FAIRY_TALE_POOL, { priceMoney: Number(3e17), effects: [starlightBloom] });
+    };
+  })();
+
+  // 9) updateUI の money 表示を常に formatSafe 経由に（0円化防止）
+  (function hardPatchUpdateUI(){
+    const orig = window.updateUI;
+    window.updateUI = function(){
+      try { if (typeof orig === 'function') orig(); } catch(e){}
+      try {
+        const m = document.getElementById('money');
+        if (m && window.GAME) m.innerText = formatSafe(GAME.money);
+      } catch(e){}
+      try { if (typeof save === 'function') save(); } catch(e){}
+    };
+  })();
+})();
+
+
 <!-- =========================================
   //Consolidated Patch Bundle (2026-06-04)
   //- Group A: Perf/Lite (軽量化)
