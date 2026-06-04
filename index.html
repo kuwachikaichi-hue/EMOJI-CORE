@@ -10185,5 +10185,201 @@ window.updateUI = function(){
 })();
 </script>
 
+<script>
+/* CEC Final Fix v2026-06-04 — click, money reset, dex/achievements render, zero-yen/NaN guard */
+/* 1) Safe number + display */
+(function(){
+  if (window.__CEC_FINAL_FIX__) return; window.__CEC_FINAL_FIX__=true;
+
+  const toNum=(v,fb=0)=>{try{
+    if(v==null)return fb;
+    if(typeof v==='number')return isFinite(v)?v:fb;
+    if(typeof v==='bigint'){const n=Number(v);return isFinite(n)?n:fb;}
+    if(typeof v==='string'){const n=Number(v.replace(/[,_\s¥円]/g,''));return isFinite(n)?n:fb;}
+    if(typeof v==='object'&&v.valueOf){const n=Number(v.valueOf());return isFinite(n)?n:fb;}
+    return fb;
+  }catch{return fb;}};
+  const fmt=(v)=>{const n=Math.max(0,toNum(v,0));try{return '¥'+n.toLocaleString();}catch{return '¥'+String(n);}};
+
+  const normSell=(c)=>{ if(!c||typeof c!=='object')return 1;
+    let s=toNum(c.sell,NaN);
+    if(!isFinite(s)||s<=0){ const sc=toNum(c.sellCrystal,NaN); s=isFinite(sc)?Math.max(1,Math.floor(sc)):1; }
+    c.sell=Math.max(1,Math.floor(s)); return c.sell;
+  };
+
+  /* 2) Unblock clicks: kill overlay pointer-events and wrong disabled */
+  (function unblock(){
+    const killers=['.heavenFlash','.flash','.rainbowFlash','[class^="fx_"]','.particle','#loadingOverlay','#liteLoading','#dangerFrame'];
+    killers.forEach(sel=>document.querySelectorAll(sel).forEach(el=>{el.style.pointerEvents='none';}));
+    const ad=document.getElementById('adBarSticky');
+    if(ad){ad.style.pointerEvents='none';ad.style.zIndex='80'; const row=ad.querySelector('.adRow'); if(row) row.style.pointerEvents='auto';}
+    document.querySelectorAll('button[disabled]:not([data-keep-disabled])').forEach(b=>{b.disabled=false;b.style.pointerEvents='auto';b.style.opacity='1';});
+  })();
+
+  /* 3) Dedupe popups (keep last) */
+  (function dedupe(id){
+    const nodes=document.querySelectorAll('#'+id);
+    if(nodes.length>1){ for(let i=0;i<nodes.length-1;i++){ nodes[i].id=id+'_old_'+i; nodes[i].style.display='none'; } }
+  })('ezPopup'); (function(id){const n=document.querySelectorAll('#'+id); if(n.length>1){for(let i=0;i<n.length-1;i++){n[i].id=id+'_old_'+i;n[i].style.display='none';}}})('tradePopup');
+
+  /* 4) Single-source obtain/gacha/updateUI/showResults — final guard */
+  const __ob=window.obtain;
+  window.obtain=function(char){
+    const s=normSell(char);
+    try{
+      if(typeof __ob==='function') __ob(char);
+      else{
+        window.GAME=window.GAME||{};
+        GAME.owned=Array.isArray(GAME.owned)?GAME.owned:[];
+        GAME.owned.push(char);
+        GAME.money=toNum(GAME.money,0)+Math.floor(s/4);
+        GAME.dex=Array.isArray(GAME.dex)?GAME.dex:[];
+        if(char?.name&&!GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+      }
+    }catch(e){
+      window.GAME=window.GAME||{};
+      GAME.owned=Array.isArray(GAME.owned)?GAME.owned:[];
+      GAME.owned.push(char);
+      GAME.money=toNum(GAME.money,0)+Math.floor(s/4);
+    }
+    if(!isFinite(toNum(GAME.money,NaN))||toNum(GAME.money,0)<0) GAME.money=Math.max(0,Math.floor(s/4));
+    try{window.addLog&&addLog('獲得 ▶ '+(char?.name||'？'));}catch{}
+    try{window.updateUI&&updateUI();}catch{}
+  };
+
+  const __ga=window.gacha;
+  window.gacha=function(pool,opts){
+    const cnt=Math.max(1,Math.floor(toNum(opts?.count,1)));
+    const pc=toNum(opts?.priceCrystal,0), pm=toNum(opts?.priceMoney,0);
+    if(!Array.isArray(pool)||pool.length===0) return alert('ガチャプールが空');
+    if(!window.GAME) return alert('GAME未初期化');
+    if((GAME.owned?.length||0)+cnt>toNum(GAME.baseCap,0)) return alert('基地容量不足');
+    if((pc<=0&&pm<=0)||(pc>0&&pm>0)) return alert('コスト設定エラー');
+    if(pc>0){ if(toNum(GAME.crystal,0)<pc) return alert('💎不足'); GAME.crystal=toNum(GAME.crystal,0)-pc; }
+    else { if(toNum(GAME.money,0)<pm) return alert('お金不足'); GAME.money=toNum(GAME.money,0)-pm; }
+    const out=[];
+    for(let i=0;i<cnt;i++){ const base=pool[Math.floor(Math.random()*pool.length)]||{}; const ch=JSON.parse(JSON.stringify(base)); normSell(ch); out.push(ch); obtain(ch); }
+    try{(opts?.effects||[]).forEach(f=>{if(typeof f==='function') f();});}catch{}
+    try{updateUI&&updateUI();}catch{}
+    try{showResults&&showResults(out);}catch{}
+    return out;
+  };
+
+  const __ui=window.updateUI;
+  window.updateUI=function(){
+    try{ if(typeof __ui==='function') __ui(); }catch{}
+    try{
+      const m=document.getElementById('money');
+      const l=document.getElementById('lp');
+      const c=document.getElementById('crystal');
+      const cap=document.getElementById('capacity');
+      const ac=document.getElementById('achieveCount');
+      const dx=document.getElementById('indexCount');
+      if(window.GAME){
+        if(m) m.textContent=fmt(GAME.money);
+        if(l) l.textContent=(toNum(GAME.lp,0))+' LP';
+        if(c) c.textContent=(toNum(GAME.crystal,0));
+        if(cap) cap.textContent=(GAME.owned?.length||0)+' / '+toNum(GAME.baseCap,5);
+        if(ac) ac.textContent=(GAME.achievements?.length||0);
+        if(dx) dx.textContent=(GAME.dex?.length||0);
+      }
+    }catch{}
+    try{window.save&&save();}catch{}
+  };
+
+  const __sr=window.showResults;
+  window.showResults=function(results){
+    try{ if(typeof __sr==='function') __sr(results); }catch{}
+    const popup=document.getElementById('popup'); const box=document.getElementById('results');
+    if(!popup||!box) return;
+    const list=Array.isArray(results)?results:[];
+    let html='';
+    for(const c of list){ normSell(c);
+      const r=c?.rarity||''; const glow=(r==='LEGEND')?' legendGlow':((r==='CHIMERA'||r==='EVENT')?' chimeraGlow':'');
+      html+=`<div class="card${glow}">
+        <div class="emoji">${c?.emoji||'❓'}</div>
+        <div class="name">${c?.name||''}</div>
+        <div class="rarity">${r}</div>
+        <div class="sell">${fmt(c.sell)}</div>
+      </div>`;
+    }
+    box.innerHTML=html; popup.classList.add('active');
+  };
+
+  /* 5) MoonRoad: price>=¥10 and from data only */
+  const __bm=window.buyMoonCharacter;
+  window.buyMoonCharacter=function(index){
+    const c=(window.GAME && GAME.moonRoad && GAME.moonRoad[index])||null; if(!c) return;
+    const s=normSell(c); const price=Math.max(10,s*10);
+    if(toNum(GAME.money,0)<price) return alert('お金不足');
+    if((GAME.owned?.length||0)>=toNum(GAME.baseCap,0)) return alert('基地容量不足');
+    GAME.money=toNum(GAME.money,0)-price; obtain(JSON.parse(JSON.stringify(c)));
+    GAME.moonRoad.splice(index,1); try{renderMoonRoad&&renderMoonRoad();}catch{} try{updateUI&&updateUI();}catch{}
+  };
+
+  const __rm=window.renderMoonRoad;
+  window.renderMoonRoad=function(){
+    const r=__rm?.apply(this,arguments);
+    try{
+      const box=document.getElementById('moonRoadShop'); if(!box) return r;
+      box.querySelectorAll('.card').forEach(card=>{
+        const name=card.querySelector('.name')?.textContent||'';
+        const c=(GAME?.moonRoad||[]).find(x=>x.name===name);
+        const el=card.querySelector('.sell');
+        if(c&&el){ const price=Math.max(10,normSell(c)*10); el.textContent=fmt(price); }
+      });
+    }catch{}
+    return r;
+  };
+
+  /* 6) Dex/Achievements: ensure visible containers */
+  (function ensureVisible(){
+    ['inventory','dexList','achievements','researchList','logs'].forEach(id=>{
+      const n=document.getElementById(id); if(n){ n.style.display='block'; n.style.visibility='visible'; }
+    });
+  })();
+
+  /* 7) Prevent forced money reset to ¥100,000 (EZ convert or others) */
+  (function antiReset(){
+    let maxSaved=0;
+    const loadObj=()=>{try{const s=localStorage.getItem('CYBER_EMOJI_CORE_SAVE_V2');return s?JSON.parse(s):null;}catch{return null;}};
+    const saveObj=(o)=>{try{localStorage.setItem('CYBER_EMOJI_CORE_SAVE_V2',JSON.stringify(o));}catch{}};
+    const guard=()=>{
+      const sv=toNum(loadObj()?.money,0);
+      maxSaved=Math.max(maxSaved,sv,toNum(GAME?.money,0));
+      if(toNum(GAME?.money,0)<maxSaved){ if(!window.GAME) window.GAME={}; GAME.money=maxSaved;
+        const ob=loadObj()||{}; if(toNum(ob.money,-1)<maxSaved){ ob.money=maxSaved; saveObj(ob); }
+      }
+      try{updateUI&&updateUI();}catch{}
+    };
+    ['convertToEmozooConfirm','performEmozooExchange','convertToEmozoo'].forEach(fn=>{
+      const f=window[fn]; if(typeof f==='function' && !f.__guard){
+        window[fn]=function(){ const out=f.apply(this,arguments); guard(); return out; }; window[fn].__guard=true;
+      }
+    });
+    setTimeout(guard,0); for(let i=1;i<=6;i++) setTimeout(guard,300*i);
+  })();
+
+  /* 8) Rebind trade buttons to not freeze UI */
+  (function rebindTrade(){
+    const box=document.getElementById('inventory'); if(!box) return;
+    box.addEventListener('click',ev=>{
+      const t=ev.target; if(!t) return;
+      if(t.classList.contains('tradeBtn')){
+        ev.preventDefault(); ev.stopPropagation();
+        if(window.TradeHandlers?.openStart){
+          try{ const card=t.closest('.card'); const idx=Array.prototype.indexOf.call(box.children,card); TradeHandlers.openStart(idx); return; }catch{}
+        }
+        // fallback: open EZ popup as safe UI so user isn't stuck
+        try{ window.convertToEmozoo && convertToEmozoo(); }catch{}
+      }
+    }, {capture:true});
+  })();
+
+  /* 9) Final UI sync */
+  try{updateUI&&updateUI();}catch{}
+})();
+</script>
+
 </body>
 </html>
