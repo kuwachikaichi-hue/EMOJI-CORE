@@ -2195,15 +2195,18 @@ onclick="buyDiamondMoney()">
   (function patchUpdateUI(){
     const orig = window.updateUI;
     window.updateUI = function(){
-      try { if (typeof orig === 'function') orig(); } catch(e){}
-      try {
-        const m = document.getElementById('money');
-        if (m && window.GAME) {
-          m.innerText = formatSafe(GAME.money);
-        }
-      } catch(e){}
-    };
-  })();
+  try { if (typeof orig === 'function') orig(); } catch(e){}
+
+  const m = document.getElementById('money');
+  if(!m || !window.GAME) return;
+
+  if(!Number.isFinite(Number(GAME.money))){
+    console.error("money broken", GAME.money);
+    return;
+  }
+
+  m.innerText = formatSafe(GAME.money);
+};
 
   // 7) MoonRoad購入の価格計算をtoNumで厳密化
   (function patchMoonRoadBuy(){
