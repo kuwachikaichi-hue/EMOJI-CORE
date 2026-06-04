@@ -1725,25 +1725,77 @@ onclick="buyDiamondMoney()">
   }, 200);
 })();
 
-// ===== トレード起動セーフガード v1 =====
+// ===== トレード起動セーフガード 修正版 =====
 (function tradeSafeBoot(){
-  // GAMEが未定義なら最小構成で用意
+
   if (typeof window.GAME !== 'object' || !window.GAME) {
-    window.GAME = {
-      money: 0, lp: 0, crystal: 0, baseCap: 5,
-      owned: [], dex: [], achievements: [],
-      research: { luck:0, legend:0, event:0, chimera:0, life:0, cap:0, auto:0, time:0 },
-      logs: [], moonRoad: [], diamondStored: 0,
-      lastMoonRefresh: 0, lastDiamondGain: Date.now(), emozoo: 0, buffs: {}
-    };
+
+    const saveData =
+      localStorage.getItem('CYBER_EMOJI_CORE_SAVE_V2');
+
+    if(saveData){
+      try{
+        window.GAME = JSON.parse(saveData);
+      }catch(e){
+        console.warn("save load failed");
+      }
+    }
+
+    if(typeof window.GAME !== 'object' || !window.GAME){
+
+      window.GAME = {
+        money: 100000,
+        lp: 0,
+        crystal: 0,
+        baseCap: 5,
+
+        owned: [],
+        dex: [],
+        achievements: [],
+
+        research:{
+          luck:0,
+          legend:0,
+          event:0,
+          chimera:0,
+          life:0,
+          cap:0,
+          auto:0,
+          time:0
+        },
+
+        logs: [],
+        moonRoad: [],
+        diamondStored: 0,
+
+        lastMoonRefresh: 0,
+        lastDiamondGain: Date.now(),
+
+        emozoo: 0,
+        buffs: {}
+      };
+    }
+
   } else {
-    // 欠損の埋め
-    GAME.owned = Array.isArray(GAME.owned) ? GAME.owned : [];
-    GAME.baseCap = Number.isFinite(GAME.baseCap) ? GAME.baseCap : 5;
-    GAME.logs = Array.isArray(GAME.logs) ? GAME.logs : [];
-    GAME.emozoo = Number.isFinite(GAME.emozoo) ? GAME.emozoo : 0;
-    GAME.buffs = (typeof GAME.buffs === 'object' && GAME.buffs) ? GAME.buffs : {};
+
+    GAME.owned = Array.isArray(GAME.owned)
+      ? GAME.owned : [];
+
+    GAME.baseCap = Number.isFinite(GAME.baseCap)
+      ? GAME.baseCap : 5;
+
+    GAME.logs = Array.isArray(GAME.logs)
+      ? GAME.logs : [];
+
+    GAME.emozoo = Number.isFinite(GAME.emozoo)
+      ? GAME.emozoo : 0;
+
+    GAME.buffs =
+      (typeof GAME.buffs === 'object' && GAME.buffs)
+      ? GAME.buffs : {};
   }
+
+})();
   // 交換ポップアップが存在しない場合は最小UIを自動挿入
   if (!document.getElementById('tradePopup')) {
     const wrap = document.createElement('div');
@@ -4195,7 +4247,23 @@ let lastSpawnSlotKey = ''; // 直近スポーンスロット識別（1時間に1
 let bossNoEscape = 0;
 
 /* ====== 永続化 ====== */
-function save(){ localStorage.setItem('CYBER_EMOJI_CORE_SAVE_V2', JSON.stringify(GAME)); }
+function save(){
+
+  // money破損防止
+  if(
+    GAME.money === undefined ||
+    GAME.money === null ||
+    Number.isNaN(Number(GAME.money))
+  ){
+    console.warn("SAVE BLOCKED: money broken", GAME.money);
+    return;
+  }
+
+  localStorage.setItem(
+    'CYBER_EMOJI_CORE_SAVE_V2',
+    JSON.stringify(GAME)
+  );
+}
 function load(){
   const data = localStorage.getItem('CYBER_EMOJI_CORE_SAVE_V2');
   if(!data) return;
