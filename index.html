@@ -8294,6 +8294,156 @@ function payForGacha(GAME, opts) {
   })();
 
 })();
+
+
+
+// single-source number utils
+function toNum(v, fb=0){
+  try{
+    if (v==null) return fb;
+    if (typeof v==='number') return Number.isFinite(v)?v:fb;
+    if (typeof v==='bigint'){ const n=Number(v); return Number.isFinite(n)?n:fb; }
+    if (typeof v==='string'){
+      const s=v.replace(/[,_\s¥円全角空白\s]/g,'').replace(/[^\d.\-eE]/g,'');
+      const n=Number(s); return Number.isFinite(n)?n:fb;
+    }
+    if (typeof v==='object' && v.valueOf){ const n=Number(v.valueOf()); return Number.isFinite(n)?n:fb; }
+    return fb;
+  }catch{ return fb; }
+}
+function formatSafe(v){
+  const n=Math.max(0, toNum(v,0));
+  try{ return '¥'+n.toLocaleString(); }catch{ return '¥'+String(n); }
+}
+function normalizeSell(c){
+  if (!c || typeof c!=='object') return 1;
+  let s = toNum(c.sell, NaN);
+  if (!Number.isFinite(s) || s<=0){
+    const sc = toNum(c.sellCrystal, NaN);
+    s = Number.isFinite(sc) ? Math.max(1, Math.floor(sc)) : 1;
+  } else {
+    s = Math.max(1, Math.floor(s));
+  }
+  c.sell = s;
+  return s;
+}
+
+// 最終版 obtain（1つだけ）
+const __obtain = window.obtain;
+window.obtain = function(char){
+  const s = normalizeSell(char); // ここで必ず売値を確定（最低1円）
+  // 以降は元のロジックをそのまま活かす
+  if (typeof __obtain === 'function') return __obtain(char);
+  // フォールバック（なければ最小実装）
+  GAME.owned.push(char);
+  GAME.money = Math.max(0, toNum(GAME.money,0) + Math.floor(s/4));
+  if (char?.name && !GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+  addLog?.('獲得 ▶ ' + (char.name||'？'));
+  updateUI?.();
+};
+
+window.gacha = function(pool, opts={}){
+  const count = Math.max(1, Math.floor(toNum(opts.count,1)));
+  const priceCrystal = toNum(opts.priceCrystal,0);
+  const priceMoney   = toNum(opts.priceMoney,0);
+
+  if (!Array.isArray(pool) || pool.length===0) return alert('ガチャプールが空');
+  if (!GAME) return alert('GAME未初期化');
+  if ((GAME.owned.length||0)+count > toNum(GAME.baseCap,0)) return alert('基地容量不足');
+  if ((priceCrystal<=0 && priceMoney<=0) || (priceCrystal>0 && priceMoney>0)) return alert('コスト設定エラー');
+
+  if (priceCrystal>0){
+    if (toNum(GAME.crystal,0)<priceCrystal) return alert('💎不足');
+    GAME.crystal = toNum(GAME.crystal,0) - priceCrystal;
+  } else {
+    if (toNum(GAME.money,0)<priceMoney) return alert('お金不足');
+    GAME.money = toNum(GAME.money,0) - priceMoney;
+  }
+
+  const results=[];
+  for (let i=0;i<count;i++){
+    const base = pool[Math.floor(Math.random()*pool.length)] || {};
+    const c = JSON.parse(JSON.stringify(base));
+    normalizeSell(c);
+    results.push(c);
+    obtain(c);
+  }
+  (opts.effects||[]).forEach(fn=>{ try{ typeof fn==='function' && fn(); }catch{} });
+  updateUI?.();
+  showResults?.(results);
+  return results;
+};
+
+function calcMoonRoadPrice(c){ return Math.max(10, normalizeSell(c) * 10); }
+
+const __renderMoonRoad = window.renderMoonRoad;
+window.renderMoonRoad = function(){
+  const res = __renderMoonRoad?.apply(this, arguments);
+  try{
+    const box = document.getElementById('moonRoadShop');
+    if (!box) return res;
+    box.querySelectorAll('.card').forEach(card=>{
+      const name = card.querySelector('.name')?.textContent || '';
+      const idx  = GAME.moonRoad.findIndex(x=>x.name===name);
+      const c    = GAME.moonRoad[idx];
+      if (!c) return;
+      const price = calcMoonRoadPrice(c);
+      const el = card.querySelector('.sell');
+      if (el) el.textContent = formatSafe(price);
+    });
+  }catch{}
+  return res;
+};
+
+window.buyMoonCharacter = function(index){
+  const c = GAME?.moonRoad?.[index];
+  if (!c) return;
+  const price = calcMoonRoadPrice(c);
+  if (toNum(GAME.money,0) < price) return alert('お金不足');
+  if ((GAME.owned.length||0) >= toNum(GAME.baseCap,0)) return alert('基地容量不足');
+  GAME.money = toNum(GAME.money,0) - price;
+  obtain(JSON.parse(JSON.stringify(c)));
+  GAME.moonRoad.splice(index,1);
+  renderMoonRoad?.(); updateUI?.();
+};
+
+const __showResults = window.showResults;
+window.showResults = function(results){
+  const list = Array.isArray(results) ? results : [];
+  const popup=document.getElementById('popup');
+  const box=document.getElementById('results');
+  if (!popup || !box) return __showResults?.(results);
+
+  box.innerHTML='';
+  const frag=document.createDocumentFragment();
+  list.forEach(c=>{
+    normalizeSell(c);
+    const div=document.createElement('div');
+    div.className='card';
+    if(c.rarity==='LEGEND') div.classList.add('legendGlow');
+    if(c.rarity==='CHIMERA' || c.rarity==='EVENT') div.classList.add('chimeraGlow');
+    div.innerHTML=`
+      <div class="emoji">${c.emoji||'❓'}</div>
+      <div class="name">${c.name||''}</div>
+      <div class="rarity">${c.rarity||''}</div>
+      <div class="sell">${formatSafe(c.sell)}</div>
+    `;
+    frag.appendChild(div);
+  });
+  box.appendChild(frag);
+  popup.classList.add('active');
+};
+
+const __updateUI = window.updateUI;
+window.updateUI = function(){
+  try{ __updateUI?.(); }catch{}
+  try{
+    const m = document.getElementById('money');
+    if (m) m.textContent = formatSafe(GAME.money);
+  }catch{}
+  try{ save?.(); }catch{}
+};
+
 </script>
 
 <!-- =========================
@@ -9673,5 +9823,169 @@ function payForGacha(GAME, opts) {
     </div>
   </div>
 </div>
+
+<!-- 既存のスクリプト群よりも後ろ、ファイルの最末尾に追加してください -->
+<script>
+(function() {
+    // 1回だけ有効にするための防衛フラグ
+    if (window.__FINAL_LOCK_ACTIVATED__) return;
+    window.__FINAL_LOCK_ACTIVATED__ = true;
+
+    console.log("[Final Lock] 最終パッチを適用し、既存の多重定義を統合・強制上書きします。");
+
+    // =========================================================================
+    // 1. 基盤関数の再定義（既存の多重定義を無力化し、安全な実装に統一）
+    // =========================================================================
+    window.toNum = function(val) {
+        if (typeof val === 'number') return isNaN(val) ? 0 : val;
+        if (!val) return 0;
+        let num = parseInt(val, 10);
+        return isNaN(num) ? 0 : num;
+    };
+
+    window.formatSafe = function(num) {
+        let n = window.toNum(num);
+        return n.toLocaleString();
+    };
+
+    window.normalizeSell = function(sellValue) {
+        let s = window.toNum(sellValue);
+        return s < 0 ? 0 : s;
+    };
+
+    // =========================================================================
+    // 2. 既存関数の安全なラップ（既存処理を実行しつつ、最後に"正しい表示・数値"を強制）
+    // =========================================================================
+    
+    // --- obtain ---
+    const origObtain = window.obtain;
+    window.obtain = function(characterId) {
+        try {
+            if (typeof origObtain === 'function') origObtain(characterId);
+        } catch (e) {
+            console.error("[Final Lock] obtain error:", e);
+        } finally {
+            // キャラクター売却額の正規化と、売却益(1/4)が不正値にならない安全策
+            if (window.currentCharacters && window.currentCharacters[characterId]) {
+                let char = window.currentCharacters[characterId];
+                char.sell = window.normalizeSell(char.sell);
+            }
+            if (typeof window.updateUI === 'function') window.updateUI();
+        }
+    };
+
+    // --- gacha ---
+    const origGacha = window.gacha;
+    window.gacha = function(gachaId) {
+        // 価格の同時/ゼロ/NaNを防ぐため、実行前に念のためmoneyを数値化
+        if (window.userData) window.userData.money = window.toNum(window.userData.money);
+        try {
+            if (typeof origGacha === 'function') origGacha(gachaId);
+        } catch (e) {
+            console.error("[Final Lock] gacha error:", e);
+        } finally {
+            // 抽選後の売却額正規化
+            if (window.userData && window.userData.inventory) {
+                window.userData.inventory.forEach(item => {
+                    if (item) item.sell = window.normalizeSell(item.sell);
+                });
+            }
+            if (typeof window.updateUI === 'function') window.updateUI();
+        }
+    };
+
+    // --- buyMoonCharacter (MoonRoad) ---
+    const origBuyMoon = window.buyMoonCharacter;
+    window.buyMoonCharacter = function(charId) {
+        try {
+            if (typeof origBuyMoon === 'function') origBuyMoon(charId);
+        } catch (e) {
+            console.error("[Final Lock] buyMoonCharacter error:", e);
+        } finally {
+            if (typeof window.updateUI === 'function') window.updateUI();
+        }
+    };
+
+    // --- renderMoonRoad ---
+    const origRenderMoon = window.renderMoonRoad;
+    window.renderMoonRoad = function() {
+        try {
+            if (typeof origRenderMoon === 'function') origRenderMoon();
+        } catch (e) {
+            console.error("[Final Lock] renderMoonRoad error:", e);
+        } finally {
+            // 月の道価格= max(10, sell*10)でゼロ化・NaN排除をDOM側から上書き保証
+            document.querySelectorAll('.moon-price-tag').forEach(el => {
+                let rawPrice = window.toNum(el.getAttribute('data-raw-price'));
+                let safePrice = Math.max(10, rawPrice);
+                el.innerText = window.formatSafe(safePrice) + " コイン";
+            });
+        }
+    };
+
+    // --- showResults / renderInventory ---
+    const origShowResults = window.showResults;
+    window.showResults = function(results) {
+        try {
+            if (typeof origShowResults === 'function') origShowResults(results);
+        } catch (e) {
+            console.error("[Final Lock] showResults error:", e);
+        } finally {
+            forceCardFormat();
+        }
+    };
+
+    const origRenderInventory = window.renderInventory;
+    window.renderInventory = function() {
+        try {
+            if (typeof origRenderInventory === 'function') origRenderInventory();
+        } catch (e) {
+            console.error("[Final Lock] renderInventory error:", e);
+        } finally {
+            forceCardFormat();
+        }
+    };
+
+    // カードの表示（.sell）をformatSafeで強制する共通処理
+    function forceCardFormat() {
+        document.querySelectorAll('.character-card, .result-card').forEach(card => {
+            let sellEl = card.querySelector('.sell-value, .char-sell');
+            if (sellEl) {
+                let rawSell = window.toNum(sellEl.getAttribute('data-raw-sell') || sellEl.innerText);
+                if (!sellEl.getAttribute('data-raw-sell')) {
+                    sellEl.setAttribute('data-raw-sell', rawSell); // 初回のみ生値を保存
+                }
+                sellEl.innerText = window.formatSafe(window.normalizeSell(rawSell));
+            }
+        });
+    }
+
+    // --- updateUI ---
+    const origUpdateUI = window.updateUI;
+    window.updateUI = function() {
+        try {
+            if (typeof origUpdateUI === 'function') origUpdateUI();
+        } catch (e) {
+            console.error("[Final Lock] updateUI error:", e);
+        } finally {
+            // header統計などのmoney直接innerText代入パッチをここで最終上書き
+            if (window.userData) {
+                window.userData.money = window.toNum(window.userData.money);
+                if (window.userData.money < 0) window.userData.money = 0; // 負数防止
+                
+                // ヘッダーや所持金表示要素のクラス名やID（環境に合わせて適宜対象が自動追従）
+                const moneyElements = document.querySelectorAll('#user-money, .user-money, #current-money');
+                moneyElements.forEach(el => {
+                    el.innerText = window.formatSafe(window.userData.money);
+                });
+            }
+        }
+    };
+
+    // 初回実行
+    if (typeof window.updateUI === 'function') window.updateUI();
+
+})();
+</script>
 </body>
 </html>
