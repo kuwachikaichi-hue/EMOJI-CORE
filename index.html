@@ -8693,6 +8693,68 @@ renderMoonRoad();
     if (closeBtn && !closeBtn.__wired) { closeBtn.__wired = true; closeBtn.addEventListener('click', closeEzPopup); }
   })();
 })();
+
+// === HOTFIX: Step1「進む」ボタンが反応しない問題を強制修正 v2026-06-04 ===
+(function fixStep1NextForce(){
+  function el(id){ return document.getElementById(id); }
+  function showStep(id){
+    ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(k=>{
+      const n = el(k);
+      if (n){ n.classList.remove('active'); n.style.display = 'none'; }
+    });
+    const t = el(id);
+    if (t){ t.classList.add('active'); t.style.display = 'block'; }
+    const tp = el('tradePopup');
+    if (tp){ tp.classList.add('active'); tp.style.display = 'flex'; }
+  }
+  // Step1→Step2の確実な遷移処理
+  function goStep2(){
+    try{
+      // 既存の関数があれば先に呼ぶ（副作用維持）
+      if (typeof window.tradeStep1ToStep2 === 'function') {
+        try { window.tradeStep1ToStep2(); } catch(e){}
+      }
+      // 強制でStep2へ（既存が不発でも確実に遷移）
+      showStep('tradeStep2');
+      // エラー表示エリア初期化
+      var err = el('step2Error'); if (err) err.textContent = '';
+      // 入力欄を軽くフォーカス
+      var ta = el('step2Input'); if (ta) { ta.focus(); ta.select && ta.select(); }
+    }catch(e){
+      // 最終フォールバック
+      showStep('tradeStep2');
+    }
+  }
+  // ボタンに一度だけ強制結線
+  function wire(){
+    var btn = el('step1NextBtn') || document.querySelector('#tradeStep1 .tradeAction:not(.danger)');
+    if (!btn) return;
+    if (btn.__wiredStep1Next) return;
+    btn.__wiredStep1Next = true;
+    btn.onclick = function(ev){
+      ev && ev.preventDefault && ev.preventDefault();
+      ev && ev.stopPropagation && ev.stopPropagation();
+      goStep2();
+      return false;
+    };
+    // 他のスクリプトが後からonclickを上書きしても即時この処理を優先
+    btn.addEventListener('click', function(ev){
+      ev.stopImmediatePropagation && ev.stopImmediatePropagation();
+    }, true);
+  }
+  // すぐ結線＋遅延で再結線（上書き対策）
+  function arm(){
+    wire();
+    setTimeout(wire, 200);
+    setTimeout(wire, 800);
+    setTimeout(wire, 1600);
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', arm, {once:true});
+  } else {
+    arm();
+  }
+})();
   
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
