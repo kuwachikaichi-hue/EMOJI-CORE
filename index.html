@@ -7825,6 +7825,158 @@ renderMoonRoad();
 
 })();
 
+// ===============================
+// CYBER EMOJI CORE SAFE SYSTEM
+// ===============================
+
+(function(){
+
+// ---------- ① 新規ゲーム ----------
+function createNewGame(){
+  return {
+    money: 100000,
+    lp: 0,
+    crystal: 0,
+    baseCap: 5,
+
+    owned: [],
+    dex: [],
+    achievements: [],
+
+    research: {
+      luck:0,
+      legend:0,
+      event:0,
+      chimera:0,
+      life:0,
+      cap:0,
+      auto:0,
+      time:0
+    },
+
+    logs: [],
+    moonRoad: [],
+    diamondStored: 0,
+
+    lastMoonRefresh: 0,
+    lastDiamondGain: Date.now(),
+
+    emozoo: 0,
+    buffs: {},
+
+    __meta: {
+      version: 1,
+      newGame: true
+    }
+  };
+}
+
+// ---------- ② セーブ読み込み ----------
+function safeLoadGame(){
+
+  const raw = localStorage.getItem('CYBER_EMOJI_CORE_SAVE_V2');
+
+  if(!raw){
+    return createNewGame();
+  }
+
+  try{
+    const data = JSON.parse(raw);
+
+    if(!data || typeof data !== 'object'){
+      return createNewGame();
+    }
+
+    if(
+      typeof data.money !== 'number' ||
+      !Array.isArray(data.owned)
+    ){
+      console.warn("Save corrupted → reset");
+      return createNewGame();
+    }
+
+    return {
+      ...createNewGame(),
+      ...data,
+      owned: Array.isArray(data.owned) ? data.owned : [],
+      dex: Array.isArray(data.dex) ? data.dex : [],
+      achievements: Array.isArray(data.achievements) ? data.achievements : [],
+      research: {
+        ...createNewGame().research,
+        ...(data.research || {})
+      },
+      buffs: (data.buffs && typeof data.buffs === 'object') ? data.buffs : {}
+    };
+
+  }catch(e){
+    console.warn("Save parse failed → reset", e);
+    return createNewGame();
+  }
+}
+
+// ---------- ③ 初期化 ----------
+(function initGame(){
+
+  window.GAME = safeLoadGame();
+
+  GAME.owned ||= [];
+  GAME.dex ||= [];
+  GAME.logs ||= [];
+  GAME.achievements ||= [];
+
+  GAME.money = Number(GAME.money) || 100000;
+  GAME.baseCap = Number(GAME.baseCap) || 5;
+  GAME.emozoo = Number(GAME.emozoo) || 0;
+
+  GAME.buffs ||= {};
+
+})();
+
+// ---------- ④ セーブ ----------
+window.save = function(){
+
+  if(!GAME || typeof GAME !== 'object'){
+    return;
+  }
+
+  if(GAME.__meta?.newGame){
+    GAME.__meta.newGame = false;
+    return;
+  }
+
+  if(typeof GAME.money !== 'number' || isNaN(GAME.money)){
+    console.warn("Broken GAME detected → skip save");
+    return;
+  }
+
+  try{
+    localStorage.setItem(
+      'CYBER_EMOJI_CORE_SAVE_V2',
+      JSON.stringify(GAME)
+    );
+  }catch(e){
+    console.warn("Save failed", e);
+  }
+};
+
+// ---------- ⑤ ロード ----------
+window.load = function(){
+  window.GAME = safeLoadGame();
+};
+
+// ---------- ⑥ 安全実行ラッパー ----------
+window.safeAction = function(fn){
+  return function(){
+    try{
+      return fn.apply(this, arguments);
+    }catch(e){
+      console.warn("Action error prevented:", e);
+    }
+  };
+};
+
+})();
+  
 </script>
 
 
