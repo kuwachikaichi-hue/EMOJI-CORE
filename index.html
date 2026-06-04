@@ -7664,6 +7664,223 @@ renderMoonRoad();
 })();
 </script>
 
+<script>
+// ===== Zero-Yen Hard Guard v2026-06-04 =====
+// 目的: 表示/計算/取得で「¥0」や NaN が出る全経路を最終的に遮断する
+(function zeroYenHardGuard(){
+  if (window.__zeroYenHardGuard__) return;
+  window.__zeroYenHardGuard__ = true;
+
+  // 1) 数値正規化（最終版）
+  function toNum(v, fb=0){
+    try{
+      if (v == null) return fb;
+      if (typeof v === 'number') return isFinite(v) ? v : fb;
+      if (typeof v === 'bigint') { const n = Number(v); return isFinite(n) ? n : fb; }
+      if (typeof v === 'string'){
+        const s = v.replace(/[,_\s¥円]/g,'');
+        const n = Number(s);
+        return isFinite(n) ? n : fb;
+      }
+      if (typeof v === 'object' && v.valueOf){
+        const n = Number(v.valueOf());
+        return isFinite(n) ? n : fb;
+      }
+      return fb;
+    }catch{ return fb; }
+  }
+
+  // 2) 最終表示フォーマッタ（¥の桁落ち/NaN抑止）
+  function formatSafe(v){
+    const n = toNum(v, 1); // 画面表示は最低1円で見せる
+    try { return '¥' + n.toLocaleString(); }
+    catch { return '¥' + String(n); }
+  }
+
+  // 3) sell 正規化（sellCrystal 等も可視化用に必ず1円以上へ）
+  function normalizeSell(obj){
+    if (!obj || typeof obj !== 'object') return 1;
+    // 円売値が無い/NaNなら補う
+    if (!isFinite(toNum(obj.sell, NaN))) {
+      // ダイヤ系は「売値0」扱いを避け、最低1円を与える（表示用）
+      if (isFinite(toNum(obj.sellCrystal, NaN))) {
+        obj.sell = Math.max(1, Math.floor(toNum(obj.sellCrystal, 0)));
+      } else {
+        obj.sell = 1; // 不明系は最低1円
+      }
+    } else {
+      // 既に数値だが0や負/NaN気味の時に1へ寄せる
+      obj.sell = Math.max(1, Math.floor(toNum(obj.sell, 1)));
+    }
+    return obj.sell;
+  }
+
+  // 4) obtain の最終ラップ（money+=sell/4 が 0/NaN にならない）
+  (function patchObtain(){
+    const orig = window.obtain;
+    window.obtain = function(char){
+      // sell を常に正規化
+      const s = normalizeSell(char);
+      if (typeof orig === 'function') {
+        const before = toNum(window.GAME?.money, 0);
+        try {
+          const res = orig(char);
+          // moneyが壊れたら復旧（before + floor(s/4) 以上を保証）
+          if (!window.GAME || !isFinite(GAME.money)) {
+            window.GAME = window.GAME || {};
+            GAME.money = before + Math.floor(s/4);
+          } else if (toNum(GAME.money, 0) < before) {
+            // 取得でmoneyが減るケースを遮断（最低限上積み）
+            GAME.money = before + Math.floor(s/4);
+          }
+          return res;
+        }catch(e){
+          // フォールバック実装（最低限の加算/所持追加/図鑑）
+          window.GAME = window.GAME || {};
+          GAME.owned = Array.isArray(GAME.owned) ? GAME.owned : [];
+          GAME.owned.push(char);
+          GAME.money = toNum(GAME.money, 0) + Math.floor(s/4);
+          GAME.dex = Array.isArray(GAME.dex) ? GAME.dex : [];
+          if (char?.name && !GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+          try{ typeof addLog==='function' && addLog('獲得 ▶ '+(char.name||'？')); }catch(_){}
+          try{ typeof updateUI==='function' && updateUI(); }catch(_){}
+        }
+      } else {
+        // obtain 未定義環境の安全取得
+        window.GAME = window.GAME || {};
+        GAME.owned = Array.isArray(GAME.owned) ? GAME.owned : [];
+        GAME.owned.push(char);
+        GAME.money = toNum(GAME.money, 0) + Math.floor(s/4);
+        GAME.dex = Array.isArray(GAME.dex) ? GAME.dex : [];
+        if (char?.name && !GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+        try{ typeof addLog==='function' && addLog('獲得 ▶ '+(char.name||'？')); }catch(_){}
+        try{ typeof updateUI==='function' && updateUI(); }catch(_){}
+      }
+    };
+  })();
+
+  // 5) gacha の最終ラップ（プールからの取り出し時に sell を必ず正規化）
+  (function patchGacha(){
+    const orig = window.gacha;
+    if (typeof orig !== 'function') return;
+    if (orig.__zeroGuardWrapped) return;
+    function wrapped(pool, opts){
+      const res = [];
+      const r = orig.call(this, pool, opts) || [];
+      // orig がそのまま showResults を出してしまう場合もあるので、
+      // 受け取れる配列があれば正規化、無ければ UI 側でやる
+      if (Array.isArray(r) && r.length){
+        for (const c of r){
+          normalizeSell(c);
+          res.push(c);
+        }
+        return res;
+      }
+      return r;
+    }
+    wrapped.__zeroGuardWrapped = true;
+    window.gacha = wrapped;
+  })();
+
+  // 6) MoonRoad/ショップ価格の強制正規化（表示と計算の両方）
+  (function patchMoonRoad(){
+    const origRender = window.renderMoonRoad;
+    if (typeof origRender === 'function' && !origRender.__zeroGuardWrapped){
+      window.renderMoonRoad = function(){
+        const r = origRender.apply(this, arguments);
+        try{
+          const box = document.getElementById('moonRoadShop');
+          if (!box) return r;
+          box.querySelectorAll('.card').forEach(card=>{
+            const sellNode = card.querySelector('.sell');
+            if (!sellNode) return;
+            // テキストからではなく、見つかる範囲のデータを最小1円で見せる
+            const txtNum = toNum(sellNode.textContent, 1);
+            sellNode.textContent = formatSafe(Math.max(1, txtNum));
+          });
+        }catch(_){}
+        return r;
+      };
+      window.renderMoonRoad.__zeroGuardWrapped = true;
+    }
+
+    const origBuy = window.buyMoonCharacter;
+    if (typeof origBuy === 'function' && !origBuy.__zeroGuardWrapped){
+      window.buyMoonCharacter = function(index){
+        const c = (window.GAME && GAME.moonRoad && GAME.moonRoad[index]) || null;
+        if (!c) return;
+        const s = normalizeSell(c); // ここで最低1円に揃える
+        const price = Math.max(1, s * 10);
+        if (toNum(GAME.money, 0) < price) { alert('お金不足'); return; }
+        if ((GAME.owned||[]).length >= toNum(GAME.baseCap, 0)) { alert('基地容量不足'); return; }
+        GAME.money = toNum(GAME.money, 0) - price;
+        obtain(JSON.parse(JSON.stringify(c)));
+        GAME.moonRoad.splice(index, 1);
+        try{ typeof renderMoonRoad==='function' && renderMoonRoad(); }catch(_){}
+        try{ typeof updateUI==='function' && updateUI(); }catch(_){}
+      };
+      window.buyMoonCharacter.__zeroGuardWrapped = true;
+    }
+  })();
+
+  // 7) showResults/renderInventory の表示を最後に矯正（売値は必ず ¥1 以上）
+  (function patchRenderers(){
+    function fixSellIn(container){
+      if (!container) return;
+      container.querySelectorAll('.card .sell').forEach(el=>{
+        const val = toNum(el.textContent, 1);
+        el.textContent = formatSafe(Math.max(1, val));
+      });
+    }
+
+    const origShow = window.showResults;
+    if (typeof origShow === 'function' && !origShow.__zeroGuardWrapped){
+      window.showResults = function(results){
+        const r = origShow.apply(this, arguments);
+        try{
+          fixSellIn(document.getElementById('results'));
+        }catch(_){}
+        return r;
+      };
+      window.showResults.__zeroGuardWrapped = true;
+    }
+
+    const origInv = window.renderInventory;
+    if (typeof origInv === 'function' && !origInv.__zeroGuardWrapped){
+      window.renderInventory = function(){
+        const r = origInv.apply(this, arguments);
+        try{
+          fixSellIn(document.getElementById('inventory'));
+        }catch(_){}
+        return r;
+      };
+      window.renderInventory.__zeroGuardWrapped = true;
+    }
+  })();
+
+  // 8) updateUI の金額最終上書き（常に formatSafe 経由）
+  (function hardPatchUpdateUI(){
+    const orig = window.updateUI;
+    window.updateUI = function(){
+      try{ if (typeof orig === 'function') orig(); }catch(_){}
+      try{
+        const m = document.getElementById('money');
+        if (m && window.GAME) {
+          // 画面は最低1円表現にしない（所持金は実値のまま）。ただしNaN/負は0へ。
+          const safeMoney = Math.max(0, toNum(GAME.money, 0));
+          m.textContent = formatSafe(safeMoney);
+        }
+      }catch(_){}
+      try{ typeof save==='function' && save(); }catch(_){}
+    };
+  })();
+
+  // 9) 既に存在するユーティリティをグローバル公開（他パッチからも参照可能に）
+  window.__ZERO_GUARD__ = { toNum, formatSafe, normalizeSell };
+})();
+</script>
+
+
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
