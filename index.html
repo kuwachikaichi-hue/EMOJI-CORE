@@ -6669,1512 +6669,32 @@ renderMoonRoad();
 }
 );
 
-// ==== Trade UI hard-wire patch v2026-06-03-a ====
-// 目的: tradePopup の各ボタンを確実に新トレード実装へ接続し、
-// 「呪文を読み込む」「キャンセル」「閉じる」「実行(OK)」が反応しない問題を修正。
-(function hardWireTradeUI(){
-  // 安全に1回だけ実行
-  if (window.__tradeUIHardWired__) return;
-  window.__tradeUIHardWired__ = true;
-  function $(sel){ return document.querySelector(sel); }
-  function el(id){ return document.getElementById(id); }
-  // 必須UIの存在確認
-  function ensurePopup() {
-    const tp = el('tradePopup');
-    // 画面に無くても、既に別所で自動挿入しているため基本ある想定。無ければ何もしない。
-    return !!tp;
-  }
-  if (!ensurePopup()) return;
-  // 既存ボタンを全て再接続
-  function wire() {
-    // Step1 -> Step2
-    const step1Next = el('step1NextBtn') || $('#tradeStep1 .tradeAction:not(.danger)');
-    if (step1Next) {
-      step1Next.onclick = function() {
-        try {
-          // 新実装に直接進ませる
-          if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function') {
-            // openStartは在庫カードから起動する想定。ここは単純にStep2へ遷移。
-            const tp = el('tradePopup');
-            if (tp) {
-              // 表示切替
-              ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(s=>{
-                const n = el(s); if(n) n.classList.remove('active');
-              });
-              const st2 = el('tradeStep2'); if (st2) st2.classList.add('active');
-            }
-          } else {
-            // フォールバック：UIだけ進める
-            ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(s=>{
-              const n = el(s); if(n) n.classList.remove('active');
-            });
-            const st2 = el('tradeStep2'); if (st2) st2.classList.add('active');
-          }
-        } catch(e){}
-      };
-    }
-    // Step2: 呪文を読み込む
-    const step2ReadBtn = $('#tradeStep2 .tradeAction:not(.danger)');
-    if (step2ReadBtn) {
-      step2ReadBtn.onclick = function() {
-        try {
-          if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function') {
-            // 新実装の readPartnerOffer を呼ぶ
-            if (typeof window.TradeHandlers_readPartnerOffer === 'function') {
-              window.TradeHandlers_readPartnerOffer();
-            } else if (typeof window.readPartnerOffer === 'function') {
-              window.readPartnerOffer(); // 既に公開されている場合
-            } else {
-              // 新実装側が公開していない端末向け：直接呼び出し（定義部に存在）
-              try {
-                // 新実装では readPartnerOffer が IIFE 内部にあるため、
-                // Step2ボタンに再度アタッチしていることが多い。ここでは単純にイベントを再送。
-                const ta = el('step2Input'); const err = el('step2Error');
-                if (!ta) throw new Error('入力欄が見つかりません');
-                const text = (ta.value||'').trim();
-                if (!text) throw new Error('呪文が空です');
-                // 簡易デコードトライ（失敗は新実装に任せたいが保険で遷移だけ行う）
-                // UIだけ進める（相手確認ステップへ）。実デコードは内部関数に任せる前提。
-                const st3 = el('tradeStep3');
-                ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(s=>{
-                  const n = el(s); if(n) n.classList.remove('active');
-                });
-                if (st3) st3.classList.add('active');
-              } catch(e2) {
-                const err = el('step2Error');
-                if (err) err.textContent = '呪文を読み込めません：' + (e2?.message||'不明なエラー');
-              }
-            }
-          } else if (typeof window.readPartnerOffer === 'function') {
-            window.readPartnerOffer();
-          } else {
-            // 旧実装専用の最低限フォールバック
-            const ta = el('step2Input'); const err = el('step2Error');
-            const text = (ta?.value||'').trim();
-            if (!text) { if (err) err.textContent='呪文が空です'; return; }
-            ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(s=>{
-              const n = el(s); if(n) n.classList.remove('active');
-            });
-            const st3 = el('tradeStep3'); if (st3) st3.classList.add('active');
-          }
-        } catch(e) {
-          const err = el('step2Error');
-          if (err) err.textContent = '呪文を読み込めません：' + (e?.message||'不明なエラー');
-        }
-      };
-    }
-    // Step3: 実行(OK)ボタンの保証（存在しなければ生成）
-    (function ensureRunButton(){
-      const s3 = el('tradeStep3');
-      if (!s3) return;
-      let run = s3.querySelector('.tradeAction.run');
-      if (!run) {
-        run = document.createElement('button');
-        run.className = 'tradeAction run';
-        run.style.marginTop = '8px';
-        run.textContent = 'OK（実行）';
-        s3.appendChild(run);
-      }
-      run.onclick = function(){
-        try {
-          if (typeof window.finalizeSwap === 'function') {
-            window.finalizeSwap();
-            return;
-          }
-          // 新実装は TradeHandlers.finalizeSwap を公開していない場合があるため、
-          // ここでは UI を完了画面へ確実に遷移させる保険を入れる。
-          ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(s=>{
-            const n = el(s); if(n) n.classList.remove('active');
-          });
-          const s4 = el('tradeStep4'); if (s4) s4.classList.add('active');
-        } catch(e){
-          alert('交換を完了できません：' + (e?.message||'不明なエラー'));
-        }
-      };
-    })();
-    // キャンセル（Step1/Step2）
-    const cancelBtns = document.querySelectorAll('#tradeStep1 .danger, #tradeStep2 .danger');
-    cancelBtns.forEach(b=>{
-      b.onclick = function(){
-        try {
-          if (typeof window.cancelAll === 'function') {
-            window.cancelAll();
-          } else if (typeof window.cancelTrade === 'function') {
-            window.cancelTrade();
-          } else {
-            const tp = el('tradePopup'); if (tp) tp.classList.remove('active');
-          }
-        } catch(e){
-          const tp = el('tradePopup'); if (tp) tp.classList.remove('active');
-        }
-      };
-    });
-    // 完了画面の閉じる
-    const closeBtn = document.querySelector('#tradeStep4 .tradeAction, #tradeStep4 button');
-    if (closeBtn) {
-      closeBtn.onclick = function(){
-        try {
-          if (typeof window.closePopup === 'function') {
-            // 共通ポップアップを使っている環境の保険
-            window.closePopup();
-          }
-          const tp = el('tradePopup'); if (tp) tp.classList.remove('active');
-        } catch(e){
-          const tp = el('tradePopup'); if (tp) tp.classList.remove('active');
-        }
-      };
-    }
-    // tradePopup 自体の強制表示/非表示API保険
-    window.openTradePopup = function(stepId){
-      const tp = el('tradePopup'); if (!tp) return;
-      tp.classList.add('active');
-      ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(s=>{
-        const n = el(s); if(n) n.classList.remove('active');
-      });
-      const st = el(stepId||'tradeStep1'); if (st) st.classList.add('active');
-    };
-    window.closeTrade = function(){
-      const tp = el('tradePopup'); if (tp) tp.classList.remove('active');
-    };
-  }
-  // 初回結線 + 遅延再結線（動的差し替えの保険）
-  function arm() {
-    try { wire(); } catch(e){}
-    // UI が動的に再描画されても 1.2 秒おきに2回だけ補強
-    let n = 0;
-    const iv = setInterval(()=>{
-      try { wire(); } catch(e){}
-      n++; if (n>=2) clearInterval(iv);
-    }, 1200);
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', arm, {once:true});
-  } else {
-    arm();
-  }
-})();
+<!-- =========================================
+  //Consolidated Patch Bundle (2026-06-04)
+  //- Group A: Perf/Lite (軽量化)
+  //- Group B: Emozoo Exchange (エモズー交換)
+  //- Group C: Offline Trade Spell & Trade UI Stabilizers (オフライントレード呪文 + UI安定化)
+  //Notes:
+    //- 各グループは相互に独立し、グループ間の機能は混在させていません。
+    //- 重複/多重定義を整理し、最小限の公開APIを固定。
+    //- 既存APIがあれば尊重（try/catchで副作用維持）、無ければ確実なフォールバック。
+    //- 既存コードが後から上書きしても負けないように、必要箇所は遅延再結線とcapture制御を併用。
+========================================= -->
 
-/* ===== Perf/UX/Binding patch v2026-06-03 ===== */
-(function(){
+<!-- =========================
+     Group A: Perf/Lite
+     目的: 描画・FX・タイマ・イベントの軽量化と応答性向上
+========================= -->
+<script>
+(function PerfLiteBundle(){
+  if (window.__PerfLiteBundle__) return;
+  window.__PerfLiteBundle__ = true;
 
-  // 0) 多重タイマの抑制と可視化領域外更新の停止
-  // -------------------------------------------------
-  // 既存の1秒収入・30秒フィーバー・MoonRoad・Rank更新などが複数回setIntervalされる環境向け。
-  // 同名キーで一意のタイマを登録し、重複を防ぐ。
-  const Timers = (function(){
-    const map = new Map();
-    function set(name, fn, ms){
-      clear(name);
-      const id = setInterval(fn, ms);
-      map.set(name, id);
-      return id;
-    }
-    function clear(name){
-      const id = map.get(name);
-      if (id) { clearInterval(id); map.delete(name); }
-    }
-    return { set, clear };
-  })();
-
-  // requestIdleCallbackがない環境フォールバック
-  const ric = window.requestIdleCallback || function(cb){ return setTimeout(()=>cb({didTimeout:false,timeRemaining:()=>0}), 1); };
-
-  // 1) showResults 高速化（DocumentFragment + 最小リフロー）
-  // -------------------------------------------------
-  (function patchShowResults(){
-    const orig = window.showResults;
-    window.showResults = function(results){
-      try { if (!results || !Array.isArray(results)) results = []; } catch(e){ results = []; }
-      // 既存があれば一旦呼ぶ（内部ログ等の副作用を維持）
-      try { if (typeof orig === 'function') orig(results); } catch(e){}
-
-      // 高速描画ルート（上書き描画）
-      try {
-        const popup = document.getElementById('popup');
-        const box = document.getElementById('results');
-        if (!popup || !box) return;
-
-        box.classList.add('rendering');
-        box.innerHTML = ''; // 古い要素を一括削除
-        const frag = document.createDocumentFragment();
-        for (let i=0; i<results.length; i++){
-          const c = results[i] || {};
-          const div = document.createElement('div');
-          div.className = 'card';
-          const r = c.rarity || '';
-          if (r === 'LEGEND') div.classList.add('legendGlow');
-          if (r === 'CHIMERA' || r === 'EVENT') div.classList.add('chimeraGlow');
-          div.innerHTML = `
-            <div class="emoji">${c.emoji || '❓'}</div>
-            <div class="name">${c.name || '不明'}</div>
-            <div class="rarity">${r}</div>
-            <div class="sell">${(window.formatSafe?formatSafe(c.sell):('¥'+Number(c.sell||0).toLocaleString()))}</div>
-          `;
-          frag.appendChild(div);
-        }
-        box.appendChild(frag);
-        popup.classList.add('active');
-      } finally {
-        ric(()=>{ const box = document.getElementById('results'); box && box.classList.remove('rendering'); });
-      }
-    };
-  })();
-
-  // 2) UI更新のバッチングと頻度制御（1フレーム1回）
-  // -------------------------------------------------
-  (function batchUpdateUI(){
-    let scheduled = false;
-    const orig = window.updateUI || function(){};
-    window.updateUI = function(){
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(()=>{
-        scheduled = false;
-        try { orig(); } catch(e){}
-      });
-    };
-  })();
-
-  // 3) FX要素の上限さらに縮小（60個）＋属性マークで選別
-  // -------------------------------------------------
-  (function fxPrune(){
-    const MAX = 60;
-    Timers.set('__FX_PRUNE__', ()=>{
-      try {
-        const nodes = document.querySelectorAll('.heavenWing,.heavenFlash,.flash,.rainbowFlash,[class^="fx_"],[data-fx]');
-        if (nodes.length > MAX) {
-          const rm = nodes.length - MAX;
-          for (let i=0; i<rm; i++){
-            const n = nodes[i];
-            n && n.parentNode && n.parentNode.removeChild(n);
-          }
-        }
-      } catch(e){}
-    }, 800);
-  })();
-
-  // 4) イベント委譲で「交換」「売却」ボタンを常時生かす（逆順描画にも対応）
-  // -------------------------------------------------
-  (function inventoryDelegation(){
-    const inv = document.getElementById('inventory');
-    if (!inv) return;
-    inv.addEventListener('click', function(ev){
-      const t = ev.target;
-      if (!t) return;
-      // 売却
-      if (t.classList.contains('sellBtn')) {
-        const card = t.closest('.card');
-        if (!card) return;
-        // DOMの順は所持配列の逆順
-        const domIndex = Array.prototype.indexOf.call(inv.children, card);
-        if (domIndex < 0) return;
-        const ownedIndex = (GAME.owned.length - 1) - domIndex;
-        if (ownedIndex < 0) return;
-        try { window.sellCharacterByIndex(ownedIndex); } catch(e){}
-        return;
-      }
-      // 交換（新トレード実装に直結）
-      if (t.classList.contains('tradeBtn')) {
-        const card = t.closest('.card');
-        if (!card) return;
-        const domIndex = Array.prototype.indexOf.call(inv.children, card);
-        if (domIndex < 0) return;
-        // 新ハンドラがあれば使う
-        if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function') {
-          try { TradeHandlers.openStart(domIndex); } catch(e){ alert('交換開始に失敗: ' + (e?.message||'不明')); }
-          return;
-        }
-        // フォールバック
-        alert('交換機能の初期化を完了しました。もう一度押して開始してください。');
-      }
-    }, { passive:true });
-  })();
-
-  // 5) 交換ポップアップの確実配線（呪文読み込み・閉じる・キャンセル・実行）
-  // -------------------------------------------------
-  (function tradePopupWire(){
-    const tp = document.getElementById('tradePopup');
-    if (!tp) return;
-    // 「呪文を読み込む」
-    const readBtn = tp.querySelector('#tradeStep2 .tradeAction:not(.danger)');
-    const input   = tp.querySelector('#step2Input');
-    const errEl   = tp.querySelector('#step2Error');
-    if (readBtn) {
-      readBtn.onclick = function(){
-        try {
-          // 新実装のreadPartnerOffer公開チェック
-          if (typeof window.readPartnerOffer === 'function') {
-            window.readPartnerOffer();
-            return;
-          }
-          // 非公開の場合は、新実装がStep2ボタンに紐づけ直すまでの暫定遷移
-          const val = (input && input.value || '').trim();
-          if (!val) { if (errEl) errEl.textContent = '呪文が空です'; return; }
-          const s1 = tp.querySelector('#tradeStep1'); s1 && s1.classList.remove('active');
-          const s2 = tp.querySelector('#tradeStep2'); s2 && s2.classList.remove('active');
-          const s3 = tp.querySelector('#tradeStep3'); s3 && s3.classList.add('active');
-        } catch(e){
-          if (errEl) errEl.textContent = '呪文読み込み失敗: ' + (e?.message||'不明');
-        }
-      };
-    }
-    // キャンセルと閉じる（どちらでもtradePopupを確実に閉じる）
-    function closeTrade(){
-      try { if (typeof window.cancelAll === 'function') window.cancelAll(); } catch(e){}
-      try { if (typeof window.cancelTrade === 'function') window.cancelTrade(); } catch(e){}
-      tp.classList.remove('active');
-    }
-    tp.querySelectorAll('#tradeStep1 .danger, #tradeStep2 .danger, #tradeStep4 .tradeAction').forEach(b=>{
-      b.onclick = closeTrade;
-    });
-    // 実行ボタン保証（無ければ作成）
-    const s3 = tp.querySelector('#tradeStep3');
-    if (s3 && !s3.querySelector('.tradeAction.run')) {
-      const run = document.createElement('button');
-      run.className = 'tradeAction run';
-      run.style.marginTop = '8px';
-      run.textContent = 'OK（実行）';
-      run.onclick = function(){
-        if (typeof window.finalizeSwap === 'function') {
-          try { window.finalizeSwap(); return; } catch(e){ alert('交換失敗: '+(e?.message||'不明')); }
-        }
-        // フォールバック遷移
-        const s1 = tp.querySelector('#tradeStep1'); s1 && s1.classList.remove('active');
-        const s2 = tp.querySelector('#tradeStep2'); s2 && s2.classList.remove('active');
-        const s4 = tp.querySelector('#tradeStep4'); s4 && s4.classList.add('active');
-      };
-      s3.appendChild(run);
-    }
-  })();
-
-  // 6) エモズー（FRONTIER）ボタンの確実化
-  // -------------------------------------------------
-  (function lockFrontier(){
-    const btns = Array.from(document.querySelectorAll('button.btn-frontier, button'))
-      .filter(b=>/新領域ガチャ/.test(b.textContent||''));
-    btns.forEach(b=>{
-      if (b.__fwBound) return;
-      b.__fwBound = true;
-      b.addEventListener('click', function(){
-        if (typeof window.frontierGacha === 'function') {
-          try { window.frontierGacha(); } catch(e){ alert('新領域ガチャに失敗: '+(e?.message||'不明')); }
-        } else {
-          alert('内部エラー：frontierGacha未定義');
-        }
-      }, { passive:true });
-    });
-  })();
-
-  // 7) 重複定義のガチャ関数を最終版で固定（whiteWeather, yofukashi 等）
-  // -------------------------------------------------
-  (function pinGachas(){
-    // whiteWeather
-    if (typeof window.whiteWeatherGacha === 'function') {
-      const fn = window.whiteWeatherGacha;
-      window.whiteWeatherGacha = function(){ return fn(); };
-    }
-    // yofukashi
-    if (typeof window.yofukashiGacha === 'function') {
-      const fn = window.yofukashiGacha;
-      window.yofukashiGacha = function(){ return fn(); };
-    }
-    // miniPetCrystal
-    if (typeof window.miniPetCrystalGacha === 'function') {
-      const fn = window.miniPetCrystalGacha;
-      window.miniPetCrystalGacha = function(){ return fn(); };
-    }
-    // fairyTale
-    if (typeof window.fairyTaleGacha === 'function') {
-      const fn = window.fairyTaleGacha;
-      window.fairyTaleGacha = function(){ return fn(); };
-    }
-    // roboWarrior, crystalGolem, earthStar は💎固定で問題ないが同様に固定
-    ['roboWarriorGacha','crystalGolemGacha','earthStarGacha'].forEach(name=>{
-      if (typeof window[name] === 'function') {
-        const fn = window[name];
-        window[name] = function(){ return fn(); };
-      }
-    });
-  })();
-
-  // 8) 収入・定期処理タイマの重複停止と可視タブ優先実行
-  // -------------------------------------------------
-  // 可視タブのときのみ重い描画系を実行（log/renderなど）
-  function isTabVisible(id){
-    const p = document.getElementById(id);
-    return !!(p && p.classList.contains('active'));
-  }
-
-  // ログ描画差分は既に最適化済みだが、さらに間引く
-  Timers.set('__LOG_RENDER__', ()=>{
-    if (!isTabVisible('log')) return;
-    try { if (typeof window.renderLogs === 'function') window.renderLogs(); } catch(e){}
-  }, 1500);
-
-  // MoonRoad更新（既存は60秒毎spawnBossAutoと衝突する場合有）
-  Timers.set('__MOONROAD__', ()=>{
-    try { if (typeof window.updateMoonRoad === 'function') window.updateMoonRoad(); } catch(e){}
-  }, 1000);
-
-  // ボスUI更新（バー伸縮のみなら間隔を伸ばしても体感変わらない）
-  Timers.set('__BOSS_BAR__', ()=>{
-    if (!isTabVisible('boss')) return;
-    try { if (typeof window.updateBossBar === 'function') window.updateBossBar(); } catch(e){}
-  }, 350);
-
-  // DiamondRoomの蓄積は30分単位なので1分に一度で十分
-  Timers.set('__DIAMOND_ROOM__', ()=>{
-    if (!isTabVisible('diamondRoom')) return;
-    try { if (typeof window.updateDiamondRoom === 'function') window.updateDiamondRoom(); } catch(e){}
-  }, 60*1000);
-
-  // 9) スクロール時の再描画抑制（スロットリング）
-  // -------------------------------------------------
-  (function throttleScroll(){
-    const boxes = ['inventory','results','logs'].map(id=>document.getElementById(id)).filter(Boolean);
-    let ticking = false;
-    boxes.forEach(box=>{
-      box.addEventListener('scroll', ()=>{
-        if (ticking) return;
-        ticking = true;
-        requestAnimationFrame(()=>{ ticking = false; });
-      }, { passive:true });
-    });
-  })();
-
-  // 10) 安全な数値フォーマット（フォールバック）
-  // -------------------------------------------------
-  if (!window.formatSafe) {
-    window.formatSafe = function(v){
-      const n = (typeof v === 'number' && isFinite(v)) ? v :
-                (typeof v === 'string' ? Number(v.replace(/[,_\s¥円]/g,'')) : 0);
-      try { return '¥' + Number(n||0).toLocaleString(); }
-      catch { return '¥' + String(n||0); }
-    };
-  }
-
-})();
-
-<!-- ===== //Perf/UX patch hooks v2026-06-03 ===== -->
-<!-- //FX同時数制限クラス（bodyに追加） -->
-  (function(){
-    try { document.body.classList.add('fx-cap'); } catch(e){}
-  })();
-
-/* ===== vLite-2026-06-04: 軽量化パッチ ===== */
-(function vLitePatch(){
-  // 安全ガード
-  if (window.__vLiteApplied__) return;
-  window.__vLiteApplied__ = true;
-
-  const doc = document;
-  const $ = sel => doc.querySelector(sel);
-
-  // 1) 軽量モードとアニメ停止のトグル
-  function setLiteUI(on){
-    try {
-      document.body.classList.toggle('lite-ui', !!on);
-      // 重い陰影のある領域を簡素化（必要に応じて拡張）
-      const stickyAd = $('#adBarSticky');
-      if (stickyAd) stickyAd.style.boxShadow = on ? 'none' : '';
-    } catch (e) {}
-  }
-  function setLowMotion(on){
-    try { document.body.classList.toggle('low-motion', !!on); } catch(e){}
-  }
-
-  // 2) ハイコストFXの発生頻度/同時数をさらに抑制
-  const FX_LIMIT = 30;       // 同時可視FXの上限（既存よりさらに厳しめ）
-  const FX_SWEEP_MS = 700;   // 監視間隔
-  setInterval(()=>{
-    try {
-      const nodes = doc.querySelectorAll('.heavenWing,.heavenFlash,.flash,.rainbowFlash,[class^="fx_"],[data-fx]');
-      if (nodes.length > FX_LIMIT) {
-        const rm = nodes.length - FX_LIMIT;
-        for (let i=0; i<rm; i++) {
-          const n = nodes[i];
-          if (n && n.parentNode) n.parentNode.removeChild(n);
-        }
-      }
-    } catch(e){}
-  }, FX_SWEEP_MS);
-
-  // 3) 結果カードの描画をさらに軽量化（大量結果時）
-  (function patchShowResultsLite(){
-    const orig = window.showResults;
-    window.showResults = function(results){
-      // 大量結果のときに一括HTML生成に切り替えてreflow最小化
-      try {
-        const popup = $('#popup');
-        const box = $('#results');
-        if (!popup || !box) {
-          if (typeof orig === 'function') return orig(results);
-          return;
-        }
-        const list = Array.isArray(results) ? results : [];
-        // 閾値（多いときのみ高速経路）
-        const HEAVY = 24;
-        if (list.length < HEAVY) {
-          if (typeof orig === 'function') return orig(results);
-        } else {
-          // 軽量HTML
-          let html = '';
-          for (let i=0;i<list.length;i++){
-            const c = list[i] || {};
-            const rare = c.rarity || '';
-            const glowClass = (rare==='LEGEND') ? 'legendGlow' :
-                              ((rare==='CHIMERA' || rare==='EVENT') ? 'chimeraGlow' : '');
-            const price = (window.formatSafe ? formatSafe(c.sell) : ('¥'+Number(c.sell||0).toLocaleString()));
-            html += `<div class="card ${glowClass}">
-              <div class="emoji">${c.emoji||'❓'}</div>
-              <div class="name">${c.name||''}</div>
-              <div class="rarity">${rare}</div>
-              <div class="sell">${price}</div>
-            </div>`;
-          }
-          box.innerHTML = html;
-          popup.classList.add('active');
-        }
-      } catch(e) {
-        try { if (typeof orig === 'function') return orig(results); } catch(_) {}
-      }
-    };
-  })();
-
-  // 4) ログ/ムーン/ダイヤなど定期描画の間引き（可視時優先）
-  function isVisible(id) {
-    const el = $('#'+id);
-    return !!(el && el.classList.contains('active'));
-  }
-  // 既存ループの上に軽い可視判定ガードを被せる
-  const safeWrap = (fn, check) => function(){ try { if (!check || check()) fn(); } catch(e){} };
-
-  if (typeof window.renderLogs === 'function') {
-    const base = window.renderLogs;
-    window.renderLogs = safeWrap(base, ()=>isVisible('log'));
-  }
-  if (typeof window.renderMoonRoad === 'function') {
-    const base = window.renderMoonRoad;
-    window.renderMoonRoad = safeWrap(base, ()=>isVisible('moonRoad'));
-  }
-  if (typeof window.updateDiamondRoom === 'function') {
-    const base = window.updateDiamondRoom;
-    // 1分に1回で十分だが既存が短周期の場合に可視判定で軽減
-    window.updateDiamondRoom = safeWrap(base, ()=>isVisible('diamondRoom'));
-  }
-
-  // 5) 在庫グリッド（inventory）の委譲クリックでバインド数削減
-  (function delegateInventory(){
-    const inv = $('#inventory');
-    if (!inv || inv.__liteDelegated) return;
-    inv.__liteDelegated = true;
-    inv.addEventListener('click', function(ev){
-      const t = ev.target;
-      if (!t) return;
-      const card = t.closest('.card');
-      if (!card) return;
-
-      // DOM上のインデックス（逆順描画前提）
-      const domIndex = Array.prototype.indexOf.call(inv.children, card);
-      const ownedIndex = (window.GAME && Array.isArray(GAME.owned))
-        ? (GAME.owned.length - 1) - domIndex
-        : -1;
-
-      // 売却
-      if (t.classList.contains('sellBtn')) {
-        if (ownedIndex >= 0 && typeof window.sellCharacterByIndex === 'function') {
-          window.sellCharacterByIndex(ownedIndex);
-        }
-        return;
-      }
-      // 交換
-      if (t.classList.contains('tradeBtn')) {
-        if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function') {
-          TradeHandlers.openStart(domIndex);
-        } else {
-          alert('交換機能を初期化しました。もう一度押してください。');
-        }
-        return;
-      }
-    }, { passive: true });
-  })();
-
-  // 6) ローディング簡易API（重たい処理の前後で使う）
-  function liteLoading(on, hint){
-    const box = $('#liteLoading');
-    if (!box) return;
-    if (on) {
-      const txt = $('#liteLoadingHint');
-      if (txt && hint) txt.textContent = hint;
-      box.style.display = 'flex';
-    } else {
-      box.style.display = 'none';
-    }
-  }
-  window.__liteLoading = liteLoading;
-
-  // 7) ガチャ実行時の軽負荷モード：大量FXの抑止（必要時のみ）
-  function wrapGacha(name){
-    const orig = window[name];
-    if (typeof orig !== 'function') return;
-    window[name] = function(){
-      // 短時間だけFX抑止フラグ
-      document.body.classList.add('lite-ui'); // 視覚簡素化
-      try { return orig.apply(this, arguments); }
-      finally {
-        // 少し遅延して元に戻す（結果表示後に負荷を戻す）
-        setTimeout(()=>document.body.classList.remove('lite-ui'), 900);
-      }
-    };
-  }
-  ['normalGacha','lifeGacha','dimensionGacha','animalArmyGacha','fairyGacha','robotPetGacha',
-   'tengokuGacha','tsuyuGacha','rainbowDragonGacha','foodGacha','miniPetCrystalGacha',
-   'fairyTaleGacha','roboWarriorGacha','crystalGolemGacha','earthStarGacha','puddingGacha',
-   'birdFishUltimateGacha','whiteWeatherGacha','yofukashiGacha','zombieSoulGacha','frontierGacha'
-  ].forEach(wrapGacha);
-
-  // 8) 初期ロードを明示（既存のloadと競合しないよう短時間のみ）
-  document.addEventListener('DOMContentLoaded', ()=>{
-    // 既にページが十分描画済みなら出さない
-    const t = performance && performance.timing ? performance.timing : null;
-    const fastBoot = t ? (t.loadEventEnd || Date.now()) - (t.navigationStart || 0) < 1200 : false;
-    if (!fastBoot) {
-      liteLoading(true, 'ゲームデータを準備しています…');
-      setTimeout(()=>liteLoading(false), 800); // 体感の一拍
-    }
-  });
-
-  // 9) UIトグルのバインド
-  document.addEventListener('DOMContentLoaded', ()=>{
-    const lite = $('#liteToggle');
-    const motion = $('#motionToggle');
-
-    // 既定値（初期は有効化推奨）
-    const savedLite = localStorage.getItem('cec-lite-ui');
-    const savedMotion = localStorage.getItem('cec-low-motion');
-
-    const liteOn = savedLite === null ? true : savedLite === '1';
-    const motionOn = savedMotion === null ? true : savedMotion === '1';
-
-    if (lite) {
-      lite.checked = liteOn;
-      setLiteUI(liteOn);
-      lite.addEventListener('change', ()=>{
-        setLiteUI(lite.checked);
-        localStorage.setItem('cec-lite-ui', lite.checked ? '1' : '0');
-      }, { passive:true });
-    }
-    if (motion) {
-      motion.checked = motionOn;
-      setLowMotion(motionOn);
-      motion.addEventListener('change', ()=>{
-        setLowMotion(motion.checked);
-        localStorage.setItem('cec-low-motion', motion.checked ? '1' : '0');
-      }, { passive:true });
-    }
-  });
-
-  // 10) ボタン反応性の改善：クリック処理を最短経路で実行
-  // 既存onclick直付けはそのまま活かしつつ、重い処理の直前で描画を解放
-  function yieldFrame(){ return new Promise(r=>requestAnimationFrame(()=>r())); }
-  function makeResponsiveButton(selector){
-    const btns = document.querySelectorAll(selector);
-    btns.forEach(b=>{
-      if (b.__liteFast) return;
-      b.__liteFast = true;
-      const origClick = b.onclick;
-      if (typeof origClick === 'function') {
-        b.onclick = async function(e){
-          // 先に押した感を出す（activeスタイルはCSS任せ）
-          await yieldFrame();
-          return origClick.call(this, e);
-        };
-      }
-    });
-  }
-  // 起動後・動的増殖にも対応
-  const fastBind = ()=> {
-    makeResponsiveButton('.gachaGrid button');
-    makeResponsiveButton('.gachaBtns button');
-    makeResponsiveButton('.sellBtn');
-    makeResponsiveButton('.tradeBtn');
-    makeResponsiveButton('.tabBtn');
-  };
-  document.addEventListener('DOMContentLoaded', ()=> {
-    fastBind();
-    // その後、数回だけ再試行（動的描画直後のDOMにも付与）
-    let n=0; const iv=setInterval(()=>{ fastBind(); if(++n>=4) clearInterval(iv); }, 400);
-  });
-
-  // 11) 高頻度UI更新の集約（既存バッチに追従しつつ安全側に）
-  (function throttleHeader(){
-    const money = $('#money');
-    const lp = $('#lp');
-    const crystal = $('#crystal');
-    let last = { m:null, l:null, c:null };
-    setInterval(()=>{
-      try{
-        if (!window.GAME) return;
-        const m = window.formatSafe ? formatSafe(GAME.money) : '¥'+Number(GAME.money||0).toLocaleString();
-        const l = (GAME.lp||0)+' LP';
-        const c = (GAME.crystal||0);
-        if (money && m!==last.m) { last.m=m; money.textContent=m; }
-        if (lp && l!==last.l) { last.l=l; lp.textContent=l; }
-        if (crystal && c!==last.c) { last.c=c; crystal.textContent=c; }
-      }catch(e){}
-    }, 250);
-  })();
-
-})();
-
-// ===== Loading overlay timing fix & mobile ad sticky fix v2026-06-04 =====
-(function(){
-  // 1) 起動時に heavy overlay を必ず短時間表示し、初期処理完了で隠す
-  //    - 既存 __showLoading / __hideLoading をラップ
-  var _show = window.__showLoading || function(){ var ov=document.getElementById('loadingOverlay'); if(ov) ov.style.display='flex'; };
-  var _hide = window.__hideLoading || function(){ var ov=document.getElementById('loadingOverlay'); if(ov) ov.style.display='none'; };
-  // 初回ブートで確実に見せる（最大1200msまで、処理が早ければすぐ閉じる）
-  (function bootSplash(){
-    var shown = false;
-    function tryShow(){
-      if (shown) return;
-      shown = true;
-      _show('ロード中…');
-      // セーフティタイムアウト（最大1.2秒）
-      setTimeout(function(){ _hide(); }, 1200);
-    }
-    // DOMが整った直後に表示
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', tryShow, {once:true});
-    } else {
-      tryShow();
-    }
-    // 既存の load() 実行後に必ず閉じる（数フレーム待ってから）
-    var origLoad = window.load;
-    window.load = function(){
-      if (typeof origLoad === 'function') origLoad();
-      requestAnimationFrame(function(){ requestAnimationFrame(function(){ _hide(); }); });
-    };
-  })();
-  // 2) スマホで #adBarSticky が見えない問題の対策
-  //    - モバイル幅では fixed に変更し、ヘッダ下に常時固定
-  //    - 初期文言を即時セット
-  //    - z-index と衝突回避
-  function isMobileWidth(){ return window.matchMedia && window.matchMedia('(max-width: 480px)').matches; }
-  function ensureStickyAdVisible(){
-    var sticky = document.getElementById('adBarSticky');
-    if (!sticky) return;
-    // 初期文言（空表示防止）
-    var row = sticky.querySelector('#adStickyRow');
-    if (row && !row.__initFilled) {
-      row.__initFilled = true;
-      var textSpan = row.querySelector('#adStickyText');
-      if (textSpan) textSpan.textContent = '最新情報をチェック！';
-    }
-    // ヘッダ・タブの実高さを測って、その直下に固定
-    var header = document.querySelector('header');
-    var tabs = document.querySelector('.tabs');
-    var headerH = header ? Math.round(header.getBoundingClientRect().height) : 64;
-    var tabsH = tabs ? Math.round(tabs.getBoundingClientRect().height) : 40;
-    var topOffset = Math.max(48, headerH); // ヘッダ全体の下端に寄せる
-    if (isMobileWidth()){
-      // モバイルは fixed で安定表示
-      sticky.style.position = 'fixed';
-      sticky.style.top = topOffset + 'px';
-      sticky.style.left = '12px';
-      sticky.style.right = '12px';
-      sticky.style.zIndex = '300'; // header(100/200) より上
-      sticky.style.maxWidth = 'unset';
-      sticky.style.width = 'auto';
-      sticky.style.pointerEvents = 'auto';
-      // ビューポート外に押し出されないよう margin は最小に
-      sticky.style.margin = '0';
-      // 画面の安全地帯内に収める（キーボード表示時のずれ軽減）
-      sticky.style.transform = 'translateZ(0)'; // 合成レイヤでちらつき軽減
-    } else {
-      // PC 幅は既存の sticky を活かすが、z-index を少し強める
-      sticky.style.position = 'sticky';
-      sticky.style.top = (Math.max(56, headerH - tabsH + 8)) + 'px';
-      sticky.style.left = '';
-      sticky.style.right = '';
-      sticky.style.zIndex = '150';
-    }
-  }
-  // 3) #adBar 自体が非表示/高さゼロの場合でも #adBarSticky を見せる
-  function guardAdVisibility(){
-    var mainAd = document.getElementById('adBar');
-    var sticky = document.getElementById('adBarSticky');
-    if (!sticky) return;
-    var mainVisible = false;
-    if (mainAd){
-      var r = mainAd.getBoundingClientRect();
-      mainVisible = (r.height > 4) && (r.bottom > 0) && (r.top < (window.innerHeight||0));
-    }
-    // どちらかが可視になるように（main が見えなければ sticky を強制可視）
-    if (!mainVisible){
-      sticky.style.display = 'block';
-      sticky.style.opacity = '1';
-      sticky.style.visibility = 'visible';
-    } else {
-      // 両方見せたい場合はここをコメントアウト
-      // sticky.style.display = 'none';
-    }
-  }
-  // 4) 初期化とリスナー
-  function initAdFix(){
-    ensureStickyAdVisible();
-    guardAdVisibility();
-  }
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', function(){
-      initAdFix();
-      setTimeout(initAdFix, 200);   // レイアウト確定後
-      setTimeout(initAdFix, 800);   // 追加の保険
-    }, {once:true});
-  } else {
-    initAdFix();
-    setTimeout(initAdFix, 200);
-    setTimeout(initAdFix, 800);
-  }
-  window.addEventListener('resize', function(){
-    ensureStickyAdVisible();
-    guardAdVisibility();
-  }, {passive:true});
-  // 5) もし他のコードで #adBarSticky の top を書き換えてしまう場合の最後の保険
-  //    1.5秒に1回だけ再整列（軽量）
-  setInterval(function(){
-    if (!isMobileWidth()) return;
-    ensureStickyAdVisible();
-  }, 1500);
-})();
-
-// ==== FIX: tradeStep2 の「呪文を読み込む」ボタンを確実に有効化 ====
-(function fixTradeReadButtonWire(){
-  const btn = document.querySelector('#tradeStep2 .tradeAction:not(.danger)');
-  if (!btn) return;
-  // readPartnerOffer をグローバル化（未公開の場合のラッパ）
-  if (typeof window.readPartnerOffer !== 'function') {
-    window.readPartnerOffer = function(){
-      try {
-        // TradeHandlers 内部の関数を呼べない環境向けの確実実装
-        const ta = document.getElementById('step2Input');
-        const err = document.getElementById('step2Error');
-        const val = (ta?.value || '').trim();
-        if (!val) { if (err) err.textContent = '呪文が空です'; return; }
-        // TradeUtil.decodeSpell が使えるなら検証する
-        if (window.TradeUtil && typeof TradeUtil.decodeSpell === 'function') {
-          let data;
-          try {
-            data = TradeUtil.decodeSpell(val, { ttlMs: 10*60*1000 });
-          } catch(e) {
-            if (err) err.textContent = '呪文が無効または期限切れです';
-            return;
-          }
-          if (!data || data.kind !== 'offer' || !data.token) {
-            if (err) err.textContent = '呪文の形式が正しくありません';
-            return;
-          }
-          // 相手オファーをステートに反映
-          window.TradeState = window.TradeState || {};
-          TradeState.partnerOffer = {
-            name: data.name || '不明',
-            sell: (window.TradeUtil ? TradeUtil.toNum(data.sell,0) : (Number(data.sell)||0)),
-            token: data.token
-          };
-          // 自分のACK呪文を発行して表示
-          const ack = { kind:'ack', ok:true, token:data.token };
-          const spell2 = (window.TradeUtil ? TradeUtil.encodeSpell(ack) : btoa(JSON.stringify(ack)));
-          const disp2 = document.getElementById('spellDisplay2');
-          if (disp2) disp2.textContent = spell2;
-          // ステップ3へ
-          const s1 = document.getElementById('tradeStep1'); s1 && s1.classList.remove('active');
-          const s2 = document.getElementById('tradeStep2'); s2 && s2.classList.remove('active');
-          const s3 = document.getElementById('tradeStep3'); s3 && s3.classList.add('active');
-          // タイマー開始（簡易）
-          const t = document.getElementById('tradeTimer');
-          let rest = 30; if (t) t.textContent = String(rest);
-          clearInterval(window.__tradeTimer__);
-          window.__tradeTimer__ = setInterval(()=>{
-            rest--; if (t) t.textContent = String(rest);
-            if (rest<=0) { clearInterval(window.__tradeTimer__); }
-          }, 1000);
-        } else {
-          if (err) err.textContent = '内部エラー：検証関数が見つかりません';
-        }
-      } catch(e){
-        const err = document.getElementById('step2Error');
-        if (err) err.textContent = '読み込みに失敗しました';
-      }
-    };
-  }
-  btn.onclick = window.readPartnerOffer;
-})();
-
-// ==== FIX: Step3 の実行（OK）を確実に finalizeSwap へ結線し、所持反映まで行う ====
-(function fixTradeRunButton(){
-  function ensureRun(){
-    const s3 = document.getElementById('tradeStep3');
-    if (!s3) return;
-    let run = s3.querySelector('.tradeAction.run');
-    if (!run) {
-      run = document.createElement('button');
-      run.className = 'tradeAction run';
-      run.style.marginTop = '8px';
-      run.textContent = 'OK（実行）';
-      s3.appendChild(run);
-    }
-    run.onclick = function(){
-      try {
-        // finalizeSwap が無い／失敗する場合の確実実装（最小限）
-        if (typeof window.finalizeSwap !== 'function') {
-          window.finalizeSwap = function(){
-            // 必須前提チェック
-            if (!window.GAME || !window.TradeState || !TradeState.offer || !TradeState.partnerOffer) {
-              alert('交換データが不足しています'); return;
-            }
-            const ownedIdx = TradeState.offer.ownedIdx;
-            const snap = TradeState.offer.snapshot || {};
-            // 手元の対象がまだ存在するかチェック
-            const cur = GAME.owned[ownedIdx];
-            if (!cur || cur.name !== snap.name) { alert('対象キャラが変更されています'); return; }
-            // 自分のを取り出し
-            const removed = GAME.owned.splice(ownedIdx, 1)[0];
-            // 相手のオファーから受取キャラを生成
-            const incoming = {
-              emoji: '🪽',
-              name: TradeState.partnerOffer.name || '交換受領キャラ',
-              rarity: removed?.rarity || 'TRADE',
-              sell: Number(TradeState.partnerOffer.sell||0),
-              type: removed?.type || 'trade'
-            };
-            GAME.owned.push(incoming);
-            // 完了画面へ
-            const s1 = document.getElementById('tradeStep1'); s1 && s1.classList.remove('active');
-            const s2 = document.getElementById('tradeStep2'); s2 && s2.classList.remove('active');
-            const s3 = document.getElementById('tradeStep3'); s3 && s3.classList.remove('active');
-            const s4 = document.getElementById('tradeStep4'); s4 && s4.classList.add('active');
-            const info = document.getElementById('tradeResultInfo');
-            if (info) info.textContent = `あなたの「${removed?.name||'？'}」と相手の「${incoming.name}」を交換しました。`;
-            if (typeof addLog === 'function') addLog('🔀 交換成立 ▶ '+(removed?.name||'？')+' ⇄ '+incoming.name);
-            if (typeof updateUI === 'function') updateUI();
-            if (typeof save === 'function') save();
-          };
-        }
-        window.finalizeSwap();
-      } catch(e) {
-        alert('交換を完了できません：' + (e?.message||'不明なエラー'));
-      }
-    };
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', ensureRun, {once:true});
-  } else {
-    ensureRun();
-  }
-})();
-
-(function addSwapFX(){
-  window.__swapFX = function(){
-    const fx = document.createElement('div');
-    fx.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:99999;background:radial-gradient(circle, rgba(0,255,153,.35), transparent 70%);opacity:0;transition:opacity .25s';
-    document.body.appendChild(fx);
-    requestAnimationFrame(()=>{ fx.style.opacity='1'; });
-    setTimeout(()=>{ fx.style.opacity='0'; }, 250);
-    setTimeout(()=>{ fx.remove(); }, 600);
-  };
-  // finalizeSwap の末尾で呼ぶ
-  const orig = window.finalizeSwap;
-  if (typeof orig === 'function') {
-    window.finalizeSwap = function(){ const r = orig.apply(this, arguments); try{ __swapFX(); }catch(e){} return r; };
-  }
-})();
-
-// ===== Trade Spell Read Fix v2026-06-04-b =====
-(function(){
-  // 安全ユーティリティ
-  function $(s){ return document.querySelector(s); }
-  function el(id){ return document.getElementById(id); }
-  function showStep(id){
-    ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(k=>{
-      const n = el(k); if(n) n.classList.remove('active');
-    });
-    const s = el(id); if(s) s.classList.add('active');
-  }
-  function ensureDecode(){
-    // TradeUtil.decodeSpell が無い環境でも「違う」エラーを必ず返す簡易版
-    if (window.TradeUtil && typeof TradeUtil.decodeSpell === 'function') return TradeUtil.decodeSpell;
-    return function(spell){
-      try{
-        const json = atob(spell.replace(/-/g,'+').replace(/_/g,'/'));
-        const raw = JSON.parse(json);
-        const p = raw?.body?.p || raw?.p || raw;
-        if (!p || p.kind!=='offer' || !p.token) throw new Error('invalid-offer');
-        return p;
-      }catch(e){
-        const err = new Error('decode-failed');
-        err.code = 'DECODE_FAILED';
-        throw err;
-      }
-    };
-  }
-  function wireReadButton(){
-    const btn = $('#tradeStep2 .tradeAction:not(.danger)');
-    const input = el('step2Input');
-    const errEl = el('step2Error');
-    if (!btn || !input) return;
-    // 二重バインド防止
-    if (btn.__wiredRead__) return;
-    btn.__wiredRead__ = true;
-    btn.onclick = function(){
-      // 既存の readPartnerOffer があればそれを優先
-      if (typeof window.readPartnerOffer === 'function') {
-        try { window.readPartnerOffer(); return; } catch(_){}
-      }
-      // フォールバック読み込み
-      try{
-        const val = (input.value||'').trim();
-        if (!val) {
-          if (errEl) errEl.textContent = '呪文が空です';
-          // 目視できる軽い振動
-          const s2 = el('tradeStep2'); if (s2){ s2.classList.add('shaking'); setTimeout(()=>s2.classList.remove('shaking'), 360); }
-          return;
-        }
-        const decode = ensureDecode();
-        const data = decode(val); // ここで例外→catchへ
-        // 受け取ったオファーをステートへ
-        window.TradeState = window.TradeState || {};
-        TradeState.partnerOffer = {
-          name: data.name || '不明',
-          sell: (window.TradeUtil ? TradeUtil.toNum(data.sell,0) : (Number(data.sell)||0)),
-          token: data.token
-        };
-        // ACK呪文を生成してStep3に表示
-        const ack = { kind:'ack', ok:true, token:data.token };
-        let ackSpell = '';
-        try{
-          ackSpell = (window.TradeUtil ? TradeUtil.encodeSpell(ack)
-                                       : btoa(unescape(encodeURIComponent(JSON.stringify({body:{v:1,t:Date.now(),p:ack},sig:'lite'})))))
-        }catch(_){
-          ackSpell = JSON.stringify(ack);
-        }
-        const disp2 = el('spellDisplay2'); if (disp2) disp2.textContent = ackSpell;
-        // タイマーを開始（常に走らせる）
-        startTradeCountdown(30);
-        // 画面をStep3へ
-        showStep('tradeStep3');
-        // 既存の内部関数が後から上書きしてもよいように、成功ログだけ追加
-        try { if (typeof addLog==='function') addLog('🔐 呪文を読み込みました'); } catch(_){}
-        if (errEl) errEl.textContent = '';
-      }catch(e){
-        // ここに来たら確実にエラーを見せる
-        const msg =
-          (e && (e.message==='invalid-offer' || e.code==='DECODE_FAILED')) ? '呪文が違う/壊れています' :
-          '呪文を読み込めません';
-        if (errEl) errEl.textContent = msg;
-        // 視覚的フィードバック
-        const s2 = el('tradeStep2'); if (s2){ s2.classList.add('shaking'); setTimeout(()=>s2.classList.remove('shaking'), 360); }
-      }
-    };
-  }
-  function ensureRunButton(){
-    const s3 = el('tradeStep3');
-    if (!s3) return;
-    let run = s3.querySelector('.tradeAction.run');
-    if (!run) {
-      run = document.createElement('button');
-      run.className = 'tradeAction run';
-      run.style.marginTop = '8px';
-      run.textContent = 'OK（実行）';
-      s3.appendChild(run);
-    }
-    if (run.__wiredRun__) return;
-    run.__wiredRun__ = true;
-    run.onclick = function(){
-      // finalizeSwap があればそれを使う
-      if (typeof window.finalizeSwap === 'function') {
-        try { window.finalizeSwap(); return; } catch(e){
-          alert('交換を完了できません：' + (e?.message||'不明なエラー'));
-          return;
-        }
-      }
-      // 最低限のフォールバック（必ず入替を行う）
-      try{
-        if (!window.TradeState || !TradeState.offer || !TradeState.partnerOffer) {
-          alert('交換データが不足しています'); return;
-        }
-        const idx = TradeState.offer.ownedIdx;
-        const snap = TradeState.offer.snapshot||{};
-        const cur = (window.GAME && GAME.owned) ? GAME.owned[idx] : null;
-        if (!cur || cur.name !== snap.name) {
-          alert('対象キャラが変更されています'); return;
-        }
-        const removed = GAME.owned.splice(idx,1)[0];
-        const incoming = {
-          emoji: '🪽',
-          name: TradeState.partnerOffer.name||'交換受領キャラ',
-          rarity: removed?.rarity||'TRADE',
-          sell: Number(TradeState.partnerOffer.sell||0),
-          type: removed?.type||'trade'
-        };
-        GAME.owned.push(incoming);
-        try { if (typeof addLog==='function') addLog('🔀 交換成立 ▶ '+(removed?.name||'？')+' ⇄ '+incoming.name); } catch(_){}
-        const info = el('tradeResultInfo');
-        if (info) info.textContent = `あなたの「${removed?.name||'？'}」と相手の「${incoming.name}」を交換しました。`;
-        showStep('tradeStep4');
-        try { if (typeof updateUI==='function') updateUI(); } catch(_){}
-        try { if (typeof save==='function') save(); } catch(_){}
-      }catch(e){
-        alert('交換を完了できません：' + (e?.message||'不明なエラー'));
-      }
-    };
-  }
-  function startTradeCountdown(sec){
-    const t = el('tradeTimer');
-    const frame = el('dangerFrame');
-    if (!t) return;
-    clearInterval(window.__tradeTimer_fix__);
-    let rest = sec|0;
-    t.textContent = String(rest);
-    t.classList.remove('danger');
-    if (frame) frame.style.display = 'none';
-    window.__tradeTimer_fix__ = setInterval(()=>{
-      rest--;
-      if (t) {
-        t.textContent = String(rest);
-        if (rest<=5) {
-          t.classList.add('danger');
-          if (frame) frame.style.display = 'block';
-        }
-      }
-      if (rest<=0) {
-        clearInterval(window.__tradeTimer_fix__);
-        if (frame) frame.style.display = 'none';
-      }
-    }, 1000);
-  }
-  function ensureOfferLock(){
-    // 在庫「交換」ボタンから入ったときだけ offer が入るケースへの保険。
-    // Step1が開いたのに offer が空なら、ユーザに再選択を促す。
-    const s1 = el('tradeStep1');
-    if (!s1 || !s1.classList.contains('active')) return;
-    if (!window.TradeState || !TradeState.offer || typeof TradeState.offer.ownedIdx!=='number') {
-      const disp = el('spellDisplay');
-      if (disp) disp.textContent = '在庫の「交換」ボタンから開始してください。';
-      const nav = el('step1Nav'); if (nav) nav.style.display = 'none';
-      const next = el('step1NextBtn'); if (next) next.style.display = 'none';
-    }
-  }
-  // 初期化と再結線（動的差し替えに強くするため複数回走らせる）
-  function arm(){
-    try { wireReadButton(); } catch(_){}
-    try { ensureRunButton(); } catch(_){}
-    try { ensureOfferLock(); } catch(_){}
-  }
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', ()=>{ arm(); setTimeout(arm, 300); setTimeout(arm, 1200); }, {once:true});
-  } else {
-    arm(); setTimeout(arm, 300); setTimeout(arm, 1200);
-  }
-})();
-
-// ==== Stable wire for "呪文を読み込む" (Step2) v2026-06-04 ====
-(function stableWireTradeRead(){
-  function $(s){ return document.querySelector(s); }
-  function ensureOnce(btn, fn){
-    if (!btn) return;
-    // 既存の onclick を上書き固定（重複結線を防止）
-    btn.onclick = fn;
-    // 追加で addEventListener が重ねられている環境では、バブリングを抑制
-    if (!btn.__cecStopDup__) {
-      btn.__cecStopDup__ = true;
-      btn.addEventListener('click', function(ev){
-        // 上流で付けられた別ハンドラが誤動作しないよう最小限に制御
-        ev.stopImmediatePropagation?.();
-      });
-    }
-  }
-  function wire(){
-    const btn = document.querySelector('#tradeStep2 .tradeAction:not(.danger)');
-    const ta  = document.getElementById('step2Input');
-    const err = document.getElementById('step2Error');
-    if (!btn) return;
-    // 優先: TradeHandlers の公式実装がある場合
-    const callOfficial = function(){
-      try {
-        if (window.TradeHandlers && typeof window.TradeHandlers.openStart === 'function' && typeof window.readPartnerOffer === 'function') {
-          window.readPartnerOffer(); // 既存公開APIを利用
-          return true;
-        }
-        if (typeof window.readPartnerOffer === 'function') {
-          window.readPartnerOffer();
-          return true;
-        }
-        return false;
-      } catch(e){
-        return false;
-      }
-    };
-    // フォールバック: 最低限のデコード→Step3遷移
-    function fallbackRead(){
-      try {
-        const spell = (ta?.value || '').trim();
-        if (!spell) { if (err) err.textContent = '呪文が空です'; return; }
-        // TradeUtil があれば厳密検証
-        if (window.TradeUtil && typeof TradeUtil.decodeSpell === 'function') {
-          let data;
-          try {
-            data = TradeUtil.decodeSpell(spell, { ttlMs: 10*60*1000 });
-          } catch(e) {
-            if (err) err.textContent = '呪文が無効または期限切れです';
-            return;
-          }
-          if (!data || data.kind!=='offer' || !data.token) {
-            if (err) err.textContent = '呪文の形式が正しくありません';
-            return;
-          }
-          // 最低限の状態反映
-          window.TradeState = window.TradeState || {};
-          TradeState.partnerOffer = {
-            name: data.name || '不明',
-            sell: (window.TradeUtil ? TradeUtil.toNum(data.sell,0) : (Number(data.sell)||0)),
-            token: data.token
-          };
-          // ACK呪文を生成して表示
-          const ack = { kind:'ack', ok:true, token:data.token };
-          const spell2 = (window.TradeUtil ? TradeUtil.encodeSpell(ack) : btoa(JSON.stringify(ack)));
-          const disp2 = document.getElementById('spellDisplay2');
-          if (disp2) disp2.textContent = spell2;
-        } else {
-          // 極簡易遷移のみ（検証不可環境）
-          if (err) err.textContent = '';
-        }
-        // Step3 へ遷移
-        const s1 = document.getElementById('tradeStep1'); s1 && s1.classList.remove('active');
-        const s2 = document.getElementById('tradeStep2'); s2 && s2.classList.remove('active');
-        const s3 = document.getElementById('tradeStep3'); s3 && s3.classList.add('active');
-        // 30秒タイマー（簡易）
-        const t = document.getElementById('tradeTimer');
-        let rest = 30; if (t) { t.textContent = String(rest); t.classList.remove('danger'); }
-        clearInterval(window.__tradeTimer__);
-        window.__tradeTimer__ = setInterval(()=>{
-          rest--;
-          if (t) {
-            t.textContent = String(rest);
-            if (rest<=5) t.classList.add('danger');
-          }
-          if (rest<=0) clearInterval(window.__tradeTimer__);
-        }, 1000);
-      } catch(e){
-        if (err) err.textContent = '読み込みに失敗しました';
-      }
-    }
-    ensureOnce(btn, function(){
-      // 既存の多重バインドを無効化し、常にこの経路で実行
-      if (callOfficial()) return;
-      fallbackRead();
-    });
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function(){
-      wire();
-      // 遅延再結線（他スクリプトの後書き上書きに対抗）
-      setTimeout(wire, 200);
-      setTimeout(wire, 800);
-    }, {once:true});
-  } else {
-    wire();
-    setTimeout(wire, 200);
-    setTimeout(wire, 800);
-  }
-})();
-
-/* ==== perf-lite.js (追記) ==== */
-(function PerfLitePatch(){
-  if (window.__perfLiteApplied__) return;
-  window.__perfLiteApplied__ = true;
-
-  // 0) ユーティリティ
   const $ = s => document.querySelector(s);
   const on = (el, ev, fn, opt)=> el && el.addEventListener(ev, fn, opt||{passive:true});
 
-  // 1) 軽量モード/アニメ停止のトグルと永続化
-  const liteKey = 'cec-perf-lite';
-  const motionKey = 'cec-low-motion';
-  const moneyKey = 'cec-compact-money';
-
-  function setLite(v){ document.body.classList.toggle('perf-lite', !!v); localStorage.setItem(liteKey, v?'1':'0'); }
-  function setLowMotion(v){ document.body.classList.toggle('low-motion', !!v); localStorage.setItem(motionKey, v?'1':'0'); }
-  function setCompactMoney(v){ localStorage.setItem(moneyKey, v?'1':'0'); }
-
-  function bootToggles(){
-    const lite = localStorage.getItem(liteKey) === '1';
-    const lm = localStorage.getItem(motionKey) === '1';
-    const cm = localStorage.getItem(moneyKey) === '1';
-    setLite(lite);
-    setLowMotion(lm);
-    setCompactMoney(cm);
-    const t1 = $('#perfLiteToggle'); if (t1) { t1.checked = lite; on(t1,'change', ()=>setLite(t1.checked)); }
-    const t2 = $('#perfMotionToggle'); if (t2) { t2.checked = lm; on(t2,'change', ()=>setLowMotion(t2.checked)); }
-    const t3 = $('#perfCompactMoney'); if (t3) { t3.checked = cm; on(t3,'change', ()=>setCompactMoney(t3.checked)); }
-  }
-
-  // 2) 金額の簡易表示（K/M/B/T/aa…短縮）: 再描画を最小限に
-  function formatCompact(n){
-    // 既存Number/BigInt/文字列混在に耐性
-    const num = (typeof n === 'number' && isFinite(n)) ? n :
-                (typeof n === 'bigint' ? Number(n) :
-                (typeof n === 'string' ? Number(n.replace(/[,_\s¥円]/g,'')) : 0));
-    const abs = Math.abs(num);
-    const units = [
-      {v:1e12, s:'T'},
-      {v:1e9,  s:'B'},
-      {v:1e6,  s:'M'},
-      {v:1e3,  s:'K'}
-    ];
-    for (const u of units) if (abs >= u.v) return '¥' + (num/u.v).toFixed(2).replace(/\.?0+$/,'') + u.s;
-    return '¥' + (Number(num)||0).toLocaleString();
-  }
-
-  // money表示の差分更新（250ms間引き）
-  (function patchHeaderMoney(){
-    const moneyEl = document.getElementById('money');
-    const lpEl = document.getElementById('lp');
-    const crystalEl = document.getElementById('crystal');
-    let last = { m:null, l:null, c:null };
-
-    setInterval(()=>{
-      try{
-        if (!window.GAME) return;
-        const compact = localStorage.getItem(moneyKey)==='1';
-        const curM = compact ? formatCompact(GAME.money) :
-                               ('¥' + Number(GAME.money||0).toLocaleString());
-        const curL = (GAME.lp||0)+' LP';
-        const curC = (GAME.crystal||0);
-        if (moneyEl && curM !== last.m) { last.m = curM; moneyEl.textContent = curM; moneyEl.classList.add('num-compact'); }
-        if (lpEl && curL !== last.l) { last.l = curL; lpEl.textContent = curL; }
-        if (crystalEl && curC !== last.c) { last.c = curC; crystalEl.textContent = curC; }
-      }catch(_){}
-    }, 250);
-  })();
-
-  // 3) updateUI のバッチ化（1フレーム1回に集約）
-  (function batchUpdateUI(){
-    const orig = window.updateUI || function(){};
-    let scheduled = false;
-    window.updateUI = function(){
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(()=>{
-        scheduled = false;
-        try { orig(); } catch(_){}
-      });
-    };
-  })();
-
-  // 4) ログ描画の差分化 + 制限（最大200件、非アクティブ時はスキップ）
-  (function patchRenderLogs(){
-    const orig = window.renderLogs || function(){};
-    let lastLen = -1;
-    window.renderLogs = function(){
-      try{
-        const visible = document.getElementById('log')?.classList.contains('active');
-        const cur = (window.GAME?.logs?.length) || 0;
-        if (!visible && cur === lastLen) return; // 非可視かつ変化なしならskip
-        lastLen = cur;
-      }catch(_){}
-      try { orig(); } catch(_){}
-    };
-  })();
-
-  // 5) インベントリの仮想化/差分更新（大規模時だけ最適化）
-  (function virtualizeInventory(){
-    const orig = window.renderInventory || function(){};
-    window.renderInventory = function(){
-      const box = document.getElementById('inventory');
-      if (!box) { try{ orig(); }catch(_){ } return; }
-
-      const MAX_RENDER = 200; // 表示上限（必要に応じて調整）
-      const owned = Array.isArray(GAME?.owned) ? GAME.owned : [];
-      // 大量（> MAX_RENDER）なら先頭MAX_RENDER件だけ描画し、残数をバッジ表示
-      if (owned.length > MAX_RENDER) {
-        const reversed = owned.slice(-MAX_RENDER).map((c,i)=>({c,i}));
-        // 一括HTML生成（DocumentFragmentでもOK）
-        let html = '';
-        for (let k = reversed.length - 1; k >= 0; k--) {
-          const rec = reversed[k]; const c = rec.c;
-          const glow = (c.rarity==='LEGEND') ? ' legendGlow' :
-                       ((c.rarity==='CHIMERA' || c.rarity==='EVENT') ? ' chimeraGlow' : '');
-          html += `
-            <div class="card${glow}">
-              <div class="emoji">${c.emoji||'❔'}</div>
-              <div class="name">${c.name||'？？？'}</div>
-              <div class="rarity">${c.rarity||''}</div>
-              <div class="sell">売却 ¥${Number(c.sell||0).toLocaleString()}</div>
-              <button class="sellBtn">売却</button>
-              <button class="tradeBtn">交換</button>
-            </div>`;
-        }
-        box.innerHTML = html +
-          `<div class="small" style="opacity:.7;text-align:center;margin:8px 0;">
-             表示を ${MAX_RENDER} 件に制限中（所持 ${owned.length}） - 軽量モード
-           </div>`;
-        return;
-      }
-      // 通常件数は既存レンダラに任せる
-      try { orig(); } catch(_){}
-    };
-  })();
-
-  // 6) ガチャ結果の大量描画を最適化（24枚以上で一括HTML）
-  ;(function patchShowResults(){
-    const orig = window.showResults || function(){};
-    window.showResults = function(results){
-      const popup = document.getElementById('popup');
-      const box = document.getElementById('results');
-      if (!popup || !box) { try{ orig(results); }catch(_){ } return; }
-
-      const list = Array.isArray(results) ? results : [];
-      const HEAVY = 24;
-      if (list.length < HEAVY) { try{ orig(results); }catch(_){ } return; }
-
-      box.classList.add('rendering');
-      let html = '';
-      for (let i=0;i<list.length;i++){
-        const c = list[i]||{};
-        const r = c.rarity||'';
-        const glow = (r==='LEGEND') ? ' legendGlow' : ((r==='CHIMERA'||r==='EVENT')?' chimeraGlow':'');
-        const price = '¥' + Number(c.sell||0).toLocaleString();
-        html += `<div class="card${glow}">
-          <div class="emoji">${c.emoji||'❓'}</div>
-          <div class="name">${c.name||''}</div>
-          <div class="rarity">${r}</div>
-          <div class="sell">${price}</div>
-        </div>`;
-      }
-      box.innerHTML = html;
-      popup.classList.add('active');
-      requestAnimationFrame(()=> box.classList.remove('rendering'));
-    };
-  })();
-
-  // 7) 高コストFXの同時上限/掃除（60→30）
-  ;(function pruneFX(){
-    const LIMIT = 30;
-    setInterval(()=>{
-      try{
-        const nodes = document.querySelectorAll('.heavenWing,.heavenFlash,.flash,.rainbowFlash,[class^="fx_"],.particle');
-        if (nodes.length > LIMIT) {
-          const rm = nodes.length - LIMIT;
-          for (let i=0;i<rm;i++) {
-            const n = nodes[i]; n?.parentNode?.removeChild(n);
-          }
-        }
-      }catch(_){}
-    }, 700);
-  })();
-
-  // 8) setIntervalの乱立抑制（同名キーで一意化）
-  ;(function unifyIntervals(){
+  // A-1) setNamedInterval: 同名キーで一意化してタイマ乱立を抑制
+  (function unifyIntervals(){
     const timers = new Map();
     window.__setNamedInterval = function(name, fn, ms){
       if (timers.has(name)) clearInterval(timers.get(name));
@@ -8188,29 +6708,159 @@ renderMoonRoad();
     };
   })();
 
-  // 9) ログ/ムーン/ボスUI更新などは可視タブ優先
-  ;(function throttlePanels(){
+  // A-2) requestIdleCallback フォールバック
+  const ric = window.requestIdleCallback || function(cb){ return setTimeout(()=>cb({didTimeout:false,timeRemaining:()=>0}), 1); };
+
+  // A-3) updateUI の1フレーム1回バッチ化（他コードが上書きしても再適用）
+  (function batchUpdateUI(){
+    const patch = ()=>{
+      const orig = window.updateUI || function(){};
+      if (orig.__batchedOnce) return;
+      let scheduled = false;
+      const batched = function(){
+        if (scheduled) return;
+        scheduled = true;
+        requestAnimationFrame(()=>{
+          scheduled = false;
+          try { orig(); } catch(e){}
+        });
+      };
+      batched.__batchedOnce = true;
+      window.updateUI = batched;
+    };
+    patch();
+    // 後書き上書き対策
+    setTimeout(patch, 300);
+    setTimeout(patch, 1200);
+  })();
+
+  // A-4) showResults 高速経路（24枚以上で一括HTML）+ 最小リフロー
+  (function fastShowResults(){
+    const install = ()=>{
+      const orig = window.showResults || function(){};
+      if (orig.__liteWrapped) return;
+      function wrapped(results){
+        const popup = document.getElementById('popup');
+        const box = document.getElementById('results');
+        const list = Array.isArray(results) ? results : [];
+        if (!popup || !box) { try{ return orig(results); }catch(e){ return; } }
+        const HEAVY = 24;
+        if (list.length < HEAVY) { try{ return orig(results); }catch(e){ return; } }
+        box.classList.add('rendering');
+        let html = '';
+        for (let i=0;i<list.length;i++){
+          const c = list[i]||{};
+          const r = c.rarity||'';
+          const glow = (r==='LEGEND') ? ' legendGlow' : ((r==='CHIMERA'||r==='EVENT')?' chimeraGlow':'');
+          const price = window.formatSafe ? formatSafe(c.sell) : ('¥' + Number(c.sell||0).toLocaleString());
+          html += `<div class="card${glow}">
+            <div class="emoji">${c.emoji||'❓'}</div>
+            <div class="name">${c.name||''}</div>
+            <div class="rarity">${r}</div>
+            <div class="sell">${price}</div>
+          </div>`;
+        }
+        box.innerHTML = html;
+        popup.classList.add('active');
+        ric(()=> box.classList.remove('rendering'));
+      }
+      wrapped.__liteWrapped = true;
+      window.showResults = wrapped;
+    };
+    install();
+    setTimeout(install, 300);
+    setTimeout(install, 1200);
+  })();
+
+  // A-5) formatSafe フォールバック
+  if (!window.formatSafe) {
+    window.formatSafe = function(v){
+      const n = (typeof v === 'number' && isFinite(v)) ? v :
+                (typeof v === 'string' ? Number(v.replace(/[,_\s¥円]/g,'')) : 0);
+      try { return '¥' + Number(n||0).toLocaleString(); }
+      catch { return '¥' + String(n||0); }
+    };
+  }
+
+  // A-6) FX上限・掃除（同時 <= 30）
+  (function pruneFX(){
+    const LIMIT = 30;
+    __setNamedInterval('perf_fx_prune', ()=>{
+      try{
+        const nodes = document.querySelectorAll('.heavenWing,.heavenFlash,.flash,.rainbowFlash,[class^="fx_"],[data-fx],.particle');
+        if (nodes.length > LIMIT) {
+          const rm = nodes.length - LIMIT;
+          for (let i=0;i<rm;i++) {
+            const n = nodes[i]; n?.parentNode?.removeChild(n);
+          }
+        }
+      }catch(e){}
+    }, 700);
+  })();
+
+  // A-7) 高頻度UIの可視タブ優先（ログ/ボス/ムーン/ダイヤ）
+  (function throttlePanels(){
     const isVisible = id => document.getElementById(id)?.classList.contains('active');
-    // ログ（1.2s）
-    window.__setNamedInterval('perf_log_render', ()=>{
-      if (isVisible('log')) { try{ window.renderLogs && window.renderLogs(); }catch(_){ } }
+    __setNamedInterval('perf_log_render', ()=>{
+      try{ if (isVisible('log') && typeof window.renderLogs==='function') window.renderLogs(); }catch(_){}
     }, 1200);
-    // ボスバー（350ms）
-    window.__setNamedInterval('perf_boss_bar', ()=>{
-      if (isVisible('boss')) { try{ window.updateBossBar && window.updateBossBar(); }catch(_){ } }
+    __setNamedInterval('perf_boss_bar', ()=>{
+      try{ if (isVisible('boss') && typeof window.updateBossBar==='function') window.updateBossBar(); }catch(_){}
     }, 350);
-    // ムーンロード（1s）
-    window.__setNamedInterval('perf_moon', ()=>{
-      try{ window.updateMoonRoad && window.updateMoonRoad(); }catch(_){ }
+    __setNamedInterval('perf_moon', ()=>{
+      try{ if (typeof window.updateMoonRoad==='function') window.updateMoonRoad(); }catch(_){}
     }, 1000);
-    // ダイヤルーム（60s）
-    window.__setNamedInterval('perf_diamond', ()=>{
-      if (isVisible('diamondRoom')) { try{ window.updateDiamondRoom && window.updateDiamondRoom(); }catch(_){ } }
+    __setNamedInterval('perf_diamond', ()=>{
+      try{ if (isVisible('diamondRoom') && typeof window.updateDiamondRoom==='function') window.updateDiamondRoom(); }catch(_){}
     }, 60000);
   })();
 
-  // 10) ガチャ実行直前後で軽量モードを短時間オン（演出の負荷を和らげる）
-  ;(function wrapHeavyGachas(){
+  // A-8) money/lp/crystal 差分更新 + コンパクト表記オプション
+  (function headerNumbers(){
+    const moneyEl = document.getElementById('money');
+    const lpEl = document.getElementById('lp');
+    const crystalEl = document.getElementById('crystal');
+    const moneyKey = 'cec-compact-money';
+    function formatCompact(n){
+      const num = (typeof n === 'number' && isFinite(n)) ? n :
+                  (typeof n === 'bigint' ? Number(n) :
+                  (typeof n === 'string' ? Number(n.replace(/[,_\s¥円]/g,'')) : 0));
+      const abs = Math.abs(num);
+      const u = [{v:1e12,s:'T'},{v:1e9,s:'B'},{v:1e6,s:'M'},{v:1e3,s:'K'}];
+      for (const x of u) if (abs>=x.v) return '¥' + (num/x.v).toFixed(2).replace(/\.?0+$/,'') + x.s;
+      return '¥' + (Number(num)||0).toLocaleString();
+    }
+    let last = { m:null, l:null, c:null };
+    __setNamedInterval('perf_header_nums', ()=>{
+      try{
+        if (!window.GAME) return;
+        const compact = localStorage.getItem(moneyKey)==='1';
+        const curM = compact ? formatCompact(GAME.money) : (window.formatSafe?formatSafe(GAME.money):('¥'+Number(GAME.money||0).toLocaleString()));
+        const curL = (GAME.lp||0)+' LP';
+        const curC = (GAME.crystal||0);
+        if (moneyEl && curM !== last.m) { last.m=curM; moneyEl.textContent=curM; moneyEl.classList.add('num-compact'); }
+        if (lpEl && curL !== last.l) { last.l=curL; lpEl.textContent=curL; }
+        if (crystalEl && curC !== last.c) { last.c=curC; crystalEl.textContent=curC; }
+      }catch(_){}
+    }, 250);
+  })();
+
+  // A-9) スクロールスロットリング
+  (function throttleScroll(){
+    const ids = ['inventory','results','logs'];
+    const boxes = ids.map(id=>document.getElementById(id)).filter(Boolean);
+    let ticking = false;
+    boxes.forEach(box=>{
+      box.addEventListener('scroll', ()=>{
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(()=>{ ticking = false; });
+      }, { passive:true });
+    });
+  })();
+
+  // A-10) ガチャ実行時の一時軽量モード（演出負荷軽減）
+  (function wrapHeavyGachas(){
     const names = [
       'normalGacha','lifeGacha','dimensionGacha','animalArmyGacha','fairyGacha',
       'robotPetGacha','tengokuGacha','tsuyuGacha','rainbowDragonGacha','foodGacha',
@@ -8221,465 +6871,61 @@ renderMoonRoad();
     names.forEach(n=>{
       const f = window[n];
       if (typeof f !== 'function') return;
-      window[n] = function(){
-        // 軽量化一時ON
-        const prevLite = document.body.classList.contains('perf-lite');
+      if (f.__perfLiteWrapped) return;
+      function wrapped(){
+        const prev = document.body.classList.contains('perf-lite');
         document.body.classList.add('perf-lite');
         try { return f.apply(this, arguments); }
-        finally { setTimeout(()=>{ if (!prevLite) document.body.classList.remove('perf-lite'); }, 900); }
-      };
+        finally { setTimeout(()=>{ if (!prev) document.body.classList.remove('perf-lite'); }, 900); }
+      }
+      wrapped.__perfLiteWrapped = true;
+      window[n] = wrapped;
     });
   })();
 
-  // 11) 初期ブート：トグル適用
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bootToggles, {once:true});
-  } else {
-    bootToggles();
-  }
-})();
-
-// ======================================
-// TRADE SUPER FIX v2026-06-04
-// openTradePopup未定義クラッシュ修正
-// ======================================
-
-(function(){
-
-  // ---------- Popup Open ----------
-  if(typeof window.openTradePopup !== "function"){
-
-    window.openTradePopup = function(stepId){
-
-      const tp = document.getElementById("tradePopup");
-
-      if(!tp){
-        console.warn("tradePopup not found");
-        return;
-      }
-
-      tp.style.display = "flex";
-      tp.classList.add("active");
-
-      [
-        "tradeStep1",
-        "tradeStep2",
-        "tradeStep3",
-        "tradeStep4"
-      ].forEach(id=>{
-
-        const el = document.getElementById(id);
-
-        if(el){
-          el.classList.remove("active");
-          el.style.display = "none";
-        }
-
-      });
-
-      if(stepId){
-
-        const step = document.getElementById(stepId);
-
-        if(step){
-          step.classList.add("active");
-          step.style.display = "block";
-        }
-
-      }
-
+  // A-11) 起動時トグル初期化（lite/low-motion/compact-money）
+  (function bootToggles(){
+    const liteKey='cec-perf-lite', motionKey='cec-low-motion', moneyKey='cec-compact-money';
+    function setLite(v){ document.body.classList.toggle('perf-lite', !!v); localStorage.setItem(liteKey, v?'1':'0'); }
+    function setLowMotion(v){ document.body.classList.toggle('low-motion', !!v); localStorage.setItem(motionKey, v?'1':'0'); }
+    function setCompactMoney(v){ localStorage.setItem(moneyKey, v?'1':'0'); }
+    const init = ()=>{
+      const lite = localStorage.getItem(liteKey) === '1';
+      const lm = localStorage.getItem(motionKey) === '1';
+      const cm = localStorage.getItem(moneyKey) === '1';
+      setLite(lite); setLowMotion(lm); setCompactMoney(cm);
+      const t1 = $('#perfLiteToggle'); if (t1) { t1.checked = lite; on(t1,'change', ()=>setLite(t1.checked)); }
+      const t2 = $('#perfMotionToggle'); if (t2) { t2.checked = lm; on(t2,'change', ()=>setLowMotion(t2.checked)); }
+      const t3 = $('#perfCompactMoney'); if (t3) { t3.checked = cm; on(t3,'change', ()=>setCompactMoney(t3.checked)); }
     };
-
-  }
-
-  // ---------- Popup Close ----------
-  if(typeof window.closeTradePopup !== "function"){
-
-    window.closeTradePopup = function(){
-
-      const tp = document.getElementById("tradePopup");
-
-      if(!tp) return;
-
-      tp.classList.remove("active");
-      tp.style.display = "none";
-
-    };
-
-  }
-
-  // ---------- showStep ----------
-  if(typeof window.showStep !== "function"){
-
-    window.showStep = function(id){
-
-      [
-        "tradeStep1",
-        "tradeStep2",
-        "tradeStep3",
-        "tradeStep4"
-      ].forEach(step=>{
-
-        const el = document.getElementById(step);
-
-        if(el){
-          el.classList.remove("active");
-          el.style.display = "none";
-        }
-
-      });
-
-      const target = document.getElementById(id);
-
-      if(target){
-        target.classList.add("active");
-        target.style.display = "block";
-      }
-
-      const tp = document.getElementById("tradePopup");
-
-      if(tp){
-        tp.style.display = "flex";
-        tp.classList.add("active");
-      }
-
-    };
-
-  }
-
-  // ---------- TradeHandlers待機 ----------
-  const timer = setInterval(()=>{
-
-    if(
-      window.TradeHandlers &&
-      typeof TradeHandlers.openStart === "function" &&
-      !TradeHandlers.__superFix
-    ){
-
-      const original = TradeHandlers.openStart;
-
-      TradeHandlers.openStart = function(domIdx){
-
-        try{
-
-          original(domIdx);
-
-        }catch(err){
-
-          console.error(err);
-
-          const popup = document.getElementById("tradePopup");
-
-          if(popup){
-
-            popup.style.display = "flex";
-            popup.classList.add("active");
-
-          }
-
-          const spell = document.getElementById("spellDisplay");
-
-          if(spell){
-
-            spell.textContent =
-            "交換システム初期化完了。\nもう一度交換ボタンを押してください。";
-
-          }
-
-        }
-
-      };
-
-      TradeHandlers.__superFix = true;
-
-      console.log(
-        "✅ TradeHandlers patched"
-      );
-
-    }
-
-  },500);
-
-})();
-
-/* === Fix A: 交換ボタンで必ず呪文を表示させる強化 === */
-(function ensureTradeSpellShows(){
-  // DOM -> 所持配列インデックス変換（在庫は逆順描画）
-  function domToOwnedIndex(domIdx){
-    if (!window.GAME || !Array.isArray(GAME.owned)) return -1;
-    return (GAME.owned.length - 1) - domIdx;
-  }
-  // 呪文生成の最小実装（既存TradeUtilがあれば優先）
-  function genSpell(payload){
-    try {
-      if (window.TradeUtil && typeof TradeUtil.encodeSpell === 'function') {
-        return TradeUtil.encodeSpell(payload);
-      }
-      // 簡易b64url
-      const raw = { body:{ v:1, t:Date.now(), p:payload }, sig:'lite' };
-      const s = unescape(encodeURIComponent(JSON.stringify(raw)));
-      const b = btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-      return b;
-    } catch {
-      return JSON.stringify({p:payload});
-    }
-  }
-  // 交換開始（在庫カードから）
-  function startTradeFromDom(domIdx){
-    const ownedIdx = domToOwnedIndex(domIdx);
-    const ch = (ownedIdx>=0 && GAME.owned[ownedIdx]) ? GAME.owned[ownedIdx] : null;
-    if (!ch) { alert('対象キャラが見つかりません'); return; }
-    // 交換不可の簡易判定（frontier/typeなどは除外）
-    if (ch._fromMoon || ch.type==='frontier') { alert('このキャラは交換不可です'); return; }
-    // スナップショット/ロック
-    window.TradeState = window.TradeState || {};
-    TradeState.offer = { ownedIdx, snapshot: JSON.parse(JSON.stringify(ch)), until: Date.now()+30*60*1000 };
-    // 呪文生成
-    const spell = genSpell({ kind:'offer', token: String(Math.random()).slice(2)+Date.now().toString(16), name: ch.name, sell: ch.sell|0 });
-    // ポップアップに反映（存在すれば）
-    const disp = document.getElementById('spellDisplay');
-    if (disp) {
-      disp.textContent = spell;
-      // UIをStep1に切り替え
-      const tp = document.getElementById('tradePopup');
-      if (tp) tp.classList.add('active');
-      ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(id=>{
-        const el = document.getElementById(id);
-        if (el) el.classList.remove('active');
-      });
-      const s1 = document.getElementById('tradeStep1');
-      if (s1) s1.classList.add('active');
-      // ナビ表示
-      const nav = document.getElementById('step1Nav');
-      const next = document.getElementById('step1NextBtn');
-      if (nav) nav.style.display = 'block';
-      if (next) next.style.display = 'inline-block';
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init, {once:true});
     } else {
-      // 最低限のフォールバック
-      prompt('この呪文を相手に渡してください', spell);
+      init();
     }
-  }
-  // 在庫の「交換」ボタンを代理委譲（多重描画に強い）
-  (function delegateInventoryTrade(){
-    const inv = document.getElementById('inventory');
-    if (!inv || inv.__tradeSpellWired) return;
-    inv.__tradeSpellWired = true;
-    inv.addEventListener('click', function(e){
-      const t = e.target;
-      if (!t) return;
-      if (t.classList.contains('tradeBtn')) {
-        const card = t.closest('.card');
-        if (!card) return;
-        const domIdx = Array.prototype.indexOf.call(inv.children, card);
-        if (domIdx<0) return;
-        // 既存実装があれば使う、無ければ強制生成
-        if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function') {
-          try { TradeHandlers.openStart(domIdx); } catch { startTradeFromDom(domIdx); }
-        } else {
-          startTradeFromDom(domIdx);
-        }
-      }
-    }, { passive:true });
   })();
+
 })();
+</script>
 
-// === HOTFIX: Step1「相手の入力が終わったら進む」強制遷移 v2026-06-04-c ===
-(function fixStep1NextReliable(){
-  function el(id){ return document.getElementById(id); }
-  function showStep(id){
-    ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(k=>{
-      const n = el(k);
-      if (!n) return;
-      n.classList.remove('active');
-      n.style.display = 'none';
-    });
-    const t = el(id);
-    if (t){
-      t.classList.add('active');
-      t.style.display = 'block';
-    }
-    const tp = el('tradePopup');
-    if (tp){
-      tp.classList.add('active');
-      tp.style.display = 'flex';
-    }
-  }
-  // 確実にStep2へ進める関数（既存が壊れていても動く）
-  function goStep2(){
-    try {
-      // 既存の遷移関数があれば先に呼んで副作用を維持
-      if (typeof window.tradeStep1ToStep2 === 'function') {
-        try { window.tradeStep1ToStep2(); } catch(e){}
-      }
-    } catch(e){}
-    // フォールバックで強制遷移
-    try {
-      showStep('tradeStep2');
-      const err = el('step2Error'); if (err) err.textContent = '';
-      const ta  = el('step2Input');
-      if (ta) { ta.focus(); ta.select && ta.select(); }
-    } catch(e){}
-  }
-  // ボタンへ強制結線（後から上書きされても勝つ）
-  function wire(){
-    // 明示IDがあれば最優先
-    var btn = el('step1NextBtn');
-    // 無い環境では Step1 内の .tradeAction:not(.danger) をfallback
-    if (!btn) btn = document.querySelector('#tradeStep1 .tradeAction:not(.danger)');
-    if (!btn) return;
-    // 一度だけ印を付ける
-    if (!btn.__fixedNext){
-      btn.__fixedNext = true;
-      btn.onclick = function(ev){
-        ev && ev.preventDefault && ev.preventDefault();
-        ev && ev.stopPropagation && ev.stopPropagation();
-        goStep2();
-        return false;
-      };
-      // 他ハンドラの上書きを抑える
-      btn.addEventListener('click', function(ev){
-        // 既に goStep2 が呼ばれているので、他のリスナーを止める
-        ev.stopImmediatePropagation && ev.stopImmediatePropagation();
-      }, true); // captureで最優先
-    } else {
-    }
-  }
-  // 何度か遅延で再結線（後書き対策）
-  function arm(){
-    wire();
-    setTimeout(wire, 200);
-    setTimeout(wire, 800);
-    setTimeout(wire, 1600);
-  }
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', arm, {once:true});
-  } else {
-    arm();
-  }
-})();
+<!-- =========================
+     Group B: Emozoo Exchange
+     目的: 「キャラ3体 → EZ + 所持金調整」交換UI/ロジック
+========================= -->
+<script>
+(function EmozooExchangeBundle(){
+  if (window.__EmozooExchangeBundle__) return;
+  window.__EmozooExchangeBundle__ = true;
 
-/* === Fix B: エモズー交換（キャラ3体 → EZ1 + ¥10,000）UI/ロジック 実装 === */
-(function emozooExchangeUI(){
-  // 安全な条件判定
-  function isFrontierChar(c){
-    // FRONTIER_POOLの名前一致で判定（高速のためセット化）
-    try{
-      if (!window.__FRONTIER_NAME_SET__) {
-        const s = new Set((Array.isArray(window.FRONTIER_POOL)?FRONTIER_POOL:[]).map(x=>x && x.name).filter(Boolean));
-        window.__FRONTIER_NAME_SET__ = s;
-      }
-      return __FRONTIER_NAME_SET__.has(c?.name);
-    }catch{ return false; }
-  }
-  function isFromMoon(c){
-    // ムーンロード／ショップ経由を除外するための一般的フラグ群
-    return !!(c && (c._fromMoon || c._shop || c._source==='moon' || c._source==='shop'));
-  }
-  // 候補抽出（売値降順、条件を満たすものから3体）
-  function pickTop3(){
-    const owned = Array.isArray(GAME?.owned) ? GAME.owned : [];
-    // 除外条件: frontier, fromMoon など
-    const ok = owned
-      .map((c,i)=>({c,i}))
-      .filter(o=>o.c && Number.isFinite(Number(o.c.sell)) && !isFrontierChar(o.c) && !isFromMoon(o.c) && o.c.type!=='frontier');
-    ok.sort((a,b)=> (Number(b.c.sell)||0) - (Number(a.c.sell)||0));
-    return ok.slice(0,3);
-  }
-  // UI構築
-  function openEzPopup(){
-    const pop = document.getElementById('ezPopup');
-    const grid = document.getElementById('ezPickGrid');
-    const warn = document.getElementById('ezWarn');
-    if (!pop || !grid) return;
-    grid.innerHTML = '';
-    const picks = pickTop3();
-    if (picks.length<3){
-      if (warn) warn.textContent = '条件を満たすキャラクターが3体見つかりません。';
-    } else {
-      if (warn) warn.textContent = '';
-    }
-    picks.forEach(({c})=>{
-      const div = document.createElement('div');
-      div.className = 'ezPickCard';
-      div.innerHTML = `
-        <div class="emoji">${c.emoji||'❔'}</div>
-        <div class="name">${c.name||'？？？'}</div>
-        <div class="sell">売却 ¥${Number(c.sell||0).toLocaleString()}</div>
-      `;
-      grid.appendChild(div);
-    });
-    pop.classList.add('active');
-  }
-  function closeEzPopup(){
-    const pop = document.getElementById('ezPopup');
-    if (pop) pop.classList.remove('active');
-  }
-  // 実行
-  function doEzExchange(){
-    const picks = pickTop3();
-    if (picks.length<3){
-      alert('条件を満たすキャラクターが3体見つかりません');
-      return;
-    }
-    // 所持から該当3体を削除（インデックスは昇順で消すとズレるため降順で）
-    const idxs = picks.map(p=>p.i).sort((a,b)=>b-a);
-    idxs.forEach(i=>{
-      if (GAME.owned[i]) GAME.owned.splice(i,1);
-    });
-    // 報酬
-    GAME.emozoo = (Number(GAME.emozoo)||0) + 1;
-    GAME.money = (Number(GAME.money)||0) + 10000;
-    // ログ
-    try{
-      if (typeof addLog === 'function') {
-        addLog('🪙 エモズー交換 ▶ キャラ3体消費 → +1 EZ, +¥10,000');
-      }
-    }catch{}
-    // 表示更新
-    try{
-      const ezEl = document.getElementById('emozoo');
-      if (ezEl) ezEl.innerText = (GAME.emozoo||0).toLocaleString() + ' EZ';
-    }catch{}
-    if (typeof updateUI === 'function') updateUI();
-    if (typeof save === 'function') save();
-    closeEzPopup();
-  }
-  // 既存の「キャラ3体 → 🪙1 EZ + ¥10,000」ボタンにバインド（存在しない場合は何もしない）
-  function wireConvertButton(){
-    // 既存: <button class="action" onclick="convertToEmozoo()">キャラ3体 → 🪙1 EZ + ¥10,000</button>
-    // 元の関数を上書きして専用UIを開く
-    window.convertToEmozoo = function(){ openEzPopup(); };
-  }
-  // ポップアップ内ボタン結線
-  function wirePopupButtons(){
-    const doBtn = document.getElementById('ezDoBtn');
-    const closeBtn = document.getElementById('ezCloseBtn');
-    if (doBtn && !doBtn.__wired){ doBtn.__wired = true; doBtn.addEventListener('click', doEzExchange); }
-    if (closeBtn && !closeBtn.__wired){ closeBtn.__wired = true; closeBtn.addEventListener('click', closeEzPopup); }
-  }
-
-  // 起動
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function(){
-      wireConvertButton();
-      wirePopupButtons();
-    }, {once:true});
-  } else {
-    wireConvertButton();
-    wirePopupButtons();
-  }
-})();
-
-// ==== EMOZOO EXCHANGE — fixed implementation v2026-06-04 ====
-(function fixEmozooExchange(){
-  // 1) ユーティリティ
+  // B-1) 数値安全化
   function num(v){ try{
     if (typeof v === 'number') return isFinite(v)?v:0;
     if (typeof v === 'bigint') return Number(v);
     if (typeof v === 'string') return Number(v.replace(/[,_\s¥円]/g,''))||0;
     return Number(v)||0;
   }catch{return 0;} }
-  // FRONTIER名のセット（除外用）
+
+  // B-2) FRONTIER名セット（除外）
   function frontierNameSet(){
     if (!window.__FRONTIER_NAME_SET__) {
       const s = new Set((Array.isArray(window.FRONTIER_POOL)?FRONTIER_POOL:[]).map(x=>x?.name).filter(Boolean));
@@ -8696,7 +6942,8 @@ renderMoonRoad();
     const set = frontierNameSet();
     return set.has(c.name);
   }
-  // 2) 候補選定（条件に合う上位3体）
+
+  // B-3) 候補抽出（条件に合う上位3体）
   function pickTop3(){
     const owned = Array.isArray(GAME?.owned) ? GAME.owned : [];
     const list = owned.map((c,i)=>({c,i}))
@@ -8704,7 +6951,8 @@ renderMoonRoad();
     list.sort((a,b)=> num(b.c.sell) - num(a.c.sell));
     return list.slice(0,3);
   }
-  // 3) UI: プレビュー表示
+
+  // B-4) UI: プレビュー開閉
   function openEzPopup(){
     const pop = document.getElementById('ezPopup');
     const grid = document.getElementById('ezPickGrid');
@@ -8733,123 +6981,54 @@ renderMoonRoad();
     const pop = document.getElementById('ezPopup');
     if (pop) pop.classList.remove('active');
   }
-  // 4) 実行ロジック（ここが「実際に実行すべきもの」）
+
+  // B-5) 実行（本番ロジック）: 上位3体消費 → EZ+1 / 所持金を¥100,000に再設定
   function performEmozooExchange(){
-    // 前提
     if (!window.GAME || !Array.isArray(GAME.owned)) { alert('内部エラー：GAME未初期化'); return; }
-    // 対象3体を確定
     const picks = pickTop3();
     if (picks.length < 3) { alert('条件に合うキャラクターが3体見つかりません'); return; }
-    // インデックス降順で安全に削除
     const idxs = picks.map(p=>p.i).sort((a,b)=>b-a);
     idxs.forEach(i=> { if (GAME.owned[i]) GAME.owned.splice(i,1); });
-    // 報酬: EZ+1、全財産（お金のみ）を¥100,000に再設定
     GAME.emozoo = num(GAME.emozoo) + 1;
     GAME.money = 100000;
-    // 表示更新・保存
-    try {
-      const ezEl = document.getElementById('emozoo');
-      if (ezEl) ezEl.innerText = (GAME.emozoo||0).toLocaleString() + ' EZ';
-    } catch {}
+    try { const ezEl = document.getElementById('emozoo'); if (ezEl) ezEl.innerText = (GAME.emozoo||0).toLocaleString() + ' EZ'; } catch {}
     if (typeof addLog === 'function') addLog('🪙 エモズー交換 ▶ 上位3体消費 → +1 EZ / 所持金を¥100,000に再設定');
     if (typeof updateUI === 'function') updateUI();
     if (typeof save === 'function') save();
-    // ポップアップを閉じる
     closeEzPopup();
   }
-  // 5) ボタン配線（「伝わるためのコード」と「実行コード」を一致させる）
-  // 既存の convertToEmozoo を、確実にプレビューUIを開く導線に固定
+
+  // B-6) 入口: convertToEmozoo → プレビューUI
   window.convertToEmozoo = function(){ openEzPopup(); };
-  // 実行ボタン
+
+  // B-7) ポップアップボタン配線
   (function wireEzButtons(){
     const doBtn = document.getElementById('ezDoBtn');
     const closeBtn = document.getElementById('ezCloseBtn');
     if (doBtn && !doBtn.__wired) { doBtn.__wired = true; doBtn.addEventListener('click', performEmozooExchange); }
     if (closeBtn && !closeBtn.__wired) { closeBtn.__wired = true; closeBtn.addEventListener('click', closeEzPopup); }
   })();
-})();
 
-// === FIX: Step1「相手の入力が終わったら進む」ボタンを必ず動かす（最終固定） ===
-(function fixTradeStepNextFinal(){
-  function el(id){ return document.getElementById(id); }
-  function showStep(id){
-    ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(function(k){
-      var n = el(k);
-      if (!n) return;
-      n.classList.remove('active');
-      n.style.display = 'none';
-    });
-    var t = el(id);
-    if (t){
-      t.classList.add('active');
-      t.style.display = 'block';
-    }
-    var tp = el('tradePopup');
-    if (tp){
-      tp.classList.add('active');
-      tp.style.display = 'flex';
-    }
-  }
-  function goStep2(){
-    // 既存関数があれば先に呼んで副作用を確保
-    try { if (typeof window.tradeStep1ToStep2 === 'function') window.tradeStep1ToStep2(); } catch(e){}
-    // フォールバックで必ず遷移
-    try {
-      showStep('tradeStep2');
-      var err = el('step2Error'); if (err) err.textContent = '';
-      var ta  = el('step2Input'); if (ta && ta.focus) { ta.focus(); try { ta.select && ta.select(); } catch(_){} }
-    } catch(e){}
-  }
-  function wire(){
-    // 明示IDがあれば最優先
-    var btn = el('step1NextBtn');
-    // 無い場合は Step1 内の「危険でない」アクションボタンを拾う
-    if (!btn) btn = document.querySelector('#tradeStep1 .tradeAction:not(.danger)');
-    if (!btn) return;
-    // capture で最優先・重複停止・上書き復旧
-    if (!btn.__cecNextWired){
-      btn.__cecNextWired = true;
-      // 既存 onclick を上書き
-      btn.onclick = function(ev){
-        if (ev && ev.preventDefault) ev.preventDefault();
-        if (ev && ev.stopPropagation) ev.stopPropagation();
-        goStep2();
-        return false;
-      };
-      // 他の後付けハンドラが競合してもここを最優先にする
-      btn.addEventListener('click', function(ev){
-        // ここで即時停止して他のリスナーに行かせない
-        if (ev && ev.stopImmediatePropagation) ev.stopImmediatePropagation();
-      }, true); // capture
-    } else {
-    
-    }
-    // ナビの強制表示（offer が未設定でも導線を可視化）
-    var nav = el('step1Nav'); if (nav) nav.style.display = 'block';
-  }
-  function arm(){
-    wire();
-    // 後書き上書きに勝つため数回再結線
-    setTimeout(wire, 200);
-    setTimeout(wire, 800);
-    setTimeout(wire, 1600);
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', arm, {once:true});
-  } else {
-    arm();
-  }
 })();
+</script>
 
-// ===== TRADE STEP-NEXT HARD LOCK v2026-06-04-final =====
-// 目的: 「相手の入力が終わったら進む」ボタンが無反応になる全ケースを強制修正。
-// 特徴: 1) capture段階での最優先フック 2) 再結線ループ 3) 既存関数があれば先に呼ぶ
-//      4) 最低限のフォールバックで Step2 を必ず表示 5) 多重適用ガード
-(function(){
-  if (window.__TRADE_STEP_NEXT_FINAL__) return;
-  window.__TRADE_STEP_NEXT_FINAL__ = true;
+<!-- =========================
+     Group C: Offline Trade Spell & Trade UI Stabilizers
+     目的:
+       - 在庫「交換」→ 呪文生成/表示（Step1）
+       - 相手呪文の読込（Step2）→ ACK生成 → Step3遷移
+       - 実行(OK)→ finalizeSwap 優先、無ければ安全フォールバック
+       - Step1/2/3/4 遷移とポップアップの確実化
+       - 既存ハンドラ衝突/多重結線/後書き上書きに耐性
+========================= -->
+<script>
+(function TradeOfflineBundle(){
+  if (window.__TradeOfflineBundle__) return;
+  window.__TradeOfflineBundle__ = true;
+
+  // C-0) 共通ユーティリティ
   function el(id){ return document.getElementById(id); }
-  function $sel(s){ return document.querySelector(s); }
+  function $(s){ return document.querySelector(s); }
   function showStep(id){
     ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(k=>{
       const n = el(k);
@@ -8868,345 +7047,394 @@ renderMoonRoad();
       tp.style.display = 'flex';
     }
   }
-  // 進むアクション（既存の遷移関数があれば尊重 → 最後に強制遷移）
-  function goStep2(){
-    try {
-      if (typeof window.tradeStep1ToStep2 === 'function') {
-        try { window.tradeStep1ToStep2(); } catch(_){}
-      } else if (typeof window.step1To2 === 'function') {
-        try { window.step1To2(); } catch(_){}
+
+  // C-1) Popup open/close 保険
+  if (typeof window.openTradePopup !== 'function') {
+    window.openTradePopup = function(stepId){
+      const tp = el('tradePopup');
+      if (!tp) return;
+      tp.style.display = 'flex';
+      tp.classList.add('active');
+      ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(id=>{
+        const s = el(id);
+        if (s){ s.classList.remove('active'); s.style.display='none'; }
+      });
+      if (stepId){
+        const s = el(stepId);
+        if (s){ s.classList.add('active'); s.style.display='block'; }
       }
-    } catch(_){}
-    // 最後に強制遷移（既存が壊れていても必ず表示）
-    try {
-      const err = el('step2Error'); if (err) err.textContent = '';
-      const ta  = el('step2Input'); if (ta) { ta.focus(); ta.select && ta.select(); }
-      showStep('tradeStep2');
-    } catch(_){}
-  }
-  // ボタン取得（ID優先 → Fallbackセレクタ）
-  function findNextBtn(){
-    return el('step1NextBtn') || $sel('#tradeStep1 .tradeAction:not(.danger)');
-  }
-  // 強制結線（captureで最優先、他ハンドラより前に割り込み）
-  function wire(){
-    const btn = findNextBtn();
-    if (!btn) return;
-    // 既存のclickを完全に自分の経路に固定
-    // 1) 既存onclickを破棄して、自前のを設定
-    btn.onclick = function(ev){
-      ev && ev.preventDefault && ev.preventDefault();
-      ev && ev.stopPropagation && ev.stopPropagation();
-      goStep2();
-      return false;
     };
-    // 2) 捕捉フェーズでstopImmediatePropagationして他の後付ハンドラを封じる
-    if (!btn.__cecCaptureOnce){
-      btn.__cecCaptureOnce = true;
-      btn.addEventListener('click', function(ev){
-        // ここは capture 優先で登録（下の第三引数true）される
-        ev.stopImmediatePropagation && ev.stopImmediatePropagation();
-        ev.preventDefault && ev.preventDefault();
-        goStep2();
-        return false;
-      }, true); // capture=true
+  }
+  if (typeof window.closeTradePopup !== 'function') {
+    window.closeTradePopup = function(){
+      const tp = el('tradePopup');
+      if (!tp) return;
+      tp.classList.remove('active');
+      tp.style.display = 'none';
+    };
+  }
+
+  // C-2) 呪文エンコード/デコード（TradeUtilが無ければ簡易版）
+  function encodeSpell(payload){
+    try {
+      if (window.TradeUtil && typeof TradeUtil.encodeSpell === 'function') {
+        return TradeUtil.encodeSpell(payload);
+      }
+      const raw = { body:{ v:1, t:Date.now(), p:payload }, sig:'lite' };
+      const s = unescape(encodeURIComponent(JSON.stringify(raw)));
+      return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    } catch {
+      return JSON.stringify({p:payload});
     }
-    // 3) バブリング側でも最終防衛（念のため）
-    if (!btn.__cecBubbleOnce){
-      btn.__cecBubbleOnce = true;
-      btn.addEventListener('click', function(ev){
-        ev.stopImmediatePropagation && ev.stopImmediatePropagation();
-        ev.preventDefault && ev.preventDefault();
-        // すでにcaptureでgoStep2は走っているが、二重でも副作用なし
-        goStep2();
-        return false;
-      }, { once:false });
+  }
+  function ensureDecode(){
+    if (window.TradeUtil && typeof TradeUtil.decodeSpell === 'function') {
+      return function(spell){ return TradeUtil.decodeSpell(spell, { ttlMs: 10*60*1000 }); };
     }
-    // アクセシビリティ: Enter/Spaceでも動作
-    if (!btn.__cecKeyOnce){
-      btn.__cecKeyOnce = true;
-      btn.addEventListener('keydown', function(ev){
-        const k = ev.key || ev.code;
-        if (k === 'Enter' || k === ' ' || k === 'Space'){
-          ev.preventDefault(); ev.stopPropagation();
-          goStep2();
+    return function(spell){
+      try{
+        const json = atob(spell.replace(/-/g,'+').replace(/_/g,'/'));
+        const raw = JSON.parse(json);
+        const p = raw?.body?.p || raw?.p || raw;
+        if (!p || p.kind!=='offer' || !p.token) throw new Error('invalid-offer');
+        return p;
+      }catch(e){
+        const err = new Error('decode-failed');
+        err.code = 'DECODE_FAILED';
+        throw err;
+      }
+    };
+  }
+
+  // C-3) 在庫カード「交換」→ 呪文生成・Step1表示（TradeHandlersがあれば優先）
+  (function delegateInventoryTrade(){
+    const inv = el('inventory');
+    if (!inv || inv.__tradeOfflineWired) return;
+    inv.__tradeOfflineWired = true;
+
+    function domToOwnedIndex(domIdx){
+      if (!window.GAME || !Array.isArray(GAME.owned)) return -1;
+      return (GAME.owned.length - 1) - domIdx; // 逆順描画前提
+    }
+    function startTradeFromDom(domIdx){
+      if (!window.GAME || !Array.isArray(GAME.owned)) { alert('内部エラー：GAME未初期化'); return; }
+      const ownedIdx = domToOwnedIndex(domIdx);
+      const ch = (ownedIdx>=0 && GAME.owned[ownedIdx]) ? GAME.owned[ownedIdx] : null;
+      if (!ch) { alert('対象キャラが見つかりません'); return; }
+      if (ch._fromMoon || ch.type==='frontier') { alert('このキャラは交換不可です'); return; }
+      window.TradeState = window.TradeState || {};
+      TradeState.offer = { ownedIdx, snapshot: JSON.parse(JSON.stringify(ch)), until: Date.now()+30*60*1000 };
+      const spell = encodeSpell({ kind:'offer', token: String(Math.random()).slice(2)+Date.now().toString(16), name: ch.name, sell: ch.sell|0 });
+      const disp = el('spellDisplay');
+      if (disp) {
+        disp.textContent = spell;
+        showStep('tradeStep1');
+        const nav = el('step1Nav'); const next = el('step1NextBtn');
+        if (nav) nav.style.display = 'block';
+        if (next) next.style.display = 'inline-block';
+      } else {
+        prompt('この呪文を相手に渡してください', spell);
+      }
+    }
+
+    inv.addEventListener('click', function(e){
+      const t = e.target;
+      if (!t) return;
+      if (t.classList.contains('tradeBtn')) {
+        const card = t.closest('.card');
+        if (!card) return;
+        const domIdx = Array.prototype.indexOf.call(inv.children, card);
+        if (domIdx<0) return;
+        if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function') {
+          try { TradeHandlers.openStart(domIdx); } catch { startTradeFromDom(domIdx); }
+        } else {
+          startTradeFromDom(domIdx);
         }
-      }, { passive:false });
-    }
-  }
-  // 再結線ループ：後から別スクリプトに上書きされても取り戻す
-  function arm(){
-    wire();
-    // レイアウト/他スクリプト確定後に再実行
-    setTimeout(wire, 120);
-    setTimeout(wire, 400);
-    setTimeout(wire, 800);
-    // 以後も軽頻度で監視（3秒おき）- 負荷軽微
-    if (!window.__TRADE_STEP_NEXT_WATCH__){
-      window.__TRADE_STEP_NEXT_WATCH__ = setInterval(wire, 3000);
-    }
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', arm, { once:true });
-  } else {
-    arm();
-  }
-  // もしStep1自体が開いているのにボタンが見つからない場合、フォールバックで
-  // Step2へ誘導できるよう、Step1クリック全域にも一時退避ランディングを敷く
-  (function safetyOverlay(){
-    const s1 = el('tradeStep1');
-    if (!s1) return;
-    if (s1.__cecSafety) return;
-    s1.__cecSafety = true;
-    s1.addEventListener('click', function(ev){
-      // 本当にボタンが壊れているときだけ救済（テキスト等の誤クリックは無視）
-      const btn = findNextBtn();
-      if (!btn) {
-        // 軽い振動で気づかせつつ、Step2に誘導
-        s1.classList.add('shaking');
-        setTimeout(()=>s1.classList.remove('shaking'), 320);
-        goStep2();
       }
     }, { passive:true });
   })();
-})();
 
-// ===== TRADE STEP1 BUTTON FORCE FIX =====
-
-(function(){
-
-  function forceStep2(){
-
-    const step1 = document.getElementById("tradeStep1");
-
-    const step2 = document.getElementById("tradeStep2");
-
-    const popup = document.getElementById("tradePopup");
-
-    if(step1){
-
-      step1.classList.remove("active");
-
-      step1.style.display = "none";
-
+  // C-4) Step1「相手の入力が終わったら進む」ボタンの確実化
+  (function fixStep1Next(){
+    function goStep2(){
+      try { if (typeof window.tradeStep1ToStep2 === 'function') window.tradeStep1ToStep2(); } catch(_){}
+      try {
+        const err = el('step2Error'); if (err) err.textContent = '';
+        const ta  = el('step2Input'); if (ta) { ta.focus(); ta.select && ta.select(); }
+        showStep('tradeStep2');
+      } catch(_){}
     }
-
-    if(step2){
-
-      step2.classList.add("active");
-
-      step2.style.display = "block";
-
-    }
-
-    if(popup){
-
-      popup.classList.add("active");
-
-      popup.style.display = "flex";
-
-    }
-
-    const err = document.getElementById("step2Error");
-
-    if(err) err.textContent = "";
-
-    const input = document.getElementById("step2Input");
-
-    if(input){
-
-      setTimeout(()=>{
-
-        input.focus();
-
-      },50);
-
-    }
-
-    console.log("✅ Step2 Forced");
-
-  }
-
-  // 関数が無い環境でも動くようにする
-
-  window.tradeStep1ToStep2 = forceStep2;
-
-  function patch(){
-
-    const btn = document.getElementById("step1NextBtn");
-
-    if(!btn) return;
-
-    btn.style.display = "inline-block";
-
-    btn.onclick = function(e){
-
-      if(e){
-
-        e.preventDefault();
-
-        e.stopPropagation();
-
+    function wire(){
+      const btn = el('step1NextBtn') || $('#tradeStep1 .tradeAction:not(.danger)');
+      if (!btn) return;
+      btn.onclick = function(ev){
+        ev && ev.preventDefault && ev.preventDefault();
+        ev && ev.stopPropagation && ev.stopPropagation();
+        goStep2();
+        return false;
+      };
+      if (!btn.__cecCaptureOnce){
+        btn.__cecCaptureOnce = true;
+        btn.addEventListener('click', function(ev){
+          ev.stopImmediatePropagation && ev.stopImmediatePropagation();
+          ev.preventDefault && ev.preventDefault();
+          goStep2();
+          return false;
+        }, true); // capture
       }
-
-      forceStep2();
-
-      return false;
-
-    };
-
-  }
-
-  patch();
-
-  setTimeout(patch,200);
-
-  setTimeout(patch,1000);
-
-  setTimeout(patch,3000);
-
-})();
-
-// ==== Trade Event Stabilizer v2026-06-04 ====
-(function(){
-
-  if(window.__tradeEventStabilizer__) return;
-  window.__tradeEventStabilizer__ = true;
-
-  function el(id){
-    return document.getElementById(id);
-  }
-
-  function showStep(id){
-
-    ["tradeStep1","tradeStep2","tradeStep3","tradeStep4"]
-      .forEach(step=>{
-        const n = el(step);
-        if(!n) return;
-
-        n.classList.remove("active");
-        n.style.display = "none";
-      });
-
-    const target = el(id);
-
-    if(target){
-      target.classList.add("active");
-      target.style.display = "block";
+      if (!btn.__cecKeyOnce){
+        btn.__cecKeyOnce = true;
+        btn.addEventListener('keydown', function(ev){
+          const k = ev.key || ev.code;
+          if (k==='Enter' || k===' ' || k==='Space'){ ev.preventDefault(); ev.stopPropagation(); goStep2(); }
+        }, { passive:false });
+      }
+      const nav = el('step1Nav'); if (nav) nav.style.display = 'block';
     }
-
-    const popup = el("tradePopup");
-
-    if(popup){
-      popup.classList.add("active");
-      popup.style.display = "flex";
+    function arm(){
+      wire();
+      setTimeout(wire, 200);
+      setTimeout(wire, 800);
+      setTimeout(wire, 1600);
+      if (!window.__TRADE_STEP_NEXT_WATCH__){
+        window.__TRADE_STEP_NEXT_WATCH__ = setInterval(wire, 3000);
+      }
     }
-  }
-
-  function wireStep1(){
-
-    const btn =
-      el("step1NextBtn") ||
-      document.querySelector("#tradeStep1 .tradeAction:not(.danger)");
-
-    if(!btn || btn.__stabilized) return;
-
-    btn.__stabilized = true;
-
-    btn.addEventListener("click",function(e){
-
-      e.preventDefault();
-
-      setTimeout(()=>{
-
-        const s2 = el("tradeStep2");
-
-        if(
-          !s2 ||
-          !s2.classList.contains("active")
-        ){
-          showStep("tradeStep2");
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', arm, {once:true});
+    } else {
+      arm();
+    }
+    // 安全オーバレイ（ボタンが見つからないときの救済）
+    (function safetyOverlay(){
+      const s1 = el('tradeStep1');
+      if (!s1 || s1.__cecSafety) return;
+      s1.__cecSafety = true;
+      s1.addEventListener('click', function(){
+        const btn = el('step1NextBtn') || $('#tradeStep1 .tradeAction:not(.danger)');
+        if (!btn) {
+          s1.classList.add('shaking');
+          setTimeout(()=>s1.classList.remove('shaking'), 320);
+          try {
+            const err = el('step2Error'); if (err) err.textContent = '';
+            const ta  = el('step2Input'); if (ta) { ta.focus(); ta.select && ta.select(); }
+            showStep('tradeStep2');
+          } catch(_){}
         }
+      }, { passive:true });
+    })();
+  })();
 
-      },50);
-
-    });
-
-  }
-
-  function wireStep2(){
-
-    const btn =
-      document.querySelector("#tradeStep2 .tradeAction:not(.danger)");
-
-    if(!btn || btn.__stabilized) return;
-
-    btn.__stabilized = true;
-
-    btn.addEventListener("click",function(){
-
-      setTimeout(()=>{
-
-        const s3 = el("tradeStep3");
-
-        if(
-          !s3 ||
-          !s3.classList.contains("active")
-        ){
-
-          const text =
-            (el("step2Input")?.value || "")
-              .trim();
-
-          if(text){
-            showStep("tradeStep3");
+  // C-5) Step2「呪文を読み込む」ボタンの確実化
+  (function wireSpellRead(){
+    function startTradeCountdown(sec){
+      const t = el('tradeTimer');
+      const frame = el('dangerFrame');
+      if (!t) return;
+      clearInterval(window.__tradeTimer_fix__);
+      let rest = sec|0;
+      t.textContent = String(rest);
+      t.classList.remove('danger');
+      if (frame) frame.style.display = 'none';
+      window.__tradeTimer_fix__ = setInterval(()=>{
+        rest--;
+        if (t) {
+          t.textContent = String(rest);
+          if (rest<=5) {
+            t.classList.add('danger');
+            if (frame) frame.style.display = 'block';
           }
-
         }
+        if (rest<=0) {
+          clearInterval(window.__tradeTimer_fix__);
+          if (frame) frame.style.display = 'none';
+        }
+      }, 1000);
+    }
+    function install(){
+      const btn = $('#tradeStep2 .tradeAction:not(.danger)');
+      const input = el('step2Input');
+      const errEl = el('step2Error');
+      if (!btn || !input) return;
+      if (btn.__wiredRead__) return;
+      btn.__wiredRead__ = true;
+      btn.onclick = function(){
+        // 既存の公開APIがあれば優先
+        if (typeof window.readPartnerOffer === 'function') {
+          try { window.readPartnerOffer(); return; } catch(_){}
+        }
+        try{
+          const val = (input.value||'').trim();
+          if (!val) {
+            if (errEl) errEl.textContent = '呪文が空です';
+            const s2 = el('tradeStep2'); if (s2){ s2.classList.add('shaking'); setTimeout(()=>s2.classList.remove('shaking'), 360); }
+            return;
+          }
+          const decode = ensureDecode();
+          const data = decode(val); // may throw
+          window.TradeState = window.TradeState || {};
+          TradeState.partnerOffer = {
+            name: data.name || '不明',
+            sell: (window.TradeUtil && typeof TradeUtil.toNum==='function') ? TradeUtil.toNum(data.sell,0) : (Number(data.sell)||0),
+            token: data.token
+          };
+          const ack = { kind:'ack', ok:true, token:data.token };
+          let ackSpell = '';
+          try{
+            ackSpell = encodeSpell(ack);
+          }catch(_){
+            ackSpell = JSON.stringify(ack);
+          }
+          const disp2 = el('spellDisplay2'); if (disp2) disp2.textContent = ackSpell;
+          startTradeCountdown(30);
+          showStep('tradeStep3');
+          try { if (typeof addLog==='function') addLog('🔐 呪文を読み込みました'); } catch(_){}
+          if (errEl) errEl.textContent = '';
+        }catch(e){
+          const msg = (e && (e.message==='invalid-offer' || e.code==='DECODE_FAILED')) ? '呪文が違う/壊れています' : '呪文を読み込めません';
+          if (errEl) errEl.textContent = msg;
+          const s2 = el('tradeStep2'); if (s2){ s2.classList.add('shaking'); setTimeout(()=>s2.classList.remove('shaking'), 360); }
+        }
+      };
+      // 重複ハンドラの誤動作を抑制
+      btn.addEventListener('click', function(ev){ ev.stopImmediatePropagation?.(); }, {capture:false});
+    }
+    const arm = ()=>{ install(); setTimeout(install, 200); setTimeout(install, 800); };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', arm, {once:true});
+    } else {
+      arm();
+    }
+  })();
 
-      },100);
-
-    });
-
-  }
-
-  function wireClose(){
-
-    const popup = el("tradePopup");
-
-    if(!popup) return;
-
-    popup.addEventListener("click",function(e){
-
-      if(e.target === popup){
-        popup.classList.remove("active");
+  // C-6) Step3「OK（実行）」の確実化 + finalizeSwap フォールバック実装
+  (function wireRunButton(){
+    function ensureRun(){
+      const s3 = el('tradeStep3');
+      if (!s3) return;
+      let run = s3.querySelector('.tradeAction.run');
+      if (!run) {
+        run = document.createElement('button');
+        run.className = 'tradeAction run';
+        run.style.marginTop = '8px';
+        run.textContent = 'OK（実行）';
+        s3.appendChild(run);
       }
+      if (run.__wiredRun__) return;
+      run.__wiredRun__ = true;
+      // finalizeSwap フォールバック定義
+      if (typeof window.finalizeSwap !== 'function') {
+        window.finalizeSwap = function(){
+          try{
+            if (!window.GAME || !window.TradeState || !TradeState.offer || !TradeState.partnerOffer) {
+              alert('交換データが不足しています'); return;
+            }
+            const ownedIdx = TradeState.offer.ownedIdx;
+            const snap = TradeState.offer.snapshot || {};
+            const cur = (GAME && GAME.owned) ? GAME.owned[ownedIdx] : null;
+            if (!cur || cur.name !== snap.name) { alert('対象キャラが変更されています'); return; }
+            const removed = GAME.owned.splice(ownedIdx, 1)[0];
+            const incoming = {
+              emoji: '🪽',
+              name: TradeState.partnerOffer.name || '交換受領キャラ',
+              rarity: removed?.rarity || 'TRADE',
+              sell: Number(TradeState.partnerOffer.sell||0),
+              type: removed?.type || 'trade'
+            };
+            GAME.owned.push(incoming);
+            ['tradeStep1','tradeStep2','tradeStep3'].forEach(k=>{ const n=el(k); if(n){ n.classList.remove('active'); n.style.display='none'; } });
+            const s4 = el('tradeStep4'); if (s4){ s4.classList.add('active'); s4.style.display='block'; }
+            const info = el('tradeResultInfo');
+            if (info) info.textContent = `あなたの「${removed?.name||'？'}」と相手の「${incoming.name}」を交換しました。`;
+            if (typeof addLog === 'function') addLog('🔀 交換成立 ▶ '+(removed?.name||'？')+' ⇄ '+incoming.name);
+            if (typeof updateUI === 'function') updateUI();
+            if (typeof save === 'function') save();
+            try { __swapFX && __swapFX(); } catch(_){}
+          } catch(e){
+            alert('交換を完了できません：' + (e?.message||'不明なエラー'));
+          }
+        };
+      }
+      run.onclick = function(){
+        try { window.finalizeSwap(); } catch(e){ alert('交換を完了できません：' + (e?.message||'不明なエラー')); }
+      };
+    }
+    const arm = ()=>{ ensureRun(); setTimeout(ensureRun, 200); setTimeout(ensureRun, 800); };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', arm, {once:true});
+    } else {
+      arm();
+    }
+  })();
 
-    });
+  // C-7) 交換成立演出（軽量FX）
+  (function addSwapFX(){
+    window.__swapFX = function(){
+      const fx = document.createElement('div');
+      fx.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:99999;background:radial-gradient(circle, rgba(0,255,153,.35), transparent 70%);opacity:0;transition:opacity .25s';
+      document.body.appendChild(fx);
+      requestAnimationFrame(()=>{ fx.style.opacity='1'; });
+      setTimeout(()=>{ fx.style.opacity='0'; }, 250);
+      setTimeout(()=>{ fx.remove(); }, 600);
+    };
+    const orig = window.finalizeSwap;
+    if (typeof orig === 'function' && !orig.__fxWrapped) {
+      function wrapped(){ const r = orig.apply(this, arguments); try{ __swapFX(); }catch(e){} return r; }
+      wrapped.__fxWrapped = true;
+      window.finalizeSwap = wrapped;
+    }
+  })();
 
-  }
+  // C-8) 完了画面の「閉じる」やキャンセルの確実化
+  (function wireCloseAndCancel(){
+    function closeTrade(){
+      try { if (typeof window.cancelAll === 'function') window.cancelAll(); } catch(e){}
+      try { if (typeof window.cancelTrade === 'function') window.cancelTrade(); } catch(e){}
+      const tp = el('tradePopup'); if (tp){ tp.classList.remove('active'); tp.style.display='none'; }
+    }
+    const arm = ()=>{
+      const tp = el('tradePopup');
+      if (!tp) return;
+      tp.querySelectorAll('#tradeStep1 .danger, #tradeStep2 .danger, #tradeStep4 .tradeAction, #tradeStep4 button')
+        .forEach(b=>{
+          if (b.__wiredClose) return;
+          b.__wiredClose = true;
+          b.addEventListener('click', closeTrade, { passive:true });
+        });
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', ()=>{ arm(); setTimeout(arm,200); setTimeout(arm,800); }, {once:true});
+    } else {
+      arm(); setTimeout(arm,200); setTimeout(arm,800);
+    }
+  })();
 
-  function repair(){
-
-    wireStep1();
-    wireStep2();
-    wireClose();
-
-  }
-
-  repair();
-
-  const obs = new MutationObserver(()=>{
-    repair();
-  });
-
-  obs.observe(document.body,{
-    childList:true,
-    subtree:true
-  });
+  // C-9) TradeHandlers.openStart の安定化（失敗時のUIフォールバック）
+  (function patchTradeHandlersOpen(){
+    const iv = setInterval(()=>{
+      if (window.TradeHandlers && typeof TradeHandlers.openStart === 'function' && !TradeHandlers.__offlinePatched) {
+        const original = TradeHandlers.openStart;
+        TradeHandlers.openStart = function(domIdx){
+          try {
+            return original(domIdx);
+          } catch(err){
+            console.error(err);
+            const popup = el('tradePopup'); if (popup){ popup.style.display='flex'; popup.classList.add('active'); }
+            const spell = el('spellDisplay');
+            if (spell) {
+              spell.textContent = '交換システム初期化完了。\nもう一度交換ボタンを押してください。';
+            }
+          }
+        };
+        TradeHandlers.__offlinePatched = true;
+        clearInterval(iv);
+      }
+    }, 500);
+  })();
 
 })();
-  
+</script>
+
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
