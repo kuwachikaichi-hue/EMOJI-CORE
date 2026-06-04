@@ -7976,7 +7976,219 @@ window.safeAction = function(fn){
 };
 
 })();
-  
+
+
+// ==== money/sell 正規化・共通ユーティリティ ====
+
+// どこから来た値でも数値へ寄せる共通関数
+function toNum(v, fb = 0) {
+  try {
+    if (v === null || v === undefined) return fb;
+    if (typeof v === 'number') {
+      return Number.isFinite(v) ? v : fb;
+    }
+    if (typeof v === 'bigint') {
+      // BigInt -> Number（安全域外は丸め誤差は許容、無料化バグ回避を優先）
+      const n = Number(v);
+      return Number.isFinite(n) ? n : fb;
+    }
+    if (typeof v === 'string') {
+      // 通貨記号やカンマ、全角、空白などを除去
+      const s = v
+        .replace(/[¥￥,\s]/g, '')
+        .replace(/[^\d.\-eE]/g, ''); // 単位・余計な文字を除去
+      const n = Number(s);
+      return Number.isFinite(n) ? n : fb;
+    }
+    // オブジェクト等は valueOf/Number で試す
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fb;
+  } catch {
+    return fb;
+  }
+}
+
+// 表示用の安全フォーマッタ（NaN/負数を吸収、最低0円を保証）
+function formatSafe(v) {
+  const n = Math.max(0, toNum(v, 0));
+  return '¥' + n.toLocaleString();
+}
+
+// キャラの sell を必ず「最低1円以上の数値」に正規化
+function normalizeSell(c) {
+  if (!c || typeof c !== 'object') return 1;
+  let s = toNum(c.sell, NaN);
+  if (!Number.isFinite(s) || s <= 0) {
+    const sc = toNum(c.sellCrystal, NaN);
+    // sell 未定義なら sellCrystal を円相当として利用（表示用）。最低1円。
+    s = Number.isFinite(sc) ? Math.max(1, Math.floor(sc)) : 1;
+  } else {
+    // 正の有限なら整数化（表示/計算の一貫性）
+    s = Math.floor(s);
+    if (s < 1) s = 1;
+  }
+  c.sell = s;
+  return s;
+}
+
+// 価格系の入力を Number に寄せ、負数/NaN を0に
+function normalizePriceLike(v, fb = 0) {
+  const n = toNum(v, fb);
+  return n > 0 && Number.isFinite(n) ? n : 0;
+}
+
+// ==== obtain / gacha / 描画前の共通ガード ====
+
+// ガチャ価格と残高の比較・減算前に正規化
+function normalizeGachaPricing(opts = {}) {
+  const pc = normalizePriceLike(opts.priceCrystal, 0);
+  const pm = normalizePriceLike(opts.priceMoney, 0);
+  // 片方だけ0で無料になるのを防ぐ：両方0は無料不可、両方>0は併用不可等のポリシーがあるならここで制御
+  // 最小実装：そのまま返却（呼び出し側で同時0や両立をブロックする）
+  return { priceCrystal: pc, priceMoney: pm };
+}
+
+// GAME グローバルの money 等を Number に矯正
+function normalizeGameMoney(GAME) {
+  if (!GAME) return;
+  GAME.money = Math.max(0, Math.floor(toNum(GAME.money, 0)));
+  GAME.crystal = Math.max(0, Math.floor(toNum(GAME.crystal, 0)));
+}
+
+// ==== obtain のパッチ ====
+// 例: 既存の obtain 関数先頭に差し込む
+function obtainPatched(GAME, char) {
+  normalizeGameMoney(GAME);
+  const s = normalizeSell(char); // 必ず先頭で正規化
+  // 1/4 加算の安全化
+  const gain = Math.floor(s / 4);
+  GAME.money = Math.max(0, GAME.money + gain);
+  // 以下、既存の所持登録ロジック...
+  // GAME.owned.push(char) など
+}
+
+// ==== gacha 抽選直後の正規化 ====
+// 例: drawGacha の最後で results を正規化して返す
+function postGachaNormalize(results) {
+  if (!Array.isArray(results)) return results;
+  for (const c of results) normalizeSell(c);
+  return results;
+}
+
+// ==== 描画層のパッチ ====
+
+// showResults: 生値描画をやめ、正規化→formatSafe
+function showResultsPatched(results, container) {
+  if (!Array.isArray(results)) return;
+  for (const c of results) normalizeSell(c);
+  // container.innerHTML を構築する例
+  const html = results.map(c => {
+    const s = c.sell; // normalizeSell 済み
+    return `
+      <div class="card">
+        <div class="name">${String(c.name || '')}</div>
+        <div class="sell">${formatSafe(s)}</div>
+      </div>`;
+  }).join('');
+  if (container) container.innerHTML = html;
+}
+
+// renderInventory: GAME.owned の元データから直接表示
+function renderInventoryPatched(GAME, container) {
+  const list = Array.isArray(GAME?.owned) ? GAME.owned : [];
+  for (const c of list) normalizeSell(c);
+  const html = list.map(c => `
+    <div class="card">
+      <div class="name">${String(c.name || '')}</div>
+      <div class="sell">${formatSafe(c.sell)}</div>
+    </div>`).join('');
+  if (container) container.innerHTML = html;
+}
+
+// ==== MoonRoad 価格計算のパッチ ====
+// 最低価格を設け、normalizeSell 済みの値で一貫計算
+function calcMoonRoadPrice(c, minPrice = 10, multiplier = 10) {
+  const s = normalizeSell(c);
+  const price = Math.max(minPrice, Math.floor(s * multiplier));
+  return price;
+}
+
+// MoonRoad の表示
+function renderMoonRoadCardPatched(c, container) {
+  const price = calcMoonRoadPrice(c);
+  const html = `
+    <div class="moonroad-card">
+      <div class="name">${String(c.name || '')}</div>
+      <div class="price">${formatSafe(price)}</div>
+    </div>`;
+  if (container) container.innerHTML = html;
+}
+
+// MoonRoad の購入判定
+function buyMoonCharacterPatched(GAME, c) {
+  normalizeGameMoney(GAME);
+  const price = calcMoonRoadPrice(c);
+  if (GAME.money < price) return false;
+  GAME.money -= price;
+  // 所持登録等
+  // GAME.owned.push(c)
+  return true;
+}
+
+// ==== DOM テキストからの数値再抽出の撤廃 ====
+// NG例を置換：box.querySelectorAll('.card .sell')... で el.textContent からNumber化 は廃止
+// 代替：元データから再描画する関数
+function recomputeFromDataAndRerender(box, dataList) {
+  if (!box) return;
+  for (const c of dataList) normalizeSell(c);
+  const html = dataList.map(c => `
+    <div class="card">
+      <div class="name">${String(c.name || '')}</div>
+      <div class="sell">${formatSafe(c.sell)}</div>
+    </div>`).join('');
+  box.innerHTML = html;
+}
+
+// ==== gacha 価格/残高の比較・減算の安全化 ====
+// 例: ガチャ起動時
+function canRunGacha(GAME, opts) {
+  normalizeGameMoney(GAME);
+  const { priceCrystal, priceMoney } = normalizeGachaPricing(opts);
+  // 両方0の無料起動や、NaN 比較による無料化を防止
+  if (priceCrystal === 0 && priceMoney === 0) return false;
+  if (priceCrystal > 0 && priceMoney > 0) {
+    // ポリシーに応じてどちらかのみ許可。ここでは両立不可としてブロック
+    return false;
+  }
+  if (priceCrystal > 0) return GAME.crystal >= priceCrystal;
+  if (priceMoney > 0) return GAME.money >= priceMoney;
+  return false;
+}
+
+function payForGacha(GAME, opts) {
+  normalizeGameMoney(GAME);
+  const { priceCrystal, priceMoney } = normalizeGachaPricing(opts);
+  if (priceCrystal > 0) {
+    if (GAME.crystal < priceCrystal) return false;
+    GAME.crystal -= priceCrystal;
+    return true;
+  }
+  if (priceMoney > 0) {
+    if (GAME.money < priceMoney) return false;
+    GAME.money -= priceMoney;
+    return true;
+  }
+  return false;
+}
+
+// ==== 既存関数への統合ガイド ====
+// 1) 抽選関数の末尾: results = postGachaNormalize(results)
+// 2) obtain の先頭: normalizeSell(char) を呼ぶ（本パッチの obtainPatched を参考）
+// 3) 表示関数: format(c.sell) → formatSafe(c.sell) へ差し替え（必ず normalizeSell 済みで）
+// 4) MoonRoad: 価格計算箇所を calcMoonRoadPrice に置換
+// 5) DOMテキストからの金額逆算処理を全削除し、データ配列から再描画
+// 6) gacha: 価格/残高の比較・減算前に normalizeGachaPricing と normalizeGameMoney を必ず通す
+
 </script>
 
 
