@@ -4196,25 +4196,20 @@ let bossNoEscape = 0;
 
 /* ====== 永続化 ====== */
 function save(){ localStorage.setItem('CYBER_EMOJI_CORE_SAVE_V2', JSON.stringify(GAME)); }
-functionfunction load(){
+function load(){
   const data = localStorage.getItem('CYBER_EMOJI_CORE_SAVE_V2');
   if(!data) return;
 
   try{
     const obj = JSON.parse(data);
 
-    if(
-      obj &&
-      (
-        typeof obj.money === 'number' ||
-        typeof obj.money === 'string' ||
-        typeof obj.money === 'bigint'
-      )
-    ){
-      Object.assign(GAME,obj);
-    }else{
-      console.warn("money data invalid");
+    // moneyが壊れていたら読み込まない
+    if(!Number.isFinite(Number(obj.money))){
+      console.warn("money broken in save", obj.money);
+      return;
     }
+
+    Object.assign(GAME, obj);
 
   }catch(e){
     console.warn('save broken');
