@@ -8988,6 +8988,102 @@ renderMoonRoad();
   })();
 })();
 
+// ===== TRADE STEP1 BUTTON FORCE FIX =====
+
+(function(){
+
+  function forceStep2(){
+
+    const step1 = document.getElementById("tradeStep1");
+
+    const step2 = document.getElementById("tradeStep2");
+
+    const popup = document.getElementById("tradePopup");
+
+    if(step1){
+
+      step1.classList.remove("active");
+
+      step1.style.display = "none";
+
+    }
+
+    if(step2){
+
+      step2.classList.add("active");
+
+      step2.style.display = "block";
+
+    }
+
+    if(popup){
+
+      popup.classList.add("active");
+
+      popup.style.display = "flex";
+
+    }
+
+    const err = document.getElementById("step2Error");
+
+    if(err) err.textContent = "";
+
+    const input = document.getElementById("step2Input");
+
+    if(input){
+
+      setTimeout(()=>{
+
+        input.focus();
+
+      },50);
+
+    }
+
+    console.log("✅ Step2 Forced");
+
+  }
+
+  // 関数が無い環境でも動くようにする
+
+  window.tradeStep1ToStep2 = forceStep2;
+
+  function patch(){
+
+    const btn = document.getElementById("step1NextBtn");
+
+    if(!btn) return;
+
+    btn.style.display = "inline-block";
+
+    btn.onclick = function(e){
+
+      if(e){
+
+        e.preventDefault();
+
+        e.stopPropagation();
+
+      }
+
+      forceStep2();
+
+      return false;
+
+    };
+
+  }
+
+  patch();
+
+  setTimeout(patch,200);
+
+  setTimeout(patch,1000);
+
+  setTimeout(patch,3000);
+
+})();
+
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
