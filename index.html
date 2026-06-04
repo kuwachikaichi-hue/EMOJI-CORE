@@ -7073,7 +7073,7 @@ renderMoonRoad();
       try { if (typeof orig === 'function') orig(); } catch(e){}
       try {
         const m = document.getElementById('money');
-        if (m && window.GAME) m.innerText = formatSafe(GAME.money);
+        if (m && window.GAME) m.innerText = String(GAME.money);
       } catch(e){}
       try { if (typeof save === 'function') save(); } catch(e){}
     };
