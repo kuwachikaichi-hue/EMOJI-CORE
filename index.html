@@ -4196,13 +4196,29 @@ let bossNoEscape = 0;
 
 /* ====== 永続化 ====== */
 function save(){ localStorage.setItem('CYBER_EMOJI_CORE_SAVE_V2', JSON.stringify(GAME)); }
-function load(){
+functionfunction load(){
   const data = localStorage.getItem('CYBER_EMOJI_CORE_SAVE_V2');
   if(!data) return;
+
   try{
     const obj = JSON.parse(data);
-    Object.assign(GAME, obj);
-  }catch(e){ console.warn('save broken'); }
+
+    if(
+      obj &&
+      (
+        typeof obj.money === 'number' ||
+        typeof obj.money === 'string' ||
+        typeof obj.money === 'bigint'
+      )
+    ){
+      Object.assign(GAME,obj);
+    }else{
+      console.warn("money data invalid");
+    }
+
+  }catch(e){
+    console.warn('save broken');
+  }
 }
 
 /* ====== ユーティリティ ====== */
