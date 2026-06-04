@@ -914,6 +914,67 @@ button {
 /* 8) アクセシビリティ：小さな文字の可読性強化（控えめ） */
 .small { letter-spacing: 0.2px; }
 
+/* ==== perf-lite.css (追記) ==== */
+
+/* 1) 軽量モード: 高コスト装飾の簡素化 */
+.perf-lite .card,
+.perf-lite .legendGlow,
+.perf-lite .chimeraGlow {
+  box-shadow: none !important;
+  border-color: rgba(255,255,255,0.12) !important;
+}
+.perf-lite .heavenWing,
+.perf-lite .heavenFlash,
+.perf-lite .flash,
+.perf-lite .rainbowFlash,
+.perf-lite [class^="fx_"],
+.perf-lite .particle {
+  opacity: .45 !important;
+  filter: none !important;
+}
+
+/* 2) 低モーション: すべてのアニメ/トランジション停止 */
+.low-motion *,
+.low-motion *::before,
+.low-motion *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* 3) 長大数/桁数の見やすさ最適化（再レイアウト抑制） */
+.num-compact {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+/* 4) 結果ポップアップ 多量描画時のコスト抑制 */
+#results.rendering * {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* 5) スクロール領域の既定最適化（慣性とレイヤ安定） */
+.list, .log, #inventory, .resultGrid {
+  overscroll-behavior: contain;
+  will-change: auto !important;
+}
+
+/* 6) 透明度/ブラー系の高コスト軽減 (ヘッダーのblur抑止オプション) */
+.perf-lite header {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* 7) スティッキー広告の描画負荷軽減 */
+.perf-lite #adBarSticky {
+  box-shadow: none !important;
+}
+
+/* 8) クリック時の視覚: 負荷の低い微増明度のみ */
+button:active {
+  filter: brightness(1.05);
+}
+
 </style>
 <div id="saveDock">
   <button id="btnSaveOpen">保存/読込</button>
@@ -1307,6 +1368,23 @@ onclick="buyDiamondMoney()">
     <div class="bar"><span></span></div>
     <div id="liteLoadingHint" style="font-size:12px;opacity:.8;color:#cfefff;">初回は少し時間がかかることがあります</div>
   </div>
+</div>
+
+<!-- ==== perf-lite.html (追記) ==== -->
+<!-- 軽量トグルバー（ヘッダーのタブ直下など見える位置に設置） -->
+<div id="perfBar" style="display:flex;gap:10px;align-items:center;margin:8px 0;">
+  <label style="display:flex;align-items:center;gap:6px;font-size:12px;opacity:.9;">
+    <input id="perfLiteToggle" type="checkbox" />
+    軽量モード（装飾オフ）
+  </label>
+  <label style="display:flex;align-items:center;gap:6px;font-size:12px;opacity:.9;">
+    <input id="perfMotionToggle" type="checkbox" />
+    アニメ停止
+  </label>
+  <label style="display:flex;align-items:center;gap:6px;font-size:12px;opacity:.9;">
+    <input id="perfCompactMoney" type="checkbox" />
+    金額の簡易表示（K/M/B/T）
+  </label>
 </div>
 
 <script>
@@ -7787,7 +7865,258 @@ renderMoonRoad();
     setTimeout(wire, 800);
   }
 })();
-  
+
+/* ==== perf-lite.js (追記) ==== */
+(function PerfLitePatch(){
+  if (window.__perfLiteApplied__) return;
+  window.__perfLiteApplied__ = true;
+
+  // 0) ユーティリティ
+  const $ = s => document.querySelector(s);
+  const on = (el, ev, fn, opt)=> el && el.addEventListener(ev, fn, opt||{passive:true});
+
+  // 1) 軽量モード/アニメ停止のトグルと永続化
+  const liteKey = 'cec-perf-lite';
+  const motionKey = 'cec-low-motion';
+  const moneyKey = 'cec-compact-money';
+
+  function setLite(v){ document.body.classList.toggle('perf-lite', !!v); localStorage.setItem(liteKey, v?'1':'0'); }
+  function setLowMotion(v){ document.body.classList.toggle('low-motion', !!v); localStorage.setItem(motionKey, v?'1':'0'); }
+  function setCompactMoney(v){ localStorage.setItem(moneyKey, v?'1':'0'); }
+
+  function bootToggles(){
+    const lite = localStorage.getItem(liteKey) === '1';
+    const lm = localStorage.getItem(motionKey) === '1';
+    const cm = localStorage.getItem(moneyKey) === '1';
+    setLite(lite);
+    setLowMotion(lm);
+    setCompactMoney(cm);
+    const t1 = $('#perfLiteToggle'); if (t1) { t1.checked = lite; on(t1,'change', ()=>setLite(t1.checked)); }
+    const t2 = $('#perfMotionToggle'); if (t2) { t2.checked = lm; on(t2,'change', ()=>setLowMotion(t2.checked)); }
+    const t3 = $('#perfCompactMoney'); if (t3) { t3.checked = cm; on(t3,'change', ()=>setCompactMoney(t3.checked)); }
+  }
+
+  // 2) 金額の簡易表示（K/M/B/T/aa…短縮）: 再描画を最小限に
+  function formatCompact(n){
+    // 既存Number/BigInt/文字列混在に耐性
+    const num = (typeof n === 'number' && isFinite(n)) ? n :
+                (typeof n === 'bigint' ? Number(n) :
+                (typeof n === 'string' ? Number(n.replace(/[,_\s¥円]/g,'')) : 0));
+    const abs = Math.abs(num);
+    const units = [
+      {v:1e12, s:'T'},
+      {v:1e9,  s:'B'},
+      {v:1e6,  s:'M'},
+      {v:1e3,  s:'K'}
+    ];
+    for (const u of units) if (abs >= u.v) return '¥' + (num/u.v).toFixed(2).replace(/\.?0+$/,'') + u.s;
+    return '¥' + (Number(num)||0).toLocaleString();
+  }
+
+  // money表示の差分更新（250ms間引き）
+  (function patchHeaderMoney(){
+    const moneyEl = document.getElementById('money');
+    const lpEl = document.getElementById('lp');
+    const crystalEl = document.getElementById('crystal');
+    let last = { m:null, l:null, c:null };
+
+    setInterval(()=>{
+      try{
+        if (!window.GAME) return;
+        const compact = localStorage.getItem(moneyKey)==='1';
+        const curM = compact ? formatCompact(GAME.money) :
+                               ('¥' + Number(GAME.money||0).toLocaleString());
+        const curL = (GAME.lp||0)+' LP';
+        const curC = (GAME.crystal||0);
+        if (moneyEl && curM !== last.m) { last.m = curM; moneyEl.textContent = curM; moneyEl.classList.add('num-compact'); }
+        if (lpEl && curL !== last.l) { last.l = curL; lpEl.textContent = curL; }
+        if (crystalEl && curC !== last.c) { last.c = curC; crystalEl.textContent = curC; }
+      }catch(_){}
+    }, 250);
+  })();
+
+  // 3) updateUI のバッチ化（1フレーム1回に集約）
+  (function batchUpdateUI(){
+    const orig = window.updateUI || function(){};
+    let scheduled = false;
+    window.updateUI = function(){
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(()=>{
+        scheduled = false;
+        try { orig(); } catch(_){}
+      });
+    };
+  })();
+
+  // 4) ログ描画の差分化 + 制限（最大200件、非アクティブ時はスキップ）
+  (function patchRenderLogs(){
+    const orig = window.renderLogs || function(){};
+    let lastLen = -1;
+    window.renderLogs = function(){
+      try{
+        const visible = document.getElementById('log')?.classList.contains('active');
+        const cur = (window.GAME?.logs?.length) || 0;
+        if (!visible && cur === lastLen) return; // 非可視かつ変化なしならskip
+        lastLen = cur;
+      }catch(_){}
+      try { orig(); } catch(_){}
+    };
+  })();
+
+  // 5) インベントリの仮想化/差分更新（大規模時だけ最適化）
+  (function virtualizeInventory(){
+    const orig = window.renderInventory || function(){};
+    window.renderInventory = function(){
+      const box = document.getElementById('inventory');
+      if (!box) { try{ orig(); }catch(_){ } return; }
+
+      const MAX_RENDER = 200; // 表示上限（必要に応じて調整）
+      const owned = Array.isArray(GAME?.owned) ? GAME.owned : [];
+      // 大量（> MAX_RENDER）なら先頭MAX_RENDER件だけ描画し、残数をバッジ表示
+      if (owned.length > MAX_RENDER) {
+        const reversed = owned.slice(-MAX_RENDER).map((c,i)=>({c,i}));
+        // 一括HTML生成（DocumentFragmentでもOK）
+        let html = '';
+        for (let k = reversed.length - 1; k >= 0; k--) {
+          const rec = reversed[k]; const c = rec.c;
+          const glow = (c.rarity==='LEGEND') ? ' legendGlow' :
+                       ((c.rarity==='CHIMERA' || c.rarity==='EVENT') ? ' chimeraGlow' : '');
+          html += `
+            <div class="card${glow}">
+              <div class="emoji">${c.emoji||'❔'}</div>
+              <div class="name">${c.name||'？？？'}</div>
+              <div class="rarity">${c.rarity||''}</div>
+              <div class="sell">売却 ¥${Number(c.sell||0).toLocaleString()}</div>
+              <button class="sellBtn">売却</button>
+              <button class="tradeBtn">交換</button>
+            </div>`;
+        }
+        box.innerHTML = html +
+          `<div class="small" style="opacity:.7;text-align:center;margin:8px 0;">
+             表示を ${MAX_RENDER} 件に制限中（所持 ${owned.length}） - 軽量モード
+           </div>`;
+        return;
+      }
+      // 通常件数は既存レンダラに任せる
+      try { orig(); } catch(_){}
+    };
+  })();
+
+  // 6) ガチャ結果の大量描画を最適化（24枚以上で一括HTML）
+  ;(function patchShowResults(){
+    const orig = window.showResults || function(){};
+    window.showResults = function(results){
+      const popup = document.getElementById('popup');
+      const box = document.getElementById('results');
+      if (!popup || !box) { try{ orig(results); }catch(_){ } return; }
+
+      const list = Array.isArray(results) ? results : [];
+      const HEAVY = 24;
+      if (list.length < HEAVY) { try{ orig(results); }catch(_){ } return; }
+
+      box.classList.add('rendering');
+      let html = '';
+      for (let i=0;i<list.length;i++){
+        const c = list[i]||{};
+        const r = c.rarity||'';
+        const glow = (r==='LEGEND') ? ' legendGlow' : ((r==='CHIMERA'||r==='EVENT')?' chimeraGlow':'');
+        const price = '¥' + Number(c.sell||0).toLocaleString();
+        html += `<div class="card${glow}">
+          <div class="emoji">${c.emoji||'❓'}</div>
+          <div class="name">${c.name||''}</div>
+          <div class="rarity">${r}</div>
+          <div class="sell">${price}</div>
+        </div>`;
+      }
+      box.innerHTML = html;
+      popup.classList.add('active');
+      requestAnimationFrame(()=> box.classList.remove('rendering'));
+    };
+  })();
+
+  // 7) 高コストFXの同時上限/掃除（60→30）
+  ;(function pruneFX(){
+    const LIMIT = 30;
+    setInterval(()=>{
+      try{
+        const nodes = document.querySelectorAll('.heavenWing,.heavenFlash,.flash,.rainbowFlash,[class^="fx_"],.particle');
+        if (nodes.length > LIMIT) {
+          const rm = nodes.length - LIMIT;
+          for (let i=0;i<rm;i++) {
+            const n = nodes[i]; n?.parentNode?.removeChild(n);
+          }
+        }
+      }catch(_){}
+    }, 700);
+  })();
+
+  // 8) setIntervalの乱立抑制（同名キーで一意化）
+  ;(function unifyIntervals(){
+    const timers = new Map();
+    window.__setNamedInterval = function(name, fn, ms){
+      if (timers.has(name)) clearInterval(timers.get(name));
+      const id = setInterval(fn, ms);
+      timers.set(name, id);
+      return id;
+    };
+    window.__clearNamedInterval = function(name){
+      const id = timers.get(name);
+      if (id) { clearInterval(id); timers.delete(name); }
+    };
+  })();
+
+  // 9) ログ/ムーン/ボスUI更新などは可視タブ優先
+  ;(function throttlePanels(){
+    const isVisible = id => document.getElementById(id)?.classList.contains('active');
+    // ログ（1.2s）
+    window.__setNamedInterval('perf_log_render', ()=>{
+      if (isVisible('log')) { try{ window.renderLogs && window.renderLogs(); }catch(_){ } }
+    }, 1200);
+    // ボスバー（350ms）
+    window.__setNamedInterval('perf_boss_bar', ()=>{
+      if (isVisible('boss')) { try{ window.updateBossBar && window.updateBossBar(); }catch(_){ } }
+    }, 350);
+    // ムーンロード（1s）
+    window.__setNamedInterval('perf_moon', ()=>{
+      try{ window.updateMoonRoad && window.updateMoonRoad(); }catch(_){ }
+    }, 1000);
+    // ダイヤルーム（60s）
+    window.__setNamedInterval('perf_diamond', ()=>{
+      if (isVisible('diamondRoom')) { try{ window.updateDiamondRoom && window.updateDiamondRoom(); }catch(_){ } }
+    }, 60000);
+  })();
+
+  // 10) ガチャ実行直前後で軽量モードを短時間オン（演出の負荷を和らげる）
+  ;(function wrapHeavyGachas(){
+    const names = [
+      'normalGacha','lifeGacha','dimensionGacha','animalArmyGacha','fairyGacha',
+      'robotPetGacha','tengokuGacha','tsuyuGacha','rainbowDragonGacha','foodGacha',
+      'miniPetCrystalGacha','fairyTaleGacha','roboWarriorGacha','crystalGolemGacha',
+      'earthStarGacha','puddingGacha','birdFishUltimateGacha','whiteWeatherGacha',
+      'yofukashiGacha','zombieSoulGacha','frontierGacha'
+    ];
+    names.forEach(n=>{
+      const f = window[n];
+      if (typeof f !== 'function') return;
+      window[n] = function(){
+        // 軽量化一時ON
+        const prevLite = document.body.classList.contains('perf-lite');
+        document.body.classList.add('perf-lite');
+        try { return f.apply(this, arguments); }
+        finally { setTimeout(()=>{ if (!prevLite) document.body.classList.remove('perf-lite'); }, 900); }
+      };
+    });
+  })();
+
+  // 11) 初期ブート：トグル適用
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootToggles, {once:true});
+  } else {
+    bootToggles();
+  }
+})();
+
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
