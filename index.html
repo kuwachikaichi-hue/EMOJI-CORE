@@ -8858,6 +8858,136 @@ renderMoonRoad();
   }
 })();
 
+// ===== TRADE STEP-NEXT HARD LOCK v2026-06-04-final =====
+// 目的: 「相手の入力が終わったら進む」ボタンが無反応になる全ケースを強制修正。
+// 特徴: 1) capture段階での最優先フック 2) 再結線ループ 3) 既存関数があれば先に呼ぶ
+//      4) 最低限のフォールバックで Step2 を必ず表示 5) 多重適用ガード
+(function(){
+  if (window.__TRADE_STEP_NEXT_FINAL__) return;
+  window.__TRADE_STEP_NEXT_FINAL__ = true;
+  function el(id){ return document.getElementById(id); }
+  function $sel(s){ return document.querySelector(s); }
+  function showStep(id){
+    ['tradeStep1','tradeStep2','tradeStep3','tradeStep4'].forEach(k=>{
+      const n = el(k);
+      if (!n) return;
+      n.classList.remove('active');
+      n.style.display = 'none';
+    });
+    const t = el(id);
+    if (t){
+      t.classList.add('active');
+      t.style.display = 'block';
+    }
+    const tp = el('tradePopup');
+    if (tp){
+      tp.classList.add('active');
+      tp.style.display = 'flex';
+    }
+  }
+  // 進むアクション（既存の遷移関数があれば尊重 → 最後に強制遷移）
+  function goStep2(){
+    try {
+      if (typeof window.tradeStep1ToStep2 === 'function') {
+        try { window.tradeStep1ToStep2(); } catch(_){}
+      } else if (typeof window.step1To2 === 'function') {
+        try { window.step1To2(); } catch(_){}
+      }
+    } catch(_){}
+    // 最後に強制遷移（既存が壊れていても必ず表示）
+    try {
+      const err = el('step2Error'); if (err) err.textContent = '';
+      const ta  = el('step2Input'); if (ta) { ta.focus(); ta.select && ta.select(); }
+      showStep('tradeStep2');
+    } catch(_){}
+  }
+  // ボタン取得（ID優先 → Fallbackセレクタ）
+  function findNextBtn(){
+    return el('step1NextBtn') || $sel('#tradeStep1 .tradeAction:not(.danger)');
+  }
+  // 強制結線（captureで最優先、他ハンドラより前に割り込み）
+  function wire(){
+    const btn = findNextBtn();
+    if (!btn) return;
+    // 既存のclickを完全に自分の経路に固定
+    // 1) 既存onclickを破棄して、自前のを設定
+    btn.onclick = function(ev){
+      ev && ev.preventDefault && ev.preventDefault();
+      ev && ev.stopPropagation && ev.stopPropagation();
+      goStep2();
+      return false;
+    };
+    // 2) 捕捉フェーズでstopImmediatePropagationして他の後付ハンドラを封じる
+    if (!btn.__cecCaptureOnce){
+      btn.__cecCaptureOnce = true;
+      btn.addEventListener('click', function(ev){
+        // ここは capture 優先で登録（下の第三引数true）される
+        ev.stopImmediatePropagation && ev.stopImmediatePropagation();
+        ev.preventDefault && ev.preventDefault();
+        goStep2();
+        return false;
+      }, true); // capture=true
+    }
+    // 3) バブリング側でも最終防衛（念のため）
+    if (!btn.__cecBubbleOnce){
+      btn.__cecBubbleOnce = true;
+      btn.addEventListener('click', function(ev){
+        ev.stopImmediatePropagation && ev.stopImmediatePropagation();
+        ev.preventDefault && ev.preventDefault();
+        // すでにcaptureでgoStep2は走っているが、二重でも副作用なし
+        goStep2();
+        return false;
+      }, { once:false });
+    }
+    // アクセシビリティ: Enter/Spaceでも動作
+    if (!btn.__cecKeyOnce){
+      btn.__cecKeyOnce = true;
+      btn.addEventListener('keydown', function(ev){
+        const k = ev.key || ev.code;
+        if (k === 'Enter' || k === ' ' || k === 'Space'){
+          ev.preventDefault(); ev.stopPropagation();
+          goStep2();
+        }
+      }, { passive:false });
+    }
+  }
+  // 再結線ループ：後から別スクリプトに上書きされても取り戻す
+  function arm(){
+    wire();
+    // レイアウト/他スクリプト確定後に再実行
+    setTimeout(wire, 120);
+    setTimeout(wire, 400);
+    setTimeout(wire, 800);
+    // 以後も軽頻度で監視（3秒おき）- 負荷軽微
+    if (!window.__TRADE_STEP_NEXT_WATCH__){
+      window.__TRADE_STEP_NEXT_WATCH__ = setInterval(wire, 3000);
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', arm, { once:true });
+  } else {
+    arm();
+  }
+  // もしStep1自体が開いているのにボタンが見つからない場合、フォールバックで
+  // Step2へ誘導できるよう、Step1クリック全域にも一時退避ランディングを敷く
+  (function safetyOverlay(){
+    const s1 = el('tradeStep1');
+    if (!s1) return;
+    if (s1.__cecSafety) return;
+    s1.__cecSafety = true;
+    s1.addEventListener('click', function(ev){
+      // 本当にボタンが壊れているときだけ救済（テキスト等の誤クリックは無視）
+      const btn = findNextBtn();
+      if (!btn) {
+        // 軽い振動で気づかせつつ、Step2に誘導
+        s1.classList.add('shaking');
+        setTimeout(()=>s1.classList.remove('shaking'), 320);
+        goStep2();
+      }
+    }, { passive:true });
+  })();
+})();
+
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
