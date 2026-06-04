@@ -9987,5 +9987,370 @@ window.updateUI = function(){
 
 })();
 </script>
+
+<script>
+/*
+  CEC Neutralizer Patch v2026-06-04
+  - 重複・競合しやすい関数/タイマー/ラッパを無効化
+  - 以降に置く「Final Unifier」を確実に効かせるための前処理
+*/
+
+(function neutralize() {
+  if (window.__CEC_NEUTRALIZED__) return;
+  window.__CEC_NEUTRALIZED__ = true;
+
+  // 1) 多重再定義が確認されたコア関数群を一旦「空ラッパ」にして衝突を止める
+  const noop = function() {};
+  const keep = (name) => Object.defineProperty(window, name, { value: window[name] || noop, writable: true });
+
+  // 競合の温床
+  [
+    'obtain','gacha','showResults','renderInventory','renderMoonRoad',
+    'buyMoonCharacter','updateUI',
+    'frontierGacha','puddingGacha','birdFishUltimateGacha','whiteWeatherGacha','miniPetCrystalGacha','fairyTaleGacha'
+  ].forEach(keep);
+
+  // 2) 既存で走っている setInterval のうち、明確にパフォーマンスへ悪影響の大掃除系を停止
+  //    - 安全側：以降のUnifierが必要なタイマーを再セットします
+  try {
+    // グローバルに名付け管理されているものを止める
+    if (window.__clearNamedInterval) {
+      ['perf_fx_prune','perf_header_nums','perf_log_render','perf_boss_bar','perf_moon','perf_diamond']
+        .forEach(k => { try { window.__clearNamedInterval(k); } catch {} });
+    }
+  } catch {}
+
+  // 3) 重複ポップアップIDを強制的に一つへ
+  function dedupeId(id) {
+    const nodes = document.querySelectorAll('#' + id);
+    if (nodes.length <= 1) return;
+    for (let i = 0; i < nodes.length - 1; i++) {
+      nodes[i].id = id + '_old_' + i;
+      nodes[i].style.display = 'none';
+    }
+  }
+  dedupeId('ezPopup');
+  dedupeId('tradePopup');
+
+  // 4) アドバー/FXが操作をブロックしないよう、ポインターイベントを統一
+  const killSelectors = [
+    '.heavenFlash','.flash','.rainbowFlash','[class^="fx_"]','.particle',
+    '#loadingOverlay','#liteLoading','#dangerFrame'
+  ];
+  killSelectors.forEach(sel => {
+    document.querySelectorAll(sel).forEach(el => { el.style.pointerEvents = 'none'; });
+  });
+  const ad = document.getElementById('adBarSticky');
+  if (ad) { ad.style.pointerEvents = 'none'; ad.style.zIndex = '80'; const row = ad.querySelector('.adRow'); if (row) row.style.pointerEvents = 'auto'; }
+
+  // 5) data-keep-disabled が無い disabled ボタンは誤ブロック解除
+  document.querySelectorAll('button[disabled]:not([data-keep-disabled])').forEach(b => { b.disabled = false; b.style.pointerEvents = 'auto'; b.style.opacity = '1'; });
+
+  // 6) 数値ユーティリティの乱立を止める（以降Unifierで一本化）
+  ['toNum','formatSafe','normalizeSell'].forEach(n => { try { delete window[n]; } catch {} });
+
+})();
+</script>
+
+<script>
+/*
+  CEC Final Unifier v2026-06-04
+  - コアユーティリティ/経済処理/ガチャ/UI描画を単一実装に統一
+  - 価格0/NaN/無料化バグを恒久防止
+  - MoonRoad/Frontier/EZ/一般ガチャの互換を維持
+*/
+
+(function CEC_Final_Unifier() {
+  if (window.__CEC_FINAL_UNIFIER__) return;
+  window.__CEC_FINAL_UNIFIER__ = true;
+
+  // ========= 1) 単一ユーティリティ =========
+  function toNum(v, fb = 0) {
+    try {
+      if (v == null) return fb;
+      if (typeof v === 'number') return Number.isFinite(v) ? v : fb;
+      if (typeof v === 'bigint') { const n = Number(v); return Number.isFinite(n) ? n : fb; }
+      if (typeof v === 'string') {
+        const n = Number(v.replace(/[,_\s¥円]/g, ''));
+        return Number.isFinite(n) ? n : fb;
+      }
+      if (typeof v === 'object' && v.valueOf) {
+        const n = Number(v.valueOf());
+        return Number.isFinite(n) ? n : fb;
+      }
+      return fb;
+    } catch { return fb; }
+  }
+  function yen(v) {
+    const n = Math.max(0, toNum(v, 0));
+    try { return '¥' + n.toLocaleString(); } catch { return '¥' + String(n); }
+  }
+  function normalizeSell(c) {
+    if (!c || typeof c !== 'object') return 1;
+    let s = toNum(c.sell, NaN);
+    if (!Number.isFinite(s) || s <= 0) {
+      const sc = toNum(c.sellCrystal, NaN);
+      s = Number.isFinite(sc) ? Math.max(1, Math.floor(sc)) : 1;
+    } else {
+      s = Math.max(1, Math.floor(s));
+    }
+    c.sell = s;
+    return s;
+  }
+  window.toNum = toNum;
+  window.formatSafe = yen;
+  window.normalizeSell = normalizeSell;
+
+  function ensureGAME() {
+    if (!window.GAME || typeof GAME !== 'object') {
+      window.GAME = {
+        money: 100000, lp: 0, crystal: 0, baseCap: 5,
+        owned: [], dex: [], achievements: [],
+        research: { luck:0, legend:0, event:0, chimera:0, life:0, cap:0, auto:0, time:0 },
+        logs: [], moonRoad: [], diamondStored: 0, lastMoonRefresh: 0, lastDiamondGain: Date.now(),
+        emozoo: 0, buffs: {}
+      };
+    }
+    GAME.money   = Math.max(0, toNum(GAME.money, 0));
+    GAME.crystal = Math.max(0, toNum(GAME.crystal, 0));
+    GAME.lp      = Math.max(0, toNum(GAME.lp, 0));
+    GAME.baseCap = Math.max(1, toNum(GAME.baseCap, 5));
+    GAME.owned   = Array.isArray(GAME.owned) ? GAME.owned : [];
+    GAME.dex     = Array.isArray(GAME.dex) ? GAME.dex : [];
+    GAME.achievements = Array.isArray(GAME.achievements) ? GAME.achievements : [];
+  }
+
+  // ========= 2) ログ/セーブ/UI =========
+  function addLog(msg) {
+    ensureGAME();
+    const line = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+    GAME.logs.push(line);
+    const log = document.getElementById('logs');
+    if (log) log.innerHTML = GAME.logs.slice(-200).reverse().join('<br>');
+  }
+  window.addLog = window.addLog || addLog;
+
+  function save() {
+    try { localStorage.setItem('CYBER_EMOJI_CORE_SAVE_V2', JSON.stringify(GAME)); } catch {}
+  }
+  window.save = window.save || save;
+
+  function updateUI() {
+    ensureGAME();
+    const m = document.getElementById('money');
+    const l = document.getElementById('lp');
+    const c = document.getElementById('crystal');
+    const cap = document.getElementById('capacity');
+    const ac = document.getElementById('achieveCount');
+    const dx = document.getElementById('indexCount');
+    const ez = document.getElementById('emozoo');
+
+    if (m)  m.textContent  = yen(GAME.money);
+    if (l)  l.textContent  = GAME.lp + ' LP';
+    if (c)  c.textContent  = GAME.crystal;
+    if (cap) cap.textContent = (GAME.owned.length) + ' / ' + GAME.baseCap;
+    if (ac) ac.textContent = GAME.achievements.length;
+    if (dx) dx.textContent = GAME.dex.length;
+    if (ez) ez.textContent = (toNum(GAME.emozoo, 0)).toLocaleString() + ' EZ';
+
+    // 重要：セーブ
+    save();
+  }
+  window.updateUI = updateUI;
+
+  // ========= 3) obtain（確定一実装） =========
+  window.obtain = function(char) {
+    ensureGAME();
+    const s = normalizeSell(char);
+    GAME.owned.push(char);
+    GAME.money = Math.max(0, GAME.money + Math.floor(s / 4));
+    if (char?.name && !GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+    addLog('獲得 ▶ ' + (char?.name || '？'));
+    updateUI();
+  };
+
+  // ========= 4) showResults / renderInventory（確定一実装） =========
+  window.showResults = function(results) {
+    ensureGAME();
+    const list = Array.isArray(results) ? results : [];
+    const popup = document.getElementById('popup');
+    const box   = document.getElementById('results');
+    if (!popup || !box) return;
+    box.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    list.forEach(c => {
+      normalizeSell(c);
+      const div = document.createElement('div');
+      div.className = 'card';
+      if (c.rarity === 'LEGEND') div.classList.add('legendGlow');
+      if (c.rarity === 'CHIMERA' || c.rarity === 'EVENT') div.classList.add('chimeraGlow');
+      div.innerHTML = `
+        <div class="emoji">${c.emoji || '❓'}</div>
+        <div class="name">${c.name || ''}</div>
+        <div class="rarity">${c.rarity || ''}</div>
+        <div class="sell">${yen(c.sell)}</div>
+      `;
+      frag.appendChild(div);
+    });
+    box.appendChild(frag);
+    popup.classList.add('active');
+  };
+
+  window.renderInventory = function() {
+    ensureGAME();
+    const box = document.getElementById('inventory');
+    if (!box) return;
+    box.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    GAME.owned.slice().reverse().forEach(c => {
+      normalizeSell(c);
+      const div = document.createElement('div');
+      div.className = 'card';
+      if (c.rarity === 'LEGEND') div.classList.add('legendGlow');
+      if (c.rarity === 'CHIMERA' || c.rarity === 'EVENT') div.classList.add('chimeraGlow');
+      div.innerHTML = `
+        <div class="emoji">${c.emoji || '❓'}</div>
+        <div class="name">${c.name || ''}</div>
+        <div class="rarity">${c.rarity || ''}</div>
+        <div class="sell">売却 ${yen(c.sell)}</div>
+        <button class="sellBtn">売却</button>
+        <button class="tradeBtn">交換</button>
+      `;
+      // 売却
+      div.querySelector('.sellBtn').addEventListener('click', () => {
+        const idx = GAME.owned.findIndex(x => x === c);
+        if (idx >= 0) {
+          GAME.money += c.sell;
+          const name = c.name;
+          GAME.owned.splice(idx, 1);
+          addLog('💸 売却 ▶ ' + name);
+          updateUI();
+          renderInventory();
+        }
+      });
+      frag.appendChild(div);
+    });
+    box.appendChild(frag);
+  };
+
+  // ========= 5) MoonRoad（価格一元化：price = max(10, sell*10)） =========
+  function moonPrice(c) { return Math.max(10, normalizeSell(c) * 10); }
+
+  window.renderMoonRoad = function() {
+    ensureGAME();
+    const box = document.getElementById('moonRoadShop');
+    if (!box) return;
+    box.innerHTML = '';
+    GAME.moonRoad.forEach((c, idx) => {
+      normalizeSell(c);
+      const price = moonPrice(c);
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.innerHTML = `
+        <div class="emoji">${c.emoji || '❓'}</div>
+        <div class="name">${c.name || ''}</div>
+        <div class="rarity">${c.rarity || ''}</div>
+        <div class="sell">${yen(price)}</div>
+        <button class="sellBtn">購入</button>
+      `;
+      div.querySelector('.sellBtn').addEventListener('click', () => window.buyMoonCharacter(idx));
+      box.appendChild(div);
+    });
+  };
+
+  window.buyMoonCharacter = function(index) {
+    ensureGAME();
+    const c = GAME.moonRoad?.[index];
+    if (!c) return;
+    const price = moonPrice(c);
+    if (GAME.money < price) { alert('お金不足'); return; }
+    if (GAME.owned.length >= GAME.baseCap) { alert('基地容量不足'); return; }
+    GAME.money -= price;
+    obtain(JSON.parse(JSON.stringify(c)));
+    GAME.moonRoad.splice(index, 1);
+    renderMoonRoad();
+    updateUI();
+  };
+
+  // ========= 6) gacha（確定一実装：無料化/二重コスト防止） =========
+  window.gacha = function(pool, opts = {}) {
+    ensureGAME();
+    const count = Math.max(1, toNum(opts.count, 1));
+    const pc = toNum(opts.priceCrystal, 0);
+    const pm = toNum(opts.priceMoney, 0);
+
+    if (!Array.isArray(pool) || pool.length === 0) { alert('内部エラー：ガチャプールが空'); return; }
+    if (GAME.owned.length + count > GAME.baseCap) { alert('基地容量不足'); return; }
+    if ((pc <= 0 && pm <= 0) || (pc > 0 && pm > 0)) { alert('コスト設定エラー'); return; }
+
+    if (pc > 0) {
+      if (GAME.crystal < pc) { alert('💎不足'); return; }
+      GAME.crystal -= pc;
+    } else {
+      if (GAME.money < pm) { alert('お金不足'); return; }
+      GAME.money -= pm;
+    }
+
+    const results = [];
+    for (let i = 0; i < count; i++) {
+      const base = pool[Math.floor(Math.random() * pool.length)] || {};
+      const ch = JSON.parse(JSON.stringify(base));
+      normalizeSell(ch);
+      results.push(ch);
+      obtain(ch);
+    }
+
+    try { (opts.effects || []).forEach(f => { if (typeof f === 'function') f(); }); } catch {}
+    updateUI();
+    showResults(results);
+    return results;
+  };
+
+  // ========= 7) 特殊ガチャの価格Number固定（指数/BigInt混入対策） =========
+  const wrapMoney = (fnName, pool, price, effect) => {
+    window[fnName] = function() { return gacha(pool, { priceMoney: Number(price), effects: effect ? [effect] : [] }); };
+  };
+  const wrapCrystal = (fnName, pool, price, effect) => {
+    window[fnName] = function() { return gacha(pool, { priceCrystal: Number(price), effects: effect ? [effect] : [] }); };
+  };
+
+  // 既存のプール/演出がある想定で安全ラップ（存在しなければ何もしない）
+  if (window.PUDDING_POOL)              wrapMoney('puddingGacha', PUDDING_POOL, 1e28, window.puddingEffect);
+  if (window.BIRD_FISH_ULTIMATE_POOL)   wrapMoney('birdFishUltimateGacha', BIRD_FISH_ULTIMATE_POOL, 1e28, window.birdFishSplashEffect);
+  if (window.WHITE_WEATHER_POOL)        wrapMoney('whiteWeatherGacha', WHITE_WEATHER_POOL, 3e18, window.whiteWeatherEffect);
+  if (window.MINI_PET_CRYSTAL_POOL)     wrapMoney('miniPetCrystalGacha', MINI_PET_CRYSTAL_POOL, 2e17, window.prismShine);
+  if (window.FAIRY_TALE_POOL)           wrapMoney('fairyTaleGacha', FAIRY_TALE_POOL, 3e17, window.starlightBloom);
+  if (window.YOFUKASHI_POOL)            wrapCrystal('yofukashiGacha', YOFUKASHI_POOL, 20000, window.screenFlash);
+  if (window.ZOMBIE_SOUL_POOL)          wrapCrystal('zombieSoulGacha', ZOMBIE_SOUL_POOL, 20000, window.warningEffect);
+  if (window.ROBO_WARRIOR)              wrapCrystal('roboWarriorGacha', ROBO_WARRIOR, 4000, ()=>{ window.roboBootUp&&roboBootUp(); window.chainClash&&chainClash(); window.overdriveFlash&&overdriveFlash(); window.empBurst&&empBurst(); });
+  if (window.CRYSTAL_GOLEM)             wrapCrystal('crystalGolemGacha', CRYSTAL_GOLEM, 4000, ()=>{ window.crystalSpawn&&crystalSpawn(); window.prismShine&&prismShine(); window.shatterPulse&&shatterPulse(); window.gemRain&&gemRain(); });
+  if (window.EARTH_STAR)                wrapCrystal('earthStarGacha', EARTH_STAR, 4000, ()=>{ window.quakeRumble&&quakeRumble(); window.orbitSweep&&orbitSweep(); window.gravityWell&&gravityWell(); window.starlightBloom&&starlightBloom(); });
+
+  // Frontier（EZ100消費）
+  window.frontierGacha = function() {
+    ensureGAME();
+    if (!Array.isArray(window.FRONTIER_POOL) || FRONTIER_POOL.length === 0) { alert('内部エラー：FRONTIER_POOLが空'); return; }
+    if (toNum(GAME.emozoo, 0) < 100) { alert('EZ不足（必要:100）'); return; }
+    if (GAME.owned.length >= GAME.baseCap) { alert('基地容量不足'); return; }
+    GAME.emozoo = toNum(GAME.emozoo, 0) - 100;
+    const ch = JSON.parse(JSON.stringify(FRONTIER_POOL[Math.floor(Math.random()*FRONTIER_POOL.length)]));
+    normalizeSell(ch);
+    obtain(ch);
+    try { window.frontierEffect && frontierEffect(); } catch {}
+    showResults([ch]);
+    updateUI();
+  };
+
+  // ========= 8) 初期同期 =========
+  // 重要UIの可視・描画
+  document.addEventListener('DOMContentLoaded', () => {
+    try { renderInventory(); } catch {}
+    try { renderMoonRoad(); } catch {}
+    try { updateUI(); } catch {}
+  }, { once: true });
+
+})();
+</script>
+
 </body>
 </html>
