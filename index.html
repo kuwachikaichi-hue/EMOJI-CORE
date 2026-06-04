@@ -7347,6 +7347,147 @@ renderMoonRoad();
   }, 1500);
 })();
 
+// ==== FIX: tradeStep2 の「呪文を読み込む」ボタンを確実に有効化 ====
+(function fixTradeReadButtonWire(){
+  const btn = document.querySelector('#tradeStep2 .tradeAction:not(.danger)');
+  if (!btn) return;
+  // readPartnerOffer をグローバル化（未公開の場合のラッパ）
+  if (typeof window.readPartnerOffer !== 'function') {
+    window.readPartnerOffer = function(){
+      try {
+        // TradeHandlers 内部の関数を呼べない環境向けの確実実装
+        const ta = document.getElementById('step2Input');
+        const err = document.getElementById('step2Error');
+        const val = (ta?.value || '').trim();
+        if (!val) { if (err) err.textContent = '呪文が空です'; return; }
+        // TradeUtil.decodeSpell が使えるなら検証する
+        if (window.TradeUtil && typeof TradeUtil.decodeSpell === 'function') {
+          let data;
+          try {
+            data = TradeUtil.decodeSpell(val, { ttlMs: 10*60*1000 });
+          } catch(e) {
+            if (err) err.textContent = '呪文が無効または期限切れです';
+            return;
+          }
+          if (!data || data.kind !== 'offer' || !data.token) {
+            if (err) err.textContent = '呪文の形式が正しくありません';
+            return;
+          }
+          // 相手オファーをステートに反映
+          window.TradeState = window.TradeState || {};
+          TradeState.partnerOffer = {
+            name: data.name || '不明',
+            sell: (window.TradeUtil ? TradeUtil.toNum(data.sell,0) : (Number(data.sell)||0)),
+            token: data.token
+          };
+          // 自分のACK呪文を発行して表示
+          const ack = { kind:'ack', ok:true, token:data.token };
+          const spell2 = (window.TradeUtil ? TradeUtil.encodeSpell(ack) : btoa(JSON.stringify(ack)));
+          const disp2 = document.getElementById('spellDisplay2');
+          if (disp2) disp2.textContent = spell2;
+          // ステップ3へ
+          const s1 = document.getElementById('tradeStep1'); s1 && s1.classList.remove('active');
+          const s2 = document.getElementById('tradeStep2'); s2 && s2.classList.remove('active');
+          const s3 = document.getElementById('tradeStep3'); s3 && s3.classList.add('active');
+          // タイマー開始（簡易）
+          const t = document.getElementById('tradeTimer');
+          let rest = 30; if (t) t.textContent = String(rest);
+          clearInterval(window.__tradeTimer__);
+          window.__tradeTimer__ = setInterval(()=>{
+            rest--; if (t) t.textContent = String(rest);
+            if (rest<=0) { clearInterval(window.__tradeTimer__); }
+          }, 1000);
+        } else {
+          if (err) err.textContent = '内部エラー：検証関数が見つかりません';
+        }
+      } catch(e){
+        const err = document.getElementById('step2Error');
+        if (err) err.textContent = '読み込みに失敗しました';
+      }
+    };
+  }
+  btn.onclick = window.readPartnerOffer;
+})();
+
+// ==== FIX: Step3 の実行（OK）を確実に finalizeSwap へ結線し、所持反映まで行う ====
+(function fixTradeRunButton(){
+  function ensureRun(){
+    const s3 = document.getElementById('tradeStep3');
+    if (!s3) return;
+    let run = s3.querySelector('.tradeAction.run');
+    if (!run) {
+      run = document.createElement('button');
+      run.className = 'tradeAction run';
+      run.style.marginTop = '8px';
+      run.textContent = 'OK（実行）';
+      s3.appendChild(run);
+    }
+    run.onclick = function(){
+      try {
+        // finalizeSwap が無い／失敗する場合の確実実装（最小限）
+        if (typeof window.finalizeSwap !== 'function') {
+          window.finalizeSwap = function(){
+            // 必須前提チェック
+            if (!window.GAME || !window.TradeState || !TradeState.offer || !TradeState.partnerOffer) {
+              alert('交換データが不足しています'); return;
+            }
+            const ownedIdx = TradeState.offer.ownedIdx;
+            const snap = TradeState.offer.snapshot || {};
+            // 手元の対象がまだ存在するかチェック
+            const cur = GAME.owned[ownedIdx];
+            if (!cur || cur.name !== snap.name) { alert('対象キャラが変更されています'); return; }
+            // 自分のを取り出し
+            const removed = GAME.owned.splice(ownedIdx, 1)[0];
+            // 相手のオファーから受取キャラを生成
+            const incoming = {
+              emoji: '🪽',
+              name: TradeState.partnerOffer.name || '交換受領キャラ',
+              rarity: removed?.rarity || 'TRADE',
+              sell: Number(TradeState.partnerOffer.sell||0),
+              type: removed?.type || 'trade'
+            };
+            GAME.owned.push(incoming);
+            // 完了画面へ
+            const s1 = document.getElementById('tradeStep1'); s1 && s1.classList.remove('active');
+            const s2 = document.getElementById('tradeStep2'); s2 && s2.classList.remove('active');
+            const s3 = document.getElementById('tradeStep3'); s3 && s3.classList.remove('active');
+            const s4 = document.getElementById('tradeStep4'); s4 && s4.classList.add('active');
+            const info = document.getElementById('tradeResultInfo');
+            if (info) info.textContent = `あなたの「${removed?.name||'？'}」と相手の「${incoming.name}」を交換しました。`;
+            if (typeof addLog === 'function') addLog('🔀 交換成立 ▶ '+(removed?.name||'？')+' ⇄ '+incoming.name);
+            if (typeof updateUI === 'function') updateUI();
+            if (typeof save === 'function') save();
+          };
+        }
+        window.finalizeSwap();
+      } catch(e) {
+        alert('交換を完了できません：' + (e?.message||'不明なエラー'));
+      }
+    };
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ensureRun, {once:true});
+  } else {
+    ensureRun();
+  }
+})();
+
+(function addSwapFX(){
+  window.__swapFX = function(){
+    const fx = document.createElement('div');
+    fx.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:99999;background:radial-gradient(circle, rgba(0,255,153,.35), transparent 70%);opacity:0;transition:opacity .25s';
+    document.body.appendChild(fx);
+    requestAnimationFrame(()=>{ fx.style.opacity='1'; });
+    setTimeout(()=>{ fx.style.opacity='0'; }, 250);
+    setTimeout(()=>{ fx.remove(); }, 600);
+  };
+  // finalizeSwap の末尾で呼ぶ
+  const orig = window.finalizeSwap;
+  if (typeof orig === 'function') {
+    window.finalizeSwap = function(){ const r = orig.apply(this, arguments); try{ __swapFX(); }catch(e){} return r; };
+  }
+})();
+
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
