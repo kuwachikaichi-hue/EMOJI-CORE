@@ -10052,6 +10052,138 @@ window.updateUI = function(){
 })();
 </script>
 
+<script>
+// === CEC Recover & Anti-Reset Patch v2026-06-04 ===
+// 貼る場所: ファイルの一番最後（</body>直前）が安全です。
+
+(function(){
+  if (window.__CEC_RECOVER_20260604__) return;
+  window.__CEC_RECOVER_20260604__ = true;
+
+  // 1) 安全数値
+  function toNum(v, fb=0){
+    try{
+      if (v==null) return fb;
+      if (typeof v==='number') return isFinite(v)?v:fb;
+      if (typeof v==='bigint'){ const n=Number(v); return isFinite(n)?n:fb; }
+      if (typeof v==='string'){ const s=v.replace(/[,_\s¥円]/g,''); const n=Number(s); return isFinite(n)?n:fb; }
+      if (typeof v==='object' && v.valueOf){ const n=Number(v.valueOf()); return isFinite(n)?n:fb; }
+      return fb;
+    }catch{ return fb; }
+  }
+
+  // 2) セーブのmoneyを常に「真」とみなす
+  function loadSaveObj(){
+    try{
+      const s = localStorage.getItem('CYBER_EMOJI_CORE_SAVE_V2');
+      return s ? JSON.parse(s) : null;
+    }catch{ return null; }
+  }
+  function saveSaveObj(obj){
+    try{ localStorage.setItem('CYBER_EMOJI_CORE_SAVE_V2', JSON.stringify(obj)); }catch{}
+  }
+
+  // 起動時にセーブのmoneyをGAMEへ反映（小さい値で上書きされないように最大値を保持）
+  let __maxKnownMoney = 0;
+
+  function syncFromSaveToGame(){
+    const sv = loadSaveObj();
+    if (!sv || typeof sv!=='object') return;
+    const m = toNum(sv.money, 0);
+    __maxKnownMoney = Math.max(__maxKnownMoney, m);
+    // GAMEが小さい/壊れていたらセーブ値で復旧
+    if (!window.GAME || typeof GAME!=='object') window.GAME = {};
+    if (!isFinite(toNum(GAME.money, NaN)) || toNum(GAME.money,0) < m){
+      GAME.money = m;
+    }
+  }
+
+  // 3) エモズー交換時にmoney=100000へリセットさせない
+  // convertToEmozooConfirm / performEmozooExchange / それに類する処理の上書き対策
+  (function neutralizeMoneyReset(){
+    // よくあるリセット箇所にガード
+    function wrap(name){
+      const fn = window[name];
+      if (!fn || fn.__noMoneyReset) return;
+      window[name] = function(){
+        const before = toNum(GAME?.money, 0);
+        const svBefore = toNum(loadSaveObj()?.money, 0);
+        const out = fn.apply(this, arguments);
+        // 実行後にmoneyが小さくされていたら直ちに復旧（セーブ/最大既知から）
+        let cur = toNum(GAME?.money, 0);
+        const sv = toNum(loadSaveObj()?.money, 0);
+        __maxKnownMoney = Math.max(__maxKnownMoney, before, svBefore, sv, cur);
+        const guard = Math.max(sv, __maxKnownMoney);
+        if (cur < guard){
+          GAME.money = guard;
+        }
+        // セーブも同調
+        const sobj = loadSaveObj() || {};
+        if (toNum(sobj.money, -1) < guard){
+          sobj.money = guard;
+          saveSaveObj(sobj);
+        }
+        // UI更新
+        try{ window.updateUI && updateUI(); }catch{}
+        return out;
+      };
+      window[name].__noMoneyReset = true;
+    }
+    [
+      'convertToEmozooConfirm',
+      'performEmozooExchange',
+      'convertToEmozoo' // UI入口がmoney触る実装がある場合の保険
+    ].forEach(wrap);
+  })();
+
+  // 4) updateUI が小さい値で上書きしないよう、最後に復旧
+  (function patchUpdateUI(){
+    const orig = window.updateUI;
+    window.updateUI = function(){
+      // セーブのmoneyと最大既知を見て、GAME.moneyが小さければ復旧
+      const sv = toNum(loadSaveObj()?.money, 0);
+      __maxKnownMoney = Math.max(__maxKnownMoney, sv, toNum(GAME?.money, 0));
+      if (toNum(GAME?.money, 0) < __maxKnownMoney){
+        if (!window.GAME || typeof GAME!=='object') window.GAME = {};
+        GAME.money = __maxKnownMoney;
+        const sobj = loadSaveObj() || {};
+        if (toNum(sobj.money, -1) < __maxKnownMoney){
+          sobj.money = __maxKnownMoney;
+          saveSaveObj(sobj);
+        }
+      }
+      try{ orig && orig(); }catch{}
+      // 表示がハードに別値を入れても、ここで最終上書き
+      try{
+        const m = document.getElementById('money');
+        if (m) m.textContent = '¥' + toNum(GAME.money, 0).toLocaleString();
+      }catch{}
+      try{ window.save && save(); }catch{}
+    };
+  })();
+
+  // 5) 起動直後と一定間隔でセーブ値→GAME→UIの順で再同期待ち撃ち
+  function hardResync(){
+    syncFromSaveToGame();
+    try{ window.updateUI && updateUI(); }catch{}
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', hardResync, {once:true});
+  } else {
+    hardResync();
+  }
+
+  // 数秒間は何度か再同期（他パッチの後書きを押さえ込む）
+  let n = 0;
+  const iv = setInterval(()=>{
+    n++;
+    hardResync();
+    if (n>=8) clearInterval(iv);
+  }, 600);
+
+})();
+</script>
 
 </body>
 </html>
