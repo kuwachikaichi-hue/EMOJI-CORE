@@ -7675,6 +7675,117 @@ renderMoonRoad();
     arm(); setTimeout(arm, 300); setTimeout(arm, 1200);
   }
 })();
+
+// ==== Stable wire for "呪文を読み込む" (Step2) v2026-06-04 ====
+(function stableWireTradeRead(){
+  function $(s){ return document.querySelector(s); }
+  function ensureOnce(btn, fn){
+    if (!btn) return;
+    // 既存の onclick を上書き固定（重複結線を防止）
+    btn.onclick = fn;
+    // 追加で addEventListener が重ねられている環境では、バブリングを抑制
+    if (!btn.__cecStopDup__) {
+      btn.__cecStopDup__ = true;
+      btn.addEventListener('click', function(ev){
+        // 上流で付けられた別ハンドラが誤動作しないよう最小限に制御
+        ev.stopImmediatePropagation?.();
+      });
+    }
+  }
+  function wire(){
+    const btn = document.querySelector('#tradeStep2 .tradeAction:not(.danger)');
+    const ta  = document.getElementById('step2Input');
+    const err = document.getElementById('step2Error');
+    if (!btn) return;
+    // 優先: TradeHandlers の公式実装がある場合
+    const callOfficial = function(){
+      try {
+        if (window.TradeHandlers && typeof window.TradeHandlers.openStart === 'function' && typeof window.readPartnerOffer === 'function') {
+          window.readPartnerOffer(); // 既存公開APIを利用
+          return true;
+        }
+        if (typeof window.readPartnerOffer === 'function') {
+          window.readPartnerOffer();
+          return true;
+        }
+        return false;
+      } catch(e){
+        return false;
+      }
+    };
+    // フォールバック: 最低限のデコード→Step3遷移
+    function fallbackRead(){
+      try {
+        const spell = (ta?.value || '').trim();
+        if (!spell) { if (err) err.textContent = '呪文が空です'; return; }
+        // TradeUtil があれば厳密検証
+        if (window.TradeUtil && typeof TradeUtil.decodeSpell === 'function') {
+          let data;
+          try {
+            data = TradeUtil.decodeSpell(spell, { ttlMs: 10*60*1000 });
+          } catch(e) {
+            if (err) err.textContent = '呪文が無効または期限切れです';
+            return;
+          }
+          if (!data || data.kind!=='offer' || !data.token) {
+            if (err) err.textContent = '呪文の形式が正しくありません';
+            return;
+          }
+          // 最低限の状態反映
+          window.TradeState = window.TradeState || {};
+          TradeState.partnerOffer = {
+            name: data.name || '不明',
+            sell: (window.TradeUtil ? TradeUtil.toNum(data.sell,0) : (Number(data.sell)||0)),
+            token: data.token
+          };
+          // ACK呪文を生成して表示
+          const ack = { kind:'ack', ok:true, token:data.token };
+          const spell2 = (window.TradeUtil ? TradeUtil.encodeSpell(ack) : btoa(JSON.stringify(ack)));
+          const disp2 = document.getElementById('spellDisplay2');
+          if (disp2) disp2.textContent = spell2;
+        } else {
+          // 極簡易遷移のみ（検証不可環境）
+          if (err) err.textContent = '';
+        }
+        // Step3 へ遷移
+        const s1 = document.getElementById('tradeStep1'); s1 && s1.classList.remove('active');
+        const s2 = document.getElementById('tradeStep2'); s2 && s2.classList.remove('active');
+        const s3 = document.getElementById('tradeStep3'); s3 && s3.classList.add('active');
+        // 30秒タイマー（簡易）
+        const t = document.getElementById('tradeTimer');
+        let rest = 30; if (t) { t.textContent = String(rest); t.classList.remove('danger'); }
+        clearInterval(window.__tradeTimer__);
+        window.__tradeTimer__ = setInterval(()=>{
+          rest--;
+          if (t) {
+            t.textContent = String(rest);
+            if (rest<=5) t.classList.add('danger');
+          }
+          if (rest<=0) clearInterval(window.__tradeTimer__);
+        }, 1000);
+      } catch(e){
+        if (err) err.textContent = '読み込みに失敗しました';
+      }
+    }
+    ensureOnce(btn, function(){
+      // 既存の多重バインドを無効化し、常にこの経路で実行
+      if (callOfficial()) return;
+      fallbackRead();
+    });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){
+      wire();
+      // 遅延再結線（他スクリプトの後書き上書きに対抗）
+      setTimeout(wire, 200);
+      setTimeout(wire, 800);
+    }, {once:true});
+  } else {
+    wire();
+    setTimeout(wire, 200);
+    setTimeout(wire, 800);
+  }
+})();
   
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
