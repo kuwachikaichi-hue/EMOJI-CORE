@@ -7226,6 +7226,127 @@ renderMoonRoad();
 
 })();
 
+// ===== Loading overlay timing fix & mobile ad sticky fix v2026-06-04 =====
+(function(){
+  // 1) 起動時に heavy overlay を必ず短時間表示し、初期処理完了で隠す
+  //    - 既存 __showLoading / __hideLoading をラップ
+  var _show = window.__showLoading || function(){ var ov=document.getElementById('loadingOverlay'); if(ov) ov.style.display='flex'; };
+  var _hide = window.__hideLoading || function(){ var ov=document.getElementById('loadingOverlay'); if(ov) ov.style.display='none'; };
+  // 初回ブートで確実に見せる（最大1200msまで、処理が早ければすぐ閉じる）
+  (function bootSplash(){
+    var shown = false;
+    function tryShow(){
+      if (shown) return;
+      shown = true;
+      _show('ロード中…');
+      // セーフティタイムアウト（最大1.2秒）
+      setTimeout(function(){ _hide(); }, 1200);
+    }
+    // DOMが整った直後に表示
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', tryShow, {once:true});
+    } else {
+      tryShow();
+    }
+    // 既存の load() 実行後に必ず閉じる（数フレーム待ってから）
+    var origLoad = window.load;
+    window.load = function(){
+      if (typeof origLoad === 'function') origLoad();
+      requestAnimationFrame(function(){ requestAnimationFrame(function(){ _hide(); }); });
+    };
+  })();
+  // 2) スマホで #adBarSticky が見えない問題の対策
+  //    - モバイル幅では fixed に変更し、ヘッダ下に常時固定
+  //    - 初期文言を即時セット
+  //    - z-index と衝突回避
+  function isMobileWidth(){ return window.matchMedia && window.matchMedia('(max-width: 480px)').matches; }
+  function ensureStickyAdVisible(){
+    var sticky = document.getElementById('adBarSticky');
+    if (!sticky) return;
+    // 初期文言（空表示防止）
+    var row = sticky.querySelector('#adStickyRow');
+    if (row && !row.__initFilled) {
+      row.__initFilled = true;
+      var textSpan = row.querySelector('#adStickyText');
+      if (textSpan) textSpan.textContent = '最新情報をチェック！';
+    }
+    // ヘッダ・タブの実高さを測って、その直下に固定
+    var header = document.querySelector('header');
+    var tabs = document.querySelector('.tabs');
+    var headerH = header ? Math.round(header.getBoundingClientRect().height) : 64;
+    var tabsH = tabs ? Math.round(tabs.getBoundingClientRect().height) : 40;
+    var topOffset = Math.max(48, headerH); // ヘッダ全体の下端に寄せる
+    if (isMobileWidth()){
+      // モバイルは fixed で安定表示
+      sticky.style.position = 'fixed';
+      sticky.style.top = topOffset + 'px';
+      sticky.style.left = '12px';
+      sticky.style.right = '12px';
+      sticky.style.zIndex = '300'; // header(100/200) より上
+      sticky.style.maxWidth = 'unset';
+      sticky.style.width = 'auto';
+      sticky.style.pointerEvents = 'auto';
+      // ビューポート外に押し出されないよう margin は最小に
+      sticky.style.margin = '0';
+      // 画面の安全地帯内に収める（キーボード表示時のずれ軽減）
+      sticky.style.transform = 'translateZ(0)'; // 合成レイヤでちらつき軽減
+    } else {
+      // PC 幅は既存の sticky を活かすが、z-index を少し強める
+      sticky.style.position = 'sticky';
+      sticky.style.top = (Math.max(56, headerH - tabsH + 8)) + 'px';
+      sticky.style.left = '';
+      sticky.style.right = '';
+      sticky.style.zIndex = '150';
+    }
+  }
+  // 3) #adBar 自体が非表示/高さゼロの場合でも #adBarSticky を見せる
+  function guardAdVisibility(){
+    var mainAd = document.getElementById('adBar');
+    var sticky = document.getElementById('adBarSticky');
+    if (!sticky) return;
+    var mainVisible = false;
+    if (mainAd){
+      var r = mainAd.getBoundingClientRect();
+      mainVisible = (r.height > 4) && (r.bottom > 0) && (r.top < (window.innerHeight||0));
+    }
+    // どちらかが可視になるように（main が見えなければ sticky を強制可視）
+    if (!mainVisible){
+      sticky.style.display = 'block';
+      sticky.style.opacity = '1';
+      sticky.style.visibility = 'visible';
+    } else {
+      // 両方見せたい場合はここをコメントアウト
+      // sticky.style.display = 'none';
+    }
+  }
+  // 4) 初期化とリスナー
+  function initAdFix(){
+    ensureStickyAdVisible();
+    guardAdVisibility();
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', function(){
+      initAdFix();
+      setTimeout(initAdFix, 200);   // レイアウト確定後
+      setTimeout(initAdFix, 800);   // 追加の保険
+    }, {once:true});
+  } else {
+    initAdFix();
+    setTimeout(initAdFix, 200);
+    setTimeout(initAdFix, 800);
+  }
+  window.addEventListener('resize', function(){
+    ensureStickyAdVisible();
+    guardAdVisibility();
+  }, {passive:true});
+  // 5) もし他のコードで #adBarSticky の top を書き換えてしまう場合の最後の保険
+  //    1.5秒に1回だけ再整列（軽量）
+  setInterval(function(){
+    if (!isMobileWidth()) return;
+    ensureStickyAdVisible();
+  }, 1500);
+})();
+
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
 <div class="tradePopup" id="tradePopup">
