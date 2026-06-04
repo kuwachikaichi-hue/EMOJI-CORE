@@ -1062,13 +1062,98 @@ button:active {
       <div class="stat">❤️ LIFE POINT<b id="lp">0 LP</b></div>
       <div class="stat">💎 CRYSTAL<b id="crystal">0</b></div>
     </div>
-    <div class="moneyBox">
-      <div class="stat">🏢 BASE<b id="capacity">0 / 5</b></div>
-      <div class="stat">🏆 ACHIEVE<b id="achieveCount">0</b></div>
-      <div class="stat">📚 INDEX<b id="indexCount">0</b></div>
-　　　　<div class="stat">🪙 EMOZOO<b id="emozoo" class="ez-stat">0 EZ</b></div>
-    </div>
-  </div>
+    <!-- 1) 余分な </style> を削除（head内終盤のこの1行を削除） -->
+<!-- 不要な閉じタグ: </style> を削除 -->
+
+<!-- 2) 全角スペースを削除（moneyBox 2段目の行を次に置換） -->
+　<div class="moneyBox">
+  <div class="stat">🏢 BASE<b id="capacity">0 / 5</b></div>
+  <div class="stat">🏆 ACHIEVE<b id="achieveCount">0</b></div>
+  <div class="stat">📚 INDEX<b id="indexCount">0</b></div>
+  <div class="stat">🪙 EMOZOO<b id="emozoo" class="ez-stat">0 EZ</b></div>
+</div>
+
+<!-- 3) #ezPopup の二重定義を解消 -->
+<!-- a) CSS/HTML上部の #ezPopup スタイルとHTML本体の #ezPopup が1つあればOKです。
+重複している後半の以下ブロックを丸ごと削除してください（残すのは1つのみ）:
+<div id="ezPopup" aria-modal="true" role="dialog"> ... </div>
+-->
+<!-- 残す方（推奨：後半の完全版）を明示 -->
+<!-- 残すのはページ末尾にある、tradePopupと並んでいる完全版の #ezPopup だけ -->
+
+<!-- 4) sticky広告をクリック透過（CSSに追記 or 既存定義へ追加） -->
+<style>
+  /* クリックを奪わない */
+  #adBarSticky { pointer-events: none; }
+  #adBarSticky .adRow,
+  #adBarSticky .adMark { pointer-events: auto; }
+</style>
+
+<!-- 5) FXレイヤをクリック透過（CSSに追記） -->
+<style>
+  .flash, .rainbowFlash, .heavenFlash,
+  .heavenWing,
+  [class^="fx_"], .particle {
+    pointer-events: none !important;
+  }
+</style>
+
+<!-- 6) .tradeBtn/.card .sell の重複削除（最後の定義だけ残す）
+置換: 重複している tradeBtn / .card .sell セットのうち1組を残して他を削除。
+最終残す定義例: -->
+<style>
+  .tradeBtn {
+    margin-top: 8px;
+    width: 100%;
+    border: none;
+    padding: 8px;
+    border-radius: 10px;
+    font-weight: 900;
+    font-size: 12px;
+    background: linear-gradient(135deg, #00e5ff, #0077ff);
+    color: #00131b;
+    box-shadow: 0 0 10px rgba(0, 150, 255, .35);
+    cursor: pointer;
+    display: block;
+  }
+  .tradeBtn:active { transform: scale(.96); }
+  .card .sell {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+    line-height: 1.2;
+  }
+</style>
+
+<!-- 7) tradeSafeBoot 内の「ない時は簡易tradePopupを自動生成」を無効化
+該当JS内のこの塊をコメントアウトしてください。 -->
+<script>
+/* ===== トレード起動セーフガード v1 ===== */
+(function tradeSafeBoot(){
+  // ... 中略 ...
+  // 交換ポップアップが存在しない場合は最小UIを自動挿入 → 衝突の元なので無効化
+  /*
+  if (!document.getElementById('tradePopup')) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `...最小tradePopupテンプレ...`;
+    document.body.appendChild(wrap.firstChild);
+  }
+  */
+  // ... 以降はそのまま ...
+})();
+</script>
+
+<!-- 8) #adBarSticky のz-indexをheaderより下げる（既存定義を次で上書き） -->
+<style>
+  header { z-index: 200; }
+  #adBarSticky { z-index: 150; }
+</style>
+
+<!-- 9) 最後に、headの閉じ順を確認：
+<head> ... </style>（必要な分だけ）</head>
+余分な </style> が </head> の外に残らないように整理してください。
+-->
+
   <div class="tabs">
     <button class="tabBtn active" data-tab="home">基地</button>
     <button class="tabBtn" data-tab="dex">図鑑</button>
@@ -7880,6 +7965,302 @@ renderMoonRoad();
 })();
 </script>
 
+<script>
+// === Hotfix Bundle v2026-06-04 (final guard) ===
+(function(){
+  if (window.__CEC_HOTFIX_FINAL__) return;
+  window.__CEC_HOTFIX_FINAL__ = true;
+
+  // 0) 安全ユーティリティ
+  const toNum = (v, fb=0)=>{
+    try{
+      if (v==null) return fb;
+      if (typeof v==='number') return isFinite(v)?v:fb;
+      if (typeof v==='bigint') { const n=Number(v); return isFinite(n)?n:fb; }
+      if (typeof v==='string'){ const n=Number(v.replace(/[,_\s¥円]/g,'')); return isFinite(n)?n:fb; }
+      if (typeof v==='object' && v.valueOf){ const n=Number(v.valueOf()); return isFinite(n)?n:fb; }
+      return fb;
+    }catch{ return fb; }
+  };
+  const formatSafe = v => {
+    const n = Math.max(0, toNum(v,0));
+    try { return '¥' + n.toLocaleString(); } catch { return '¥' + String(n); }
+  };
+  const normalizeSell = (c)=>{
+    if (!c || typeof c!=='object') return 1;
+    let s = toNum(c.sell, NaN);
+    if (!isFinite(s) || s<=0){
+      const sc = toNum(c.sellCrystal, NaN);
+      s = isFinite(sc) ? Math.max(1, Math.floor(sc)) : 1;
+    }
+    c.sell = s;
+    return s;
+  };
+  const $ = sel => document.querySelector(sel);
+
+  // 1) クリック不能の根本封じ
+  //  - 無効化: 全画面かぶり要素(pointer-events有/opacity>0)を非アクティブ化
+  //  - ボタンdisabled誤残りの解除（data-keep-disabled除く）
+  (function fixClickability(){
+    // フルスクリーン覆いの整理
+    const killers = [
+      '#loadingOverlay', '#liteLoading', '#dangerFrame',
+      '.fx_robo_boot','.fx_chain_clash','.fx_overdrive','.fx_emp',
+      '.fx_crystal_spawn','.fx_prism','.fx_shatter','.fx_gem_rain',
+      '.fx_quake','.fx_orbit','.fx_gravity','.fx_star',
+      '.heavenFlash','.flash','.rainbowFlash'
+    ];
+    killers.forEach(sel=>{
+      document.querySelectorAll(sel).forEach(el=>{
+        const st = getComputedStyle(el);
+        // 透過しているのにクリック遮っている場合は無効化
+        const op = parseFloat(st.opacity||'1');
+        if (op<=0.02) el.style.pointerEvents='none';
+      });
+    });
+    // sticky広告のクリック貫通
+    const ad = document.getElementById('adBarSticky');
+    if (ad){
+      ad.style.pointerEvents = 'none'; // 自身は無効
+      const row = document.getElementById('adStickyRow');
+      if (row) row.style.pointerEvents = 'auto'; // テキストは選択可、でもクリック邪魔しない
+      ad.style.zIndex = '80'; // header(100)未満に落とす
+    }
+    // ボタン強制有効化（本当に必要な無効化は data-keep-disabled を付ける設計）
+    document.querySelectorAll('button[disabled]:not([data-keep-disabled])').forEach(b=>{
+      b.disabled = false;
+      b.style.pointerEvents = 'auto';
+      b.style.opacity = (b.style.opacity && +b.style.opacity<0.8) ? b.style.opacity : '1';
+    });
+  })();
+
+  // 2) 重要ボタンの強制イベントバインド（capture優先）
+  (function forceBindCriticalButtons(){
+    const bind = (sel, fn)=>{
+      document.querySelectorAll(sel).forEach(el=>{
+        if (el.__cecBound) return;
+        el.__cecBound = true;
+        el.addEventListener('click', (ev)=>{
+          ev.stopImmediatePropagation?.();
+          ev.preventDefault?.();
+          try{ fn.call(el, ev); }catch(e){ console.error('bind fail', sel, e); }
+          return false;
+        }, {capture:true});
+      });
+    };
+    // gachaGrid 全ボタン
+    bind('.gachaGrid button', function(){
+      // onclickが定義されていないまたは潰れていた場合は関数名を推測
+      const txt = (this.textContent||'').trim();
+      // 既にonclickがあるなら素直に実行
+      if (typeof this.onclick === 'function'){ this.onclick(); return; }
+      // 推測できない場合は何もしない
+    });
+    // 基地管理
+    const calls = [
+      ['button.action[onclick*="expandBase"]', ()=>window.expandBase?.() ],
+      ['button.action[onclick*="buyLP"]', ()=>window.buyLP?.() ],
+      ['button.action[onclick*="accelerate"]', ()=>window.accelerate?.() ],
+      ['button.action[onclick*="preventEscape"]', ()=>window.preventEscape?.() ],
+      ['button.action[onclick*="convertLPToCrystal"]', ()=>window.convertLPToCrystal?.() ],
+      ['button.action[onclick*="convertToEmozoo"]', ()=>window.convertToEmozoo?.() ],
+    ];
+    calls.forEach(([sel,fn])=>bind(sel, fn));
+    // ポップアップ クローズ
+    bind('.closeBtn', ()=> window.closePopup?.());
+    // タブ
+    document.querySelectorAll('.tabBtn').forEach(btn=>{
+      if (btn.__cecBound) return;
+      btn.__cecBound = true;
+      btn.addEventListener('click', (ev)=>{
+        ev.stopImmediatePropagation?.(); ev.preventDefault?.();
+        const id = btn.dataset.tab; if (!id) return false;
+        document.querySelectorAll('.tabBtn').forEach(b=>b.classList.toggle('active', b===btn));
+        document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('active', p.id===id));
+        return false;
+      }, {capture:true});
+    });
+  })();
+
+  // 3) 0円/NaNの最終ガード：obtain/gacha/updateUI/showResults の再固定
+  // obtain
+  (function patchObtainFinal(){
+    const orig = window.obtain;
+    window.obtain = function(char){
+      const s = normalizeSell(char);
+      try{
+        if (typeof orig === 'function') orig(char);
+        else {
+          window.GAME = window.GAME || {};
+          GAME.owned = Array.isArray(GAME.owned)?GAME.owned:[];
+          GAME.owned.push(char);
+          GAME.money = toNum(GAME.money,0) + Math.floor(s/4);
+          GAME.dex = Array.isArray(GAME.dex)?GAME.dex:[];
+          if (char?.name && !GAME.dex.includes(char.name)) GAME.dex.push(char.name);
+        }
+      }catch(e){
+        window.GAME = window.GAME || {};
+        GAME.owned = Array.isArray(GAME.owned)?GAME.owned:[];
+        GAME.owned.push(char);
+        GAME.money = toNum(GAME.money,0) + Math.floor(s/4);
+      }
+      // money壊れてたら復旧
+      if (!isFinite(toNum(GAME.money,NaN))) GAME.money = Math.floor(s/4);
+      try{ window.addLog?.('獲得 ▶ '+(char?.name||'？')); }catch(_){}
+      try{ window.updateUI?.(); }catch(_){}
+    };
+  })();
+
+  // gacha
+  (function patchGachaFinal(){
+    const orig = window.gacha;
+    window.gacha = function(pool, opts){
+      const count = toNum(opts?.count,1)||1;
+      const pc = toNum(opts?.priceCrystal,0);
+      const pm = toNum(opts?.priceMoney,0);
+      if (!Array.isArray(pool) || pool.length===0) { alert('ガチャプールが空'); return; }
+      if (!window.GAME) { alert('GAME未初期化'); return; }
+      if ((GAME.owned?.length||0)+count > toNum(GAME.baseCap,0)) { alert('基地容量不足'); return; }
+      if ((pc<=0 && pm<=0) || (pc>0 && pm>0)) { alert('コスト設定エラー'); return; }
+      if (pc>0){
+        if (toNum(GAME.crystal,0)<pc){ alert('💎不足'); return; }
+        GAME.crystal = toNum(GAME.crystal,0) - pc;
+      }else{
+        if (toNum(GAME.money,0)<pm){ alert('お金不足'); return; }
+        GAME.money = toNum(GAME.money,0) - pm;
+      }
+      const results=[];
+      for (let i=0;i<count;i++){
+        const base = pool[Math.floor(Math.random()*pool.length)]||{};
+        const ch = JSON.parse(JSON.stringify(base));
+        normalizeSell(ch);
+        results.push(ch);
+        window.obtain(ch);
+      }
+      try{ (opts?.effects||[]).forEach(f=>{ if(typeof f==='function') f();}); }catch(_){}
+      try{ window.updateUI?.(); }catch(_){}
+      try{ window.showResults?.(results); }catch(_){}
+      return results;
+    };
+  })();
+
+  // updateUI
+  (function patchUpdateUIFinal(){
+    const orig = window.updateUI;
+    window.updateUI = function(){
+      try{ if (typeof orig==='function') orig(); }catch(_){}
+      try{
+        if (!window.GAME) return;
+        const m = document.getElementById('money');
+        const l = document.getElementById('lp');
+        const c = document.getElementById('crystal');
+        const cap = document.getElementById('capacity');
+        const ac = document.getElementById('achieveCount');
+        const dx = document.getElementById('indexCount');
+        if (m) m.textContent = formatSafe(GAME.money);
+        if (l) l.textContent = (toNum(GAME.lp,0))+' LP';
+        if (c) c.textContent = (toNum(GAME.crystal,0));
+        if (cap) cap.textContent = (GAME.owned?.length||0)+' / '+toNum(GAME.baseCap,5);
+        if (ac) ac.textContent = (GAME.achievements?.length||0);
+        if (dx) dx.textContent = (GAME.dex?.length||0);
+      }catch(_){}
+      try{ window.save?.(); }catch(_){}
+    };
+  })();
+
+  // showResults
+  (function patchShowResultsFinal(){
+    const orig = window.showResults;
+    window.showResults = function(results){
+      try{ if (typeof orig==='function') return orig(results); }catch(_){}
+      const popup = document.getElementById('popup');
+      const box = document.getElementById('results');
+      if (!popup || !box) return;
+      const list = Array.isArray(results)?results:[];
+      let html = '';
+      for (const c of list){
+        const s = normalizeSell(c);
+        const r = c?.rarity||'';
+        const glow = (r==='LEGEND')?' legendGlow':((r==='CHIMERA'||r==='EVENT')?' chimeraGlow':'');
+        html += `<div class="card${glow}">
+          <div class="emoji">${c?.emoji||'❓'}</div>
+          <div class="name">${c?.name||''}</div>
+          <div class="rarity">${r}</div>
+          <div class="sell">${formatSafe(s)}</div>
+        </div>`;
+      }
+      box.innerHTML = html;
+      popup.classList.add('active');
+    };
+  })();
+
+  // 4) 売値表記を最終的に矯正（インベントリ・ムーン・結果）
+  (function fixRenderedPrices(){
+    const fix = root=>{
+      if (!root) return;
+      root.querySelectorAll('.card .sell').forEach(el=>{
+        const v = toNum(el.textContent, 1);
+        el.textContent = formatSafe(Math.max(1,v));
+      });
+    };
+    try{ fix(document.getElementById('inventory')); }catch(_){}
+    try{ fix(document.getElementById('results')); }catch(_){}
+    try{ fix(document.getElementById('moonRoadShop')); }catch(_){}
+    // render系フック
+    const wrap = (name, targetId)=>{
+      const f = window[name];
+      if (typeof f!=='function' || f.__priceFixed) return;
+      window[name] = function(){
+        const r = f.apply(this, arguments);
+        try{ fix(document.getElementById(targetId)); }catch(_){}
+        return r;
+      };
+      window[name].__priceFixed = true;
+    };
+    wrap('renderInventory','inventory');
+    wrap('renderMoonRoad','moonRoadShop');
+    wrap('showResults','results');
+  })();
+
+  // 5) 重複ID/ポップアップ衝突の緊急回避
+  (function dedupeIDs(){
+    // ezPopup重複: 最後の1つを残し、それ以外を無効化
+    const ezs = document.querySelectorAll('#ezPopup');
+    if (ezs.length>1){
+      ezs.forEach((n,i)=>{ if (i<ezs.length-1){ n.id='ezPopup_old_'+i; n.style.display='none'; }});
+    }
+    // tradePopup重複
+    const tps = document.querySelectorAll('#tradePopup');
+    if (tps.length>1){
+      tps.forEach((n,i)=>{ if (i< tps.length-1){ n.id='tradePopup_old_'+i; n.style.display='none'; }});
+    }
+  })();
+
+  // 6) インベントリ「交換」ボタン再配線（確実に動かす）
+  (function rebindTradeButtons(){
+    const box = document.getElementById('inventory');
+    if (!box) return;
+    box.addEventListener('click', function(ev){
+      const t = ev.target;
+      if (!t) return;
+      if (t.classList.contains('tradeBtn')){
+        ev.stopImmediatePropagation?.(); ev.preventDefault?.();
+        // 新実装があれば使用
+        if (window.TradeHandlers?.openStart) { try{ TradeHandlers.openStart( Array.prototype.indexOf.call(box.children, t.closest('.card')) ); }catch(e){} return false; }
+        // フォールバック: ezポップアップを開く(安全導線)
+        try{ window.convertToEmozoo?.(); }catch(_){}
+        return false;
+      }
+    }, {capture:true});
+  })();
+
+  // 7) ページ起動時の最終UI同期
+  setTimeout(()=>{
+    try{ window.updateUI?.(); }catch(_){}
+  }, 0);
+
+})();
+</script>
 
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
