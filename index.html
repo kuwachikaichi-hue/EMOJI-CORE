@@ -8595,6 +8595,104 @@ renderMoonRoad();
   }
 })();
 
+// ==== EMOZOO EXCHANGE — fixed implementation v2026-06-04 ====
+(function fixEmozooExchange(){
+  // 1) ユーティリティ
+  function num(v){ try{
+    if (typeof v === 'number') return isFinite(v)?v:0;
+    if (typeof v === 'bigint') return Number(v);
+    if (typeof v === 'string') return Number(v.replace(/[,_\s¥円]/g,''))||0;
+    return Number(v)||0;
+  }catch{return 0;} }
+  // FRONTIER名のセット（除外用）
+  function frontierNameSet(){
+    if (!window.__FRONTIER_NAME_SET__) {
+      const s = new Set((Array.isArray(window.FRONTIER_POOL)?FRONTIER_POOL:[]).map(x=>x?.name).filter(Boolean));
+      window.__FRONTIER_NAME_SET__ = s;
+    }
+    return window.__FRONTIER_NAME_SET__;
+  }
+  function isFromMoon(c){
+    return !!(c && (c._fromMoon || c._source==='moon' || c._shop==='moon' || c._fromShop==='moon'));
+  }
+  function isFrontier(c){
+    if (!c) return false;
+    if (c.type === 'frontier') return true;
+    const set = frontierNameSet();
+    return set.has(c.name);
+  }
+  // 2) 候補選定（条件に合う上位3体）
+  function pickTop3(){
+    const owned = Array.isArray(GAME?.owned) ? GAME.owned : [];
+    const list = owned.map((c,i)=>({c,i}))
+      .filter(o=> o.c && Number.isFinite(num(o.c.sell)) && !isFromMoon(o.c) && !isFrontier(o.c));
+    list.sort((a,b)=> num(b.c.sell) - num(a.c.sell));
+    return list.slice(0,3);
+  }
+  // 3) UI: プレビュー表示
+  function openEzPopup(){
+    const pop = document.getElementById('ezPopup');
+    const grid = document.getElementById('ezPickGrid');
+    const warn = document.getElementById('ezWarn');
+    if (!pop || !grid) { alert('交換UIが見つかりません'); return; }
+    grid.innerHTML = '';
+    const picks = pickTop3();
+    if (picks.length < 3) {
+      if (warn) warn.textContent = '条件に合うキャラクターが3体見つかりません（ムーン・新領域は除外）。';
+    } else {
+      if (warn) warn.textContent = '';
+      picks.forEach(({c})=>{
+        const div = document.createElement('div');
+        div.className = 'ezPickCard';
+        div.innerHTML = `
+          <div class="emoji">${c.emoji||'❔'}</div>
+          <div class="name">${c.name||'？？？'}</div>
+          <div class="sell">売却 ¥${num(c.sell).toLocaleString()}</div>
+        `;
+        grid.appendChild(div);
+      });
+    }
+    pop.classList.add('active');
+  }
+  function closeEzPopup(){
+    const pop = document.getElementById('ezPopup');
+    if (pop) pop.classList.remove('active');
+  }
+  // 4) 実行ロジック（ここが「実際に実行すべきもの」）
+  function performEmozooExchange(){
+    // 前提
+    if (!window.GAME || !Array.isArray(GAME.owned)) { alert('内部エラー：GAME未初期化'); return; }
+    // 対象3体を確定
+    const picks = pickTop3();
+    if (picks.length < 3) { alert('条件に合うキャラクターが3体見つかりません'); return; }
+    // インデックス降順で安全に削除
+    const idxs = picks.map(p=>p.i).sort((a,b)=>b-a);
+    idxs.forEach(i=> { if (GAME.owned[i]) GAME.owned.splice(i,1); });
+    // 報酬: EZ+1、全財産（お金のみ）を¥100,000に再設定
+    GAME.emozoo = num(GAME.emozoo) + 1;
+    GAME.money = 100000;
+    // 表示更新・保存
+    try {
+      const ezEl = document.getElementById('emozoo');
+      if (ezEl) ezEl.innerText = (GAME.emozoo||0).toLocaleString() + ' EZ';
+    } catch {}
+    if (typeof addLog === 'function') addLog('🪙 エモズー交換 ▶ 上位3体消費 → +1 EZ / 所持金を¥100,000に再設定');
+    if (typeof updateUI === 'function') updateUI();
+    if (typeof save === 'function') save();
+    // ポップアップを閉じる
+    closeEzPopup();
+  }
+  // 5) ボタン配線（「伝わるためのコード」と「実行コード」を一致させる）
+  // 既存の convertToEmozoo を、確実にプレビューUIを開く導線に固定
+  window.convertToEmozoo = function(){ openEzPopup(); };
+  // 実行ボタン
+  (function wireEzButtons(){
+    const doBtn = document.getElementById('ezDoBtn');
+    const closeBtn = document.getElementById('ezCloseBtn');
+    if (doBtn && !doBtn.__wired) { doBtn.__wired = true; doBtn.addEventListener('click', performEmozooExchange); }
+    if (closeBtn && !closeBtn.__wired) { closeBtn.__wired = true; closeBtn.addEventListener('click', closeEzPopup); }
+  })();
+})();
   
 </script>
   <!-- 交換ポップアップ（修正版フロー対応） -->
